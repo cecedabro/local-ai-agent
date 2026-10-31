@@ -32,9 +32,9 @@ Expected output speed on a 3080 Ti: roughly 30–45 tok/s (estimate; measure wit
 
 ## Phases
 1. **Inference node** — `pc/README.md`. Done: `curl` from a k3s node gets a completion.
-2. **Power control** — `pc/power/`, `k8s/waker/`. Done: sleeping PC answers in ~90 s,
+2. **Power control** — `pc/power/`, waker (homelab `apps/ai-agent/`). Done: sleeping PC answers in ~90 s,
    stays awake through a 30-min job, sleeps ~20 min after.
-3. **Devbox** — `devbox/`, `k8s/devbox/`. Done: phone → Tailscale SSH → tmux →
+3. **Devbox** — `devbox/`, homelab `apps/ai-agent/`. Done: phone → Tailscale SSH → tmux →
    agent edits a toy repo against the PC.
 4. **Loop** — `harness/`. Done: 10-task toy spec runs unattended overnight.
 5. **Weather station** — new repo from `harness/templates/`, order:

@@ -3,11 +3,11 @@
 # - Hyper-V firewall rule: llama-server (8080) and WSL sshd (2222) from your LAN only.
 # - Disables Fast Startup (breaks Wake-on-LAN from shutdown).
 param(
-  [string]$LanSubnet = 'REPLACE_ME',   # e.g. 192.168.1.0/24
+  [string]$LanSubnet = 'REPLACE_ME',   # homelab LAN: 192.168.50.0/24
   [string]$Distro = 'Ubuntu-24.04'
 )
 $ErrorActionPreference = 'Stop'
-if ($LanSubnet -eq 'REPLACE_ME') { throw 'Pass -LanSubnet, e.g. 192.168.1.0/24' }
+if ($LanSubnet -eq 'REPLACE_ME') { throw 'Pass -LanSubnet, e.g. 192.168.50.0/24' }
 
 $script = Join-Path $PSScriptRoot 'ai-power.ps1'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `

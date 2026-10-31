@@ -23,8 +23,8 @@ changing architecture. Decisions below are settled unless the user says otherwis
 ## Conventions
 - Shell: `bash`, `set -euo pipefail`, must pass `shellcheck`.
 - Python: stdlib only in `harness/` (it runs in a minimal image), 3.11+.
-- Kubernetes: plain manifests + Kustomize, deployed by Flux from the homelab repo.
-- Secrets never committed. Examples end in `.example.yaml`; real ones are SOPS-encrypted elsewhere.
+- Kubernetes: manifests live in the homelab repo (`apps/ai-agent/`), not here; deployed by Flux.
+- Secrets never committed. They live in OpenBao (`secret/ai-agent/*`) and reach the pods via External Secrets.
 - Placeholders are literally `REPLACE_ME`.
 
 ## Commands

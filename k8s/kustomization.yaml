@@ -1,7 +1,0 @@
-# Point a Flux Kustomization at this path (or copy into the homelab repo).
-# Secrets are NOT included: add the SOPS-encrypted ones alongside.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - waker
-  - devbox

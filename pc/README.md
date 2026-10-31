@@ -39,15 +39,15 @@ Once, by hand:
 - [ ] Device Manager → NIC → Power Management: "Allow this device to wake the computer" + "Only allow a magic packet".
       Advanced: "Wake on Magic Packet" enabled.
 - [ ] `powercfg /a` lists **S3**. If only S0 (Modern Standby), test before relying on WoL.
-- [ ] Note the NIC MAC (`getmac /v`) for `k8s/waker/`.
+- [ ] Note the NIC MAC (`getmac /v`) for the waker (OpenBao `secret/ai-agent/waker`, key `PC_MAC`).
 
 Then elevated PowerShell in `pc/power/`:
 ```powershell
-.\install-windows.ps1 -LanSubnet 192.168.1.0/24
+.\install-windows.ps1 -LanSubnet 192.168.50.0/24
 ```
 Reboot once. Desktop shortcuts for `ai.ps1 pause` and `ai.ps1 resume`.
 
-**Check:** sleep the PC, `curl -X POST` the waker from the devbox (see `k8s/waker/`),
+**Check:** sleep the PC, `curl -X POST` the waker from the devbox (`curl -X POST -H "X-Waker-Token: $WAKER_TOKEN" $WAKER_URL/wake`),
 PC answers within ~90 s. `ssh -p 2222 <you>@<pc-ip> busy on` keeps it awake;
 `busy off` (or 20 min without a heartbeat) lets Windows sleep it again.
 

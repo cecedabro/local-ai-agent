@@ -11,9 +11,9 @@ Run from inside a project repo (see harness/templates/):
     agent-loop --no-pc --no-push --retries 1   # local dry run
 
 Environment (set by the devbox ConfigMap/Secret):
-    LLAMA_BASE_URL  e.g. http://192.168.1.50:8080/v1
+    LLAMA_BASE_URL  e.g. http://192.168.50.50:8080/v1
     LLAMA_API_KEY   llama-server API key
-    WAKER_URL       e.g. http://waker.ai-waker.svc.cluster.local
+    WAKER_URL       e.g. http://192.168.50.11:9009 (waker on k3s-worker-01)
     WAKER_TOKEN     shared token for the waker
     NTFY_URL, NTFY_TOPIC, NTFY_TOKEN   notifications (optional)
     AGENT_CMD       agent command; "{prompt}" is replaced by the prompt

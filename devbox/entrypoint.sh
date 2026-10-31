@@ -13,15 +13,23 @@ chmod 700 "${HOME}/.ssh"
 # Agent config: seeded once, then yours to edit on the PVC.
 [[ -f "${HOME}/.config/opencode/opencode.json" ]] || cp /etc/devbox/opencode.json "${HOME}/.config/opencode/opencode.json"
 
-# ssh refuses group-readable keys, so copy the mounted secret with 0600.
+# SSH key for the PC: a mounted secret wins (ssh refuses group-readable keys, so copy it with
+# 0600); otherwise generate one once on the PVC. Its public half goes to pc/power/setup-wsl.sh.
 if [[ -f "${SECRETS}/pc_ssh_key" ]]; then
   install -m 0600 "${SECRETS}/pc_ssh_key" "${HOME}/.ssh/pc_key"
+elif [[ ! -f "${HOME}/.ssh/pc_key" ]]; then
+  ssh-keygen -q -t ed25519 -N '' -C devbox -f "${HOME}/.ssh/pc_key"
 fi
+[[ -f "${HOME}/.ssh/pc_key.pub" ]] || ssh-keygen -y -f "${HOME}/.ssh/pc_key" > "${HOME}/.ssh/pc_key.pub"
+echo "PC key (for pc/power/setup-wsl.sh): $(cat "${HOME}/.ssh/pc_key.pub")"
+
+# The devbox also starts before the PC is set up; 'ssh pc' then just fails.
+[[ -n "${PC_HOST:-}" && -n "${PC_SSH_USER:-}" ]] || echo "PC_HOST/PC_SSH_USER not set: 'ssh pc' won't work yet" >&2
 cat > "${HOME}/.ssh/config" <<CONF
 Host pc
-  HostName ${PC_HOST:?PC_HOST not set}
+  HostName ${PC_HOST:-pc.invalid}
   Port 2222
-  User ${PC_SSH_USER:?PC_SSH_USER not set}
+  User ${PC_SSH_USER:-agent}
   IdentityFile ~/.ssh/pc_key
   IdentitiesOnly yes
   StrictHostKeyChecking accept-new

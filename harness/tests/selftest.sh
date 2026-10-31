@@ -37,5 +37,7 @@ grep -q '^- \[x\] T03:' PLAN.md || fail "T03 not done"
 grep -q '| T03 Write the right answer to out.txt | done | 2 |' REPORT.md || fail "T03 should take 2 attempts"
 [[ "$(git rev-parse --abbrev-ref HEAD)" == agent/* ]] || fail "not on an agent/ branch"
 [[ -z "$(git status --porcelain)" ]] || fail "tree not clean after run"
-git log --oneline | grep -q 'T01: Create hello.txt' || fail "T01 commit missing"
+# Not `git log | grep -q`: grep -q exits on the first match, git log gets SIGPIPE (141) and
+# pipefail turns that into a random failure.
+[[ "$(git log --oneline)" == *'T01: Create hello.txt'* ]] || fail "T01 commit missing"
 echo "selftest passed"

@@ -10,7 +10,17 @@ permissions:
   contents: read
   packages: write
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: pip install pyyaml
+      - run: make lint test
+  # Only push an image when lint + self-test pass. The cluster pins the sha tag (homelab repo,
+  # apps/ai-agent/devbox.yaml), so a new build never restarts a running agent by itself.
   build:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,10 +40,3 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/local-ai-agent-devbox:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y shellcheck
-      - run: pip install pyyaml
-      - run: make lint test

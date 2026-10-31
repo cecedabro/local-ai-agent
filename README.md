@@ -29,7 +29,7 @@ k3s (always on)                                 PC (Windows + WSL2)
 | `pc/llama/` | build, bench, systemd unit, server flags | PC (WSL) |
 | `pc/power/` | keep-awake, pause/resume, SSH forced command, setup | PC (Windows + WSL) |
 | `devbox/` | Container image for the agent pod | k3s |
-| `k8s/` | Kustomize manifests: namespace, devbox, waker, policies | k3s (via Flux) |
+| (homelab repo) `apps/ai-agent/` | Cluster side: namespaces, devbox StatefulSet, waker, NetworkPolicy, ExternalSecrets | k3s (via Flux) |
 | `harness/` | `loop.py` and its prompt; project templates | devbox pod |
 | `docs/` | Plan, runbook notes | — |
 
@@ -38,12 +38,17 @@ k3s (always on)                                 PC (Windows + WSL2)
 | Phase | Do | Done when |
 | --- | --- | --- |
 | 1 | `pc/README.md` steps 1–9 | `curl` from a k3s node gets a completion |
-| 2 | `pc/power/` + `k8s/waker/` | Sleeping PC answers within ~90 s, sleeps again after idle |
-| 3 | Build `devbox/`, apply `k8s/devbox/` | Phone → Tailscale SSH → tmux → agent edits a toy repo |
+| 2 | `pc/power/` + waker in the homelab repo, `apps/ai-agent/` | Sleeping PC answers within ~90 s, sleeps again after idle |
+| 3 | Build `devbox/` (CI), devbox in the homelab repo, `apps/ai-agent/` | Phone → Tailscale SSH → tmux → agent edits a toy repo |
 | 4 | `harness/loop.py` on a toy spec | 10-task spec runs unattended overnight |
 | 5 | Weather station repo from `harness/templates/` | Backend + gateway pass tests on agent branches |
 
 Values you must fill in are marked `REPLACE_ME` (`grep -rn REPLACE_ME .`).
+
+The Kubernetes manifests live in the homelab repo (github.com/cecedabro/homelab, `apps/ai-agent/`),
+deployed by Flux like everything else there; secrets come from OpenBao via External Secrets.
+Reason: one GitOps source for the cluster, and this repo (which agents work on) gets no power over
+cluster objects such as the privileged waker namespace.
 
 ## Checks
 
