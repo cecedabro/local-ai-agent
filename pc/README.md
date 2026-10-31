@@ -54,7 +54,7 @@ Then elevated PowerShell in `pc/power/`:
 ```powershell
 .\install-windows.ps1 -LanSubnet 192.168.50.0/24
 ```
-`Start-ScheduledTask ai-power` (or reboot) and check `%LOCALAPPDATA%\ai-power.log`: it should show the
+`Start-ScheduledTask ai-power` (or reboot) and check `pc\power\ai-power.log`: it should show the
 keepalive and, on Windows 10, `portproxy: 8080,2222 -> <WSL address>` (`netsh interface portproxy show all`).
 Desktop shortcuts for `ai.ps1 pause` and `ai.ps1 resume`.
 

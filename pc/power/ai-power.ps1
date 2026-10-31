@@ -20,8 +20,13 @@ public static extern uint SetThreadExecutionState(uint esFlags);
 $ES_CONTINUOUS       = [uint32]'0x80000000'
 $ES_SYSTEM_REQUIRED  = [uint32]'0x00000001'
 
-$log = Join-Path $env:LOCALAPPDATA 'ai-power.log'
-function Log($m) { "$(Get-Date -Format s) $m" | Add-Content -Path $log }
+# Next to this script: under the S4U boot task the profile folders were not writable/visible
+# (%LOCALAPPDATA%\ai-power.log stayed empty after a reboot while a manual start did write it).
+$log = Join-Path $PSScriptRoot 'ai-power.log'
+function Log($m) {
+  try { "$(Get-Date -Format s) $m" | Add-Content -Path $log -ErrorAction Stop }
+  catch { Write-EventLog -LogName Application -Source 'Windows PowerShell' -EventId 4100 -EntryType Warning -Message "ai-power: $m ($_)" -ErrorAction SilentlyContinue }
+}
 
 $keepalive = $null
 function Start-Keepalive {

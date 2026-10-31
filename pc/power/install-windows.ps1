@@ -49,5 +49,5 @@ if (Get-Command New-NetFirewallHyperVRule -ErrorAction SilentlyContinue) {
 powercfg /hibernate off   # also turns off Fast Startup
 powercfg /change standby-timeout-ac 20
 
-Write-Host 'Installed. Start now with Start-ScheduledTask ai-power (or reboot), then check %LOCALAPPDATA%\ai-power.log.'
+Write-Host 'Installed. Start now with Start-ScheduledTask ai-power (or reboot), then check pc\power\ai-power.log.'
 Write-Host 'Manual: NIC wake settings and BIOS Wake-on-LAN (see pc/README.md).'
