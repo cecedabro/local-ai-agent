@@ -3,7 +3,8 @@
 # 32 GB host: leave ~6 GB for Windows. Model weights mmap'd from disk count here.
 memory=26GB
 swap=8GB
-# WSL services reachable on the PC's own LAN IP; no portproxy rules.
-networkingMode=mirrored
+# Windows 11 only: WSL services reachable on the PC's own LAN IP, no portproxy needed.
+# On Windows 10 leave this out; ai-power.ps1 forwards 8080/2222 with netsh portproxy instead.
+# networkingMode=mirrored
 # Keep the VM alive when no terminal is open (needed for llama-server).
 vmIdleTimeout=-1

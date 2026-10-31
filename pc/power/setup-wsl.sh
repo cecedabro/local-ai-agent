@@ -2,13 +2,15 @@
 # One-shot setup inside WSL Ubuntu (run as your normal user; uses sudo).
 # Installs: /run/ai flags dir, llama-server unit + env + API key, sshd on 2222
 # (key-only), ai-power-remote forced command, narrow sudoers rule.
-# Usage: setup-wsl.sh <devbox-ssh-public-key-file>
+# Usage: setup-wsl.sh [devbox-ssh-public-key-file]
+#   Without a key everything else is installed; run it again with the key once the devbox
+#   has printed it (`kubectl -n ai-agent logs devbox-0 | grep "PC key"`). Safe to re-run.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${HERE}/../.." && pwd)"
 ME="$(id -un)"
-PUBKEY_FILE="${1:?usage: setup-wsl.sh <devbox-ssh-public-key-file>}"
+PUBKEY_FILE="${1:-}"
 
 # Flags dir on tmpfs, recreated every boot, writable by you.
 echo "d /run/ai 0775 ${ME} ${ME} -" | sudo tee /etc/tmpfiles.d/ai.conf >/dev/null
@@ -44,11 +46,15 @@ PermitRootLogin no
 AllowUsers ${ME}
 CONF
 install -d -m 0700 "${HOME}/.ssh"
-KEY="$(cat "${PUBKEY_FILE}")"
-LINE="command=\"/usr/local/bin/ai-power-remote\",restrict ${KEY}"
 touch "${HOME}/.ssh/authorized_keys"
-grep -qxF "${LINE}" "${HOME}/.ssh/authorized_keys" || echo "${LINE}" >> "${HOME}/.ssh/authorized_keys"
 chmod 0600 "${HOME}/.ssh/authorized_keys"
+if [[ -n "${PUBKEY_FILE}" ]]; then
+  KEY="$(cat "${PUBKEY_FILE}")"
+  LINE="command=\"/usr/local/bin/ai-power-remote\",restrict ${KEY}"
+  grep -qxF "${LINE}" "${HOME}/.ssh/authorized_keys" || echo "${LINE}" >> "${HOME}/.ssh/authorized_keys"
+else
+  echo "No devbox key given: sshd accepts nobody yet. Re-run with the key file later."
+fi
 
 # Ubuntu 24.04 uses socket activation for ssh; the drop-in port needs a reload of both.
 sudo systemctl daemon-reload

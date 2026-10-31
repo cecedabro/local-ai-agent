@@ -4,7 +4,7 @@
 # Usage: bench.sh [model.gguf] [values...]
 set -euo pipefail
 
-MODEL="${1:-${HOME}/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_XL.gguf}"
+MODEL="${1:-${HOME}/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
 shift || true
 VALUES=("$@")
 [[ ${#VALUES[@]} -gt 0 ]] || VALUES=(24 20 16 12)

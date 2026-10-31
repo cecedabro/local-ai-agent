@@ -21,7 +21,10 @@ if ! command -v nvcc >/dev/null 2>&1 && [[ -x /usr/local/cuda/bin/nvcc ]]; then
 fi
 command -v nvcc >/dev/null || { echo "nvcc not found: install the CUDA toolkit (WSL-Ubuntu repo)" >&2; exit 1; }
 
-cmake -S "${SRC}" -B "${BUILD}" -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+# Only the local GPU's architecture (much faster than all of them). CUDA_ARCH=86 for an
+# RTX 30xx when the GPU can't be queried at build time.
+cmake -S "${SRC}" -B "${BUILD}" -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH:-native}"
 cmake --build "${BUILD}" --config Release -j "$(nproc)" --target llama-server llama-bench
 
 "${BUILD}/bin/llama-server" --version
