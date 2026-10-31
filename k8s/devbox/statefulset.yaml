@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devbox
+  namespace: ai-agent
+spec:
+  clusterIP: None          # governing service for the StatefulSet; no ports exposed
+  selector: {app: devbox}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: devbox
+  namespace: ai-agent
+spec:
+  serviceName: devbox
+  replicas: 1
+  selector:
+    matchLabels: {app: devbox}
+  template:
+    metadata:
+      labels: {app: devbox}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: devbox
+          image: ghcr.io/REPLACE_ME/local-ai-agent-devbox:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef: {name: devbox-config}
+          env:
+            - name: LLAMA_API_KEY
+              valueFrom: {secretKeyRef: {name: devbox, key: LLAMA_API_KEY}}
+            - name: GITHUB_TOKEN
+              valueFrom: {secretKeyRef: {name: devbox, key: GITHUB_TOKEN}}
+            - name: GH_TOKEN
+              valueFrom: {secretKeyRef: {name: devbox, key: GITHUB_TOKEN}}
+            - name: WAKER_TOKEN
+              valueFrom: {secretKeyRef: {name: devbox, key: WAKER_TOKEN}}
+            - name: NTFY_TOKEN
+              valueFrom: {secretKeyRef: {name: devbox, key: NTFY_TOKEN, optional: true}}
+            - name: TS_AUTHKEY
+              valueFrom: {secretKeyRef: {name: devbox, key: TS_AUTHKEY}}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: home, mountPath: /home/agent}
+            - {name: secrets, mountPath: /etc/devbox/secrets, readOnly: true}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: devbox
+            items: [{key: PC_SSH_KEY, path: pc_ssh_key}]
+            defaultMode: 0440
+  volumeClaimTemplates:
+    - metadata:
+        name: home
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests: {storage: 30Gi}

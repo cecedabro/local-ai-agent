@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# SSH forced command for the devbox key. Installed to /usr/local/bin/ai-power-remote.
+# authorized_keys line:
+#   command="/usr/local/bin/ai-power-remote",restrict ssh-ed25519 AAAA... devbox
+# The devbox calls: ssh -p 2222 agent@pc <verb>
+set -euo pipefail
+
+FLAGS=/run/ai
+read -r verb arg _ <<<"${SSH_ORIGINAL_COMMAND:-status}"
+
+case "${verb}:${arg:-}" in
+  busy:on)
+    # Touch = heartbeat. ai-power.ps1 ignores a busy flag older than its TTL,
+    # so a crashed harness can't keep the PC awake forever.
+    touch "${FLAGS}/busy"; echo busy-on ;;
+  busy:off)
+    rm -f "${FLAGS}/busy"; echo busy-off ;;
+  status:)
+    if [[ -e "${FLAGS}/paused" ]]; then echo paused
+    elif systemctl is-active --quiet llama-server; then echo ready
+    else echo down; fi ;;
+  restart:)
+    if [[ -e "${FLAGS}/paused" ]]; then echo paused; exit 0; fi
+    sudo -n /usr/bin/systemctl restart llama-server; echo restarting ;;
+  *)
+    echo "usage: busy on|busy off|status|restart" >&2; exit 2 ;;
+esac

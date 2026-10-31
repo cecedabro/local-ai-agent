@@ -1,0 +1,10 @@
+# Separate namespace: hostNetwork is not allowed under the restricted
+# Pod Security level that ai-agent enforces. hostNetwork pods are also not
+# subject to NetworkPolicy, so /wake is protected by WAKER_TOKEN instead.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-waker
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: baseline

@@ -1,0 +1,23 @@
+[Unit]
+Description=llama-server (alias coder)
+After=network-online.target
+Wants=network-online.target
+# Refuse to start while paused by the user (see pc/power).
+ConditionPathExists=!/run/ai/paused
+
+[Service]
+User=REPLACE_ME
+EnvironmentFile=/etc/llama/llama-server.env
+# $EXTRA_ARGS unquoted on purpose: systemd splits it into words.
+ExecStart=/home/REPLACE_ME/src/llama.cpp/current/bin/llama-server \
+  -m ${MODEL} --alias ${ALIAS} --jinja -ngl 99 --n-cpu-moe ${N_CPU_MOE} \
+  -c ${CTX} -np 1 -fa on -ctk q8_0 -ctv q8_0 \
+  --host 0.0.0.0 --port ${PORT} --api-key-file ${API_KEY_FILE} \
+  $EXTRA_ARGS
+Restart=on-failure
+RestartSec=5
+# Model load from NVMe can take a while on first start.
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

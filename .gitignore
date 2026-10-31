@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+*.gguf
+secrets/
+*.secret.yaml
+.env
