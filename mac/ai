@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Pause / resume / check the local model on the Windows PC, from the Mac.
+#   ai pause    stop llama-server and free VRAM/RAM (nothing can restart it until resume)
+#   ai resume   allow and start llama-server again (model takes about a minute to load)
+#   ai status   paused / active, and whether a job holds the PC awake
+# Runs the same steps as pc/power/ai.ps1, through `ssh pc` into WSL.
+set -euo pipefail
+
+case "${1:-}" in
+  pause)  script='mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && echo "paused: VRAM and RAM freed"' ;;
+  resume) script='rm -f /run/ai/paused && systemctl start llama-server && echo "resumed: model loading"' ;;
+  status) script='if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; if test -e /run/ai/busy; then echo busy; fi' ;;
+  *) echo "usage: ai pause|resume|status" >&2; exit 2 ;;
+esac
+
+# The script goes in on stdin (quoting through PowerShell breaks otherwise).
+ssh pc 'wsl -d Ubuntu -u root -- bash -s' <<<"$script"

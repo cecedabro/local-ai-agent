@@ -10,6 +10,7 @@ ARG PI_PKG=@earendil-works/pi-coding-agent
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg git tmux ripgrep jq make less vim-tiny procps \
       openssh-client iproute2 build-essential python3 python3-venv python3-pip \
+      shellcheck postgresql-client unzip chromium fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI and Tailscale from their official apt repos.
@@ -26,9 +27,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 RUN curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
     | tar -xz -C /usr/local/bin kubeconform
 
+# kustomize (deploy manifests; pinned, renovate can bump it).
+ARG KUSTOMIZE_VERSION=5.4.3
+RUN curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+    | tar -xz -C /usr/local/bin kustomize
+
+# Headless browser: system Chromium. Playwright/Selenium in a project point at it instead of
+# downloading their own build, so their version never has to match an image rebuild.
+ENV CHROMIUM_PATH=/usr/bin/chromium
+
 # Tools outside $HOME, because /home/agent is a PVC mount that would hide them.
 ENV UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin
 RUN uv tool install platformio \
+ && uv tool install bandit \
+ && uv tool install pip-audit \
+ && uv tool install schemathesis \
  && npm install -g "${OPENCODE_PKG}" "${PI_PKG}" \
  && npm cache clean --force
 
@@ -36,10 +49,11 @@ RUN uv tool install platformio \
 RUN userdel -r node && useradd -m -u 1000 -s /bin/bash agent
 
 COPY devbox/entrypoint.sh /usr/local/bin/devbox-entrypoint
+COPY devbox/fetch-docs.sh /usr/local/bin/fetch-docs
 COPY devbox/opencode.json /etc/devbox/opencode.json
 COPY devbox/profile.sh /etc/profile.d/devbox.sh
 COPY harness/ /opt/harness/
-RUN chmod +x /usr/local/bin/devbox-entrypoint /opt/harness/loop.py \
+RUN chmod +x /usr/local/bin/devbox-entrypoint /usr/local/bin/fetch-docs /opt/harness/loop.py \
  && ln -s /opt/harness/loop.py /usr/local/bin/agent-loop
 
 USER agent
