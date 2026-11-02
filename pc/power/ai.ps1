@@ -3,7 +3,7 @@ param([Parameter(Mandatory)][ValidateSet('pause','resume','status')][string]$Act
       [string]$Distro = 'Ubuntu')
 
 switch ($Action) {
-  'pause'  { wsl.exe -d $Distro -u root -- bash -c 'mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server'; 'paused: VRAM and RAM freed' }
+  'pause'  { wsl.exe -d $Distro -u root -- bash -c 'mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory'; 'paused: VRAM and RAM freed' }
   'resume' { wsl.exe -d $Distro -u root -- bash -c 'rm -f /run/ai/paused && systemctl start llama-server'; 'resumed: model loading' }
   'status' { wsl.exe -d $Distro -u root -- bash -c 'test -e /run/ai/paused && echo paused || systemctl is-active llama-server; test -e /run/ai/busy && echo busy || true' }
 }
