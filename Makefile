@@ -1,5 +1,5 @@
 SHELL := bash
-SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote
+SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote harness/tests/fakebin/gh
 PY_FILES := $(shell git ls-files '*.py')
 YAML_FILES := $(shell git ls-files '*.yaml' '*.yml')
 

@@ -6,9 +6,17 @@ The harness, not the model, decides when a task is done: it runs the task's
 acceptance command plus a project-wide check. Pass -> commit. Fail -> reset
 and retry with the failure output. Too many failures -> skip and move on.
 
+After the tasks, the harness waits for CI on the pushed branch. A failed check
+becomes a fix task (with the failed log) and the branch is pushed again, up to
+--ci-rounds times. `agent-watch` (watch.py) does the same for failures on main.
+
 Run from inside a project repo (see harness/templates/):
-    agent-loop                  # full run: wake PC, work through PLAN.md, open a PR
+    agent-loop                  # full run: wake PC, work through PLAN.md, wait for CI, open a PR
+    agent-loop --fix-ci 123456  # only fix the failed GitHub Actions run 123456 (used by agent-watch)
     agent-loop --no-pc --no-push --retries 1   # local dry run
+
+Protected paths: the PROTECTED defaults plus every line of `.agent-protected` in
+the repo root (one path per line, `#` comments; the file protects itself).
 
 Environment (set by the devbox ConfigMap/Secret):
     LLAMA_BASE_URL  e.g. http://192.168.50.50:8080/v1
@@ -31,6 +39,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -44,7 +53,9 @@ HERE = Path(__file__).resolve().parent
 TASK_RE = re.compile(r"^- \[(?P<mark>[ x~])\] (?P<id>T\d+): (?P<title>.+?)\s*$")
 ACCEPT_RE = re.compile(r"^\s+accept:\s*`?(?P<cmd>.+?)`?\s*$")
 STATE_DIR = ".agent"          # logs + STOP file; kept out of git via .git/info/exclude
+PROTECT_FILE = ".agent-protected"
 FAIL_TAIL_LINES = 80
+CI_OK = {"success", "skipped", "neutral"}
 
 
 # --------------------------------------------------------------------------- utils
@@ -221,7 +232,8 @@ class Task:
     id: str
     title: str
     accept: str
-    line: int
+    line: int                  # -1: not in PLAN.md (a CI fix task)
+    context: str = ""          # extra text for the prompt, e.g. a failed CI log
 
 
 def parse_plan(text: str) -> list[Task]:
@@ -258,6 +270,59 @@ def mark_task(plan: Path, task: Task, mark: str, note: str = "") -> None:
     plan.write_text("\n".join(lines) + "\n")
 
 
+def load_protected(repo: Path, defaults: list[str]) -> list[str]:
+    """Defaults plus the repo's .agent-protected lines; the file always protects itself."""
+    extra: list[str] = []
+    path = repo / PROTECT_FILE
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line:
+                extra.append(line)
+    out: list[str] = []
+    for p in [*defaults, *extra, PROTECT_FILE]:
+        if p not in out:
+            out.append(p)
+    return out
+
+
+# --------------------------------------------------------------------------- CI (GitHub Actions via gh)
+
+def ci_runs(repo: Path, branch: str, sha: str) -> list[dict] | None:
+    """Workflow runs for one commit on a branch, or None if gh failed."""
+    res = sh(["gh", "run", "list", "--branch", branch, "--commit", sha, "--limit", "50",
+              "--json", "databaseId,name,status,conclusion"], cwd=repo, timeout=60)
+    if res.returncode != 0:
+        print(f"[ci] gh run list failed: {tail(res.stdout, 5)}", file=sys.stderr)
+        return None
+    try:
+        return json.loads(res.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+
+
+def ci_failure_log(repo: Path, run_id: int | str, lines: int = 60) -> str:
+    """The tail of a failed run's log, without gh's job/step/timestamp prefix columns."""
+    res = sh(["gh", "run", "view", str(run_id), "--log-failed"], cwd=repo, timeout=120)
+    out = []
+    for line in res.stdout.splitlines():
+        parts = line.split("\t", 2)
+        text = parts[-1]
+        text = re.sub(r"^﻿?\d{4}-\d\d-\d\dT[\d:.]+Z ", "", text)
+        if text.strip():
+            out.append(text)
+    return "\n".join(out[-lines:]) or tail(res.stdout, lines)
+
+
+def ci_fix_task(n: int, failed: list[tuple[str, str]]) -> Task:
+    names = ", ".join(name for name, _ in failed)
+    logs = "\n\n".join(f"### CI job `{name}` failed. Log tail:\n```\n{log}\n```" for name, log in failed)
+    title = (f"CI failed on this branch ({names}). Find the cause in the log below, reproduce it "
+             "locally if you can (most CI steps are `make check` or a script in the repo), and fix "
+             "the code or config that is wrong. Never weaken or skip a check to make it pass.")
+    return Task(f"CI{n}", title, "", -1, logs)
+
+
 # --------------------------------------------------------------------------- loop
 
 @dataclass
@@ -276,6 +341,7 @@ class Run:
     pc: Pc
     branch: str = ""
     results: list[Result] = field(default_factory=list)
+    ci_notes: list[str] = field(default_factory=list)
     started: float = field(default_factory=time.monotonic)
 
     @property
@@ -303,11 +369,23 @@ class Run:
                 fh.write(f"\n{STATE_DIR}/\n")
         if git(self.repo, "status", "--porcelain"):
             sys.exit("working tree not clean; commit or stash first")
+        lock = self.state / "lock"
+        if lock.exists():
+            try:
+                os.kill(int(lock.read_text().strip()), 0)
+                sys.exit(f"another agent-loop is running here (pid in {lock})")
+            except (ValueError, ProcessLookupError):
+                pass                                      # stale lock from a crashed run
+            except PermissionError:
+                sys.exit(f"another agent-loop is running here (pid in {lock})")
+        lock.write_text(str(os.getpid()))
+        self.args.protected = load_protected(self.repo, self.args.protected)
         current = git(self.repo, "rev-parse", "--abbrev-ref", "HEAD")
         if current.startswith("agent/"):
             self.branch = current                         # resume an interrupted run
         else:
-            self.branch = f"agent/{dt.datetime.now():%Y-%m-%d-%H%M}"
+            stamp = f"ci-fix-{self.args.fix_ci}" if self.args.fix_ci else f"{dt.datetime.now():%Y-%m-%d-%H%M}"
+            self.branch = f"agent/{stamp}"
             git(self.repo, "checkout", "-b", self.branch)
 
     # -- one attempt
@@ -316,7 +394,7 @@ class Run:
         progress_file = self.repo / "PROGRESS.md"
         progress = tail(progress_file.read_text(), 40) if progress_file.exists() else "(none yet)"
         values = {
-            "task_id": task.id, "task": task.title,
+            "task_id": task.id, "task": task.title + (f"\n\n{task.context}" if task.context else ""),
             "accept": task.accept or "(none; the project check must pass)",
             "check": self.args.check_cmd, "protected": ", ".join(self.args.protected),
             "progress": progress,
@@ -379,7 +457,8 @@ class Run:
             print(f"[{now()}] {task.id} attempt {n}/{self.args.retries}: {task.title}")
             ok, failure = self.attempt(task, n, failure)
             if ok:
-                mark_task(self.repo / "PLAN.md", task, "x")
+                if task.line >= 0:
+                    mark_task(self.repo / "PLAN.md", task, "x")
                 git(self.repo, "add", "-A")
                 git(self.repo, "commit", "-q", "-m", f"{task.id}: {task.title}")
                 self.push()
@@ -390,8 +469,9 @@ class Run:
             if self.stop_reason():
                 break
         reason = failure.splitlines()[0][:160] if failure else "unknown"
-        mark_task(self.repo / "PLAN.md", task, "~", f"skipped: {reason}")
-        git(self.repo, "commit", "-q", "-am", f"{task.id}: skipped")
+        if task.line >= 0:
+            mark_task(self.repo / "PLAN.md", task, "~", f"skipped: {reason}")
+            git(self.repo, "commit", "-q", "-am", f"{task.id}: skipped")
         notify(f"{task.id} skipped", f"{task.title}\n{reason}", "warning")
         return Result(task, "skipped", self.args.retries, reason, time.monotonic() - t0)
 
@@ -411,6 +491,67 @@ class Run:
             if consecutive_skips >= self.args.max_skips:
                 return f"{consecutive_skips} skips in a row (spec or environment problem?)"
 
+    # -- CI feedback
+    def wait_ci(self) -> list[tuple[str, str]] | None:
+        """Wait for every workflow run on the pushed HEAD. [] = green, None = no CI / unknown."""
+        sha = git(self.repo, "rev-parse", "HEAD")
+        appear_by = time.monotonic() + self.args.ci_appear
+        deadline = time.monotonic() + self.args.ci_timeout
+        print(f"[{now()}] waiting for CI on {sha[:7]}")
+        while True:
+            runs = ci_runs(self.repo, self.branch, sha)
+            if runs is None:
+                return None
+            if not runs and time.monotonic() > appear_by:
+                return None
+            if runs and all(r.get("status") == "completed" for r in runs):
+                failed = [r for r in runs if r.get("conclusion") not in CI_OK]
+                return [(r["name"], ci_failure_log(self.repo, r["databaseId"])) for r in failed]
+            if time.monotonic() > deadline:
+                return [("timeout", f"CI did not finish within {self.args.ci_timeout} s")]
+            time.sleep(self.args.ci_poll)
+
+    def ci_gate(self, first: list[tuple[str, str]] | None = None) -> None:
+        """Wait for CI; turn failures into fix tasks until green or out of rounds.
+        `first` skips the initial wait (agent-watch passes the failure it saw on main)."""
+        if not (self.args.ci and self.args.push):
+            return
+        if first is None and self.stop_reason():
+            self.ci_notes.append(f"CI not checked: {self.stop_reason()}.")
+            return
+        self.push()                                       # a trailing "skipped" commit is not pushed yet
+        failed = first
+        for n in range(1, self.args.ci_rounds + 1):
+            if failed is None:
+                failed = self.wait_ci()
+            if failed is None:
+                self.ci_notes.append("No CI runs found for the last commit (or gh failed).")
+                return
+            if not failed:
+                self.ci_notes.append(f"CI green on {git(self.repo, 'rev-parse', '--short', 'HEAD')}.")
+                notify("CI green", self.branch, "white_check_mark")
+                return
+            names = ", ".join(name for name, _ in failed)
+            self.ci_notes.append(f"CI round {n}: failed ({names}).")
+            notify("CI failed", f"{self.branch}: {names}; starting fix task CI{n}", "rotating_light")
+            if self.stop_reason():
+                return
+            result = self.run_task(ci_fix_task(n, failed))
+            self.results.append(result)
+            if result.status != "done":
+                self.ci_notes.append(f"CI{n} could not fix it; needs a human.")
+                return
+            failed = None
+        self.ci_notes.append(f"CI still failing after {self.args.ci_rounds} fix rounds; needs a human.")
+
+    def fix_ci_run(self, run_id: str) -> str:
+        """agent-watch mode: one failed run (on main) becomes the first fix task."""
+        res = sh(["gh", "run", "view", run_id, "--json", "name,conclusion,headSha"], cwd=self.repo, timeout=60)
+        info = json.loads(res.stdout) if res.returncode == 0 else {"name": f"run {run_id}"}
+        self.ci_notes.append(f"Started for failed run {run_id} ({info.get('name')}) on main.")
+        self.ci_gate(first=[(info.get("name", run_id), ci_failure_log(self.repo, run_id))])
+        return "CI fix run finished"
+
     def report(self, ended: str) -> str:
         done = [r for r in self.results if r.status == "done"]
         skipped = [r for r in self.results if r.status == "skipped"]
@@ -429,6 +570,8 @@ class Run:
         remaining = parse_plan((self.repo / "PLAN.md").read_text())
         if remaining:
             lines += ["", f"{len(remaining)} task(s) not started: " + ", ".join(t.id for t in remaining)]
+        if self.ci_notes:
+            lines += ["", "## CI", "", *[f"- {note}" for note in self.ci_notes]]
         lines += ["", f"Logs: `{STATE_DIR}/logs/` in the devbox checkout."]
         return "\n".join(lines) + "\n"
 
@@ -447,6 +590,7 @@ class Run:
         done = sum(r.status == "done" for r in self.results)
         notify("Agent run finished", f"{ended}: {done}/{len(self.results)} done. {pr}".strip(), "checkered_flag")
         print(report)
+        (self.state / "lock").unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -460,10 +604,20 @@ def main() -> int:
     p.add_argument("--no-pc", dest="pc", action="store_false", help="skip wake/keep-awake")
     p.add_argument("--no-push", dest="push", action="store_false")
     p.add_argument("--no-pr", dest="pr", action="store_false")
+    p.add_argument("--no-ci", dest="ci", action="store_false", help="don't wait for CI after the tasks")
+    p.add_argument("--ci-rounds", type=int, default=3, help="max CI fix tasks per run")
+    p.add_argument("--ci-timeout", type=int, default=1800, help="seconds to wait for CI to finish")
+    p.add_argument("--ci-appear", type=int, default=180, help="seconds to wait for CI runs to show up")
+    p.add_argument("--ci-poll", type=int, default=20)
+    p.add_argument("--fix-ci", metavar="RUN_ID", help="skip PLAN.md; fix this failed GitHub Actions run")
     args = p.parse_args()
     args.agent_cmd = shlex.split(env("AGENT_CMD", "opencode run --model pc/coder {prompt}"))
     args.check_cmd = env("CHECK_CMD", "make check")
     args.protected = [x.strip() for x in env("PROTECTED", "tests/,contract/,PLAN.md,SPEC.md,AGENTS.md").split(",") if x.strip()]
+
+    if args.ci and args.push and not shutil.which("gh"):
+        print("[ci] gh not found; not waiting for CI", file=sys.stderr)
+        args.ci = False
 
     run = Run(repo=args.repo.resolve(), args=args, pc=Pc(args.pc))
     run.prepare()
@@ -472,7 +626,11 @@ def main() -> int:
     try:
         run.pc.up()
         run.pc.hold()
-        ended = run.loop()
+        if args.fix_ci:
+            ended = run.fix_ci_run(args.fix_ci)
+        else:
+            ended = run.loop()
+            run.ci_gate()
     except PcUnavailable as exc:
         ended = str(exc)
     except KeyboardInterrupt:
