@@ -16,7 +16,7 @@ back to sleep when done.
 - **Model:** Qwen3.6-35B-A3B (Apache 2.0, Apr 2026, agentic-coding tuned), Q4 GGUF
   with MTP speculative decoding. Experts partly in RAM (`--n-cpu-moe`), 48k
   context, q8 KV cache. Served as alias `coder`.
-- **Inference node:** Windows 10 + WSL2 Ubuntu (NAT; `ai-power.ps1` forwards 8080/2222 and keeps WSL up
+- **Inference node:** Windows 10 + WSL2 Ubuntu (NAT; `ai-power.ps1` forwards 8080/2223 and keeps WSL up
   via a boot task), llama-server as systemd unit, firewall open to the LAN only.
 - **Control plane:** devbox pod (tmux, OpenCode, Pi, git, toolchains) reached
   over Tailscale SSH; waker pod on host network sends the magic packet.

@@ -74,7 +74,7 @@ browser and no parallel heavy jobs.
 ## Safety as built
 
 - Own namespace, no service account token, repo-scoped GitHub token (the agent works on branches and opens PRs; you merge).
-- Egress policy: DNS, the public internet on 80/443 (plus Tailscale ports), the PC (8080, 2222) and
+- Egress policy: DNS, the public internet on 80/443 (plus Tailscale ports), the PC (8080, 2223) and
   the waker. Private ranges and other pods are blocked. The cluster network cannot filter by
   hostname, so GitHub/PyPI/npm are not singled out. Ingress is closed.
 - The devbox key on the PC only runs `ai-power-remote` (busy/status/restart). It cannot pause or

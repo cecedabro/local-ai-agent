@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot setup inside WSL Ubuntu (run as your normal user; uses sudo).
-# Installs: /run/ai flags dir, llama-server unit + env + API key, sshd on 2222
+# Installs: /run/ai flags dir, llama-server unit + env + API key, sshd on 2223
 # (key-only), ai-power-remote forced command, narrow sudoers rule.
 # Usage: setup-wsl.sh [devbox-ssh-public-key-file]
 #   Without a key everything else is installed; run it again with the key once the devbox
@@ -36,10 +36,10 @@ echo "${ME} ALL=(root) NOPASSWD: /usr/bin/systemctl restart llama-server, /usr/b
 sudo chmod 0440 /etc/sudoers.d/ai-power
 sudo visudo -cf /etc/sudoers.d/ai-power
 
-# sshd on 2222 (22 belongs to Windows in mirrored mode), keys only.
+# sshd on 2223 (22 belongs to Windows in mirrored mode), keys only.
 sudo apt-get install -y --no-install-recommends openssh-server
 sudo tee /etc/ssh/sshd_config.d/ai.conf >/dev/null <<CONF
-Port 2222
+Port 2223
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
@@ -62,4 +62,4 @@ sudo systemctl restart ssh.socket 2>/dev/null || true
 sudo systemctl enable --now ssh
 sudo systemctl enable --now llama-server
 
-echo "Done. Check: systemctl status llama-server; ssh -p 2222 ${ME}@localhost status (from a host with the devbox key)"
+echo "Done. Check: systemctl status llama-server; ssh -p 2223 ${ME}@localhost status (from a host with the devbox key)"

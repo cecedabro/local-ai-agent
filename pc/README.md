@@ -55,11 +55,11 @@ Then elevated PowerShell in `pc/power/`:
 .\install-windows.ps1 -LanSubnet 192.168.50.0/24
 ```
 `Start-ScheduledTask ai-power` (or reboot) and check `pc\power\ai-power.log`: it should show the
-keepalive and, on Windows 10, `portproxy: 8080,2222 -> <WSL address>` (`netsh interface portproxy show all`).
+keepalive and, on Windows 10, `portproxy: 8080,2223 -> <WSL address>` (`netsh interface portproxy show all`).
 Desktop shortcuts for `ai.ps1 pause` and `ai.ps1 resume`.
 
 **Check:** sleep the PC, `curl -X POST` the waker from the devbox (`curl -X POST -H "X-Waker-Token: $WAKER_TOKEN" $WAKER_URL/wake`),
-PC answers within ~90 s. `ssh -p 2222 <you>@<pc-ip> busy on` keeps it awake;
+PC answers within ~90 s. `ssh -p 2223 <you>@<pc-ip> busy on` keeps it awake;
 `busy off` (or 20 min without a heartbeat) lets Windows sleep it again.
 
 ## Files
