@@ -5,3 +5,4 @@ __pycache__/
 secrets/
 *.secret.yaml
 .env
+.DS_Store
