@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Stand-in for the GitHub CLI in the self-test. Runs in the project repo (cwd).
+# CI "fails" for any commit that lacks ci-fixed.txt and passes once it exists.
+set -euo pipefail
+
+green() { git cat-file -e "$1:ci-fixed.txt" 2>/dev/null; }
+run_json() {  # run_json <sha>
+  if green "$1"; then
+    printf '[{"databaseId":2,"name":"ci","status":"completed","conclusion":"success","headSha":"%s","event":"push"}]\n' "$1"
+  else
+    printf '[{"databaseId":1,"name":"ci","status":"completed","conclusion":"failure","headSha":"%s","event":"push"}]\n' "$1"
+  fi
+}
+
+case "${1:-} ${2:-}" in
+  "run list")
+    sha="" branch=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --commit) sha=$2; shift ;;
+        --branch) branch=$2; shift ;;
+      esac
+      shift
+    done
+    [[ -n "$sha" ]] || sha=$(git rev-parse "origin/${branch}")
+    run_json "$sha"
+    ;;
+  "run view")
+    if [[ " $* " == *" --log-failed "* ]]; then
+      printf 'ci\ttest\t2026-11-02T10:00:00.0000000Z E   ci says: ci-fixed.txt is missing\n'
+    else
+      printf '{"name":"ci","conclusion":"failure","headSha":"unknown"}\n'
+    fi
+    ;;
+  "pr create")
+    echo "https://example.invalid/pr/1"
+    ;;
+  *)
+    echo "fake gh: unsupported: $*" >&2
+    exit 1
+    ;;
+esac
