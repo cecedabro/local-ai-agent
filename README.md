@@ -60,7 +60,7 @@ cluster objects such as the privileged waker namespace.
 | I want to | Command |
 | --- | --- |
 | Open the agent | `ssh agent@devbox` (lands in tmux session `agent`; `NO_TMUX=1` skips tmux) |
-| Run the loop | in the project repo on the devbox: `agent-loop` (stop after the current task: `touch .agent/STOP`). After the tasks it waits for CI and turns failures into fix tasks (`--no-ci` skips) |
+| Run the loop | in the project repo on the devbox: `agent-loop` (stop after the current task: `touch .agent/STOP`; it stops starting new tasks after 24 h, change with `--max-hours N`). After the tasks it waits for CI and turns failures into fix tasks (`--no-ci` skips) |
 | Fix failures on main automatically | in a tmux window in the project repo: `agent-watch` (checks every 10 min, one fix PR per failing commit; stop with `touch .agent/WATCH-STOP`) |
 | Tell it what to do | edit `PLAN.md` / `SPEC.md` / `AGENTS.md` in the project repo; the agent cannot edit them |
 | Free the GPU for myself | on the Mac: `ai pause`; give it back with `ai resume`; `ai status` |
