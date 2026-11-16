@@ -40,6 +40,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -67,17 +68,41 @@ def env(name: str, default: str | None = None) -> str:
     return value
 
 
+def _kill_group(pgid: int) -> None:
+    """Kill a process group; ignore it if it is already gone."""
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def sh(cmd: str | list[str], *, cwd: Path, timeout: int | None = None,
        check: bool = False) -> subprocess.CompletedProcess[str]:
-    """Run a command, merge stderr into stdout, never raise on timeout."""
-    try:
-        proc = subprocess.run(
-            cmd, cwd=cwd, shell=isinstance(cmd, str), text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        out = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout or b"").decode(errors="replace")
-        proc = subprocess.CompletedProcess(cmd, 124, out + f"\n[timed out after {timeout}s]\n")
+    """Run a command, merge stderr into stdout, never raise on timeout.
+
+    The command runs in its own process group, and the whole group is killed when it
+    finishes or times out. Killing only the shell left test runs (and the agent's own
+    tool calls) running in the background, where they held locks and hung later runs.
+    """
+    with subprocess.Popen(
+        cmd, cwd=cwd, shell=isinstance(cmd, str), text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
+    ) as child:
+        try:
+            out, _ = child.communicate(timeout=timeout)
+            code = child.returncode
+        except subprocess.TimeoutExpired:
+            _kill_group(child.pid)
+            try:
+                out, _ = child.communicate(timeout=10)
+            except subprocess.TimeoutExpired:  # a process outside the group holds the pipe
+                child.kill()
+                out = ""
+            out = (out or "") + f"\n[timed out after {timeout}s]\n"
+            code = 124
+        finally:
+            _kill_group(child.pid)
+    proc = subprocess.CompletedProcess(cmd, code, out or "")
     if check and proc.returncode != 0:
         raise RuntimeError(f"command failed ({proc.returncode}): {cmd}\n{proc.stdout}")
     return proc
