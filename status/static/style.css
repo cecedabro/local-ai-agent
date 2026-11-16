@@ -1,4 +1,5 @@
-/* agent-status: "liquid glass" with Aero gloss. Light and dark follow the device setting.
+/* agent-status: "liquid glass" with Aero gloss. Light or dark: <html data-theme>, set before paint
+   by the head script from the header switch (Auto follows the device).
    Colours live in the custom properties below; the rest of the sheet only uses them. */
 :root{color-scheme:light;
 --ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
@@ -21,7 +22,7 @@
 --title-a:#0a4e7c;--title-b:#0d86c6;--gloss:1;
 --t1:rgba(90,190,255,.30);--t2:rgba(110,225,140,.30);--t3:rgba(255,200,90,.30);
 --t4:rgba(170,140,255,.28);--t5:rgba(70,220,200,.30);--t6:rgba(255,130,170,.26)}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;
+:root[data-theme=dark]{color-scheme:dark;
 --ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
 --ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
 --bg:#06121f;
@@ -40,7 +41,7 @@
 --fill:linear-gradient(90deg,#2ee59d,#22c3ee 55%,#3b9cff);--bar-top:#7fe3ff;--bar-bottom:#2a7fe0;
 --title-a:#ffffff;--title-b:#8fd8ff;--gloss:.3;
 --t1:rgba(90,190,255,.16);--t2:rgba(110,225,140,.14);--t3:rgba(255,200,90,.13);
---t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}}
+--t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}
 
 /* ------------------------------------------------------------------ base */
 *{box-sizing:border-box}
@@ -53,6 +54,14 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .muted{color:var(--muted)}.small{font-size:13px}
 code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
 .defs{position:absolute;width:0;height:0}
+/* Aero scrollbars: a slim glossy aqua-to-green capsule on a clear track */
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{border-radius:99px;border:3px solid transparent;background-clip:padding-box;
+  background-image:linear-gradient(90deg,rgba(255,255,255,.55),rgba(255,255,255,0) 60%),linear-gradient(180deg,#7fdcff,#22c3ee 55%,#34d399)}
+::-webkit-scrollbar-thumb:hover{border-width:2px}
+::-webkit-scrollbar-corner{background:transparent}
+@supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:#22c3ee transparent}}
 
 /* ------------------------------------------------------------------ frame */
 header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
@@ -141,13 +150,34 @@ button{font:inherit;font-weight:600;cursor:pointer;color:var(--ink);border-radiu
   background:var(--btn);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.08)}
 button:hover{filter:brightness(1.05)}button:active{transform:translateY(1px)}
 button:disabled{opacity:.5;cursor:default}
-button.primary,#add>button:not(.link),#unlock button{color:#fff;border-color:transparent;background:var(--primary);
+button.primary,#unlock button{color:#fff;border-color:transparent;background:var(--primary);
   text-shadow:0 1px 1px rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px var(--glow)}
 button.link{border:0;background:none;box-shadow:none;color:var(--link);padding:0 4px}
 .btns{display:flex;gap:4px}.btns button{width:30px;height:30px;padding:0}
 form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-form input[name=repo],form select[name=repo]{flex:1 1 200px}form input[name=ref]{flex:1 1 150px}
-form input[name=note]{flex:2 1 200px}form input[name=max_hours]{width:72px}
+.card-head{display:flex;align-items:baseline;gap:12px}.card-head h2{margin-right:auto}
+#add{display:grid;gap:10px}
+#add .fields{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.6fr);gap:8px}
+#add .fields>*{width:100%;min-width:0}
+#add .opts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+#add .opts .spacer{flex:1}
+select{appearance:none;-webkit-appearance:none;padding-right:32px;cursor:pointer;
+  background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2322c3ee' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center/12px 8px}
+/* "max 24 h" as a glass chip with a bare number field */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:13px;color:var(--muted);
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+.chip input{width:44px;padding:3px 4px;text-align:center;border-radius:8px;font-weight:650;color:var(--ink);-moz-appearance:textfield}
+.chip input::-webkit-inner-spin-button,.chip input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+/* checkbox as a glossy switch */
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch .track{position:relative;width:40px;height:24px;border-radius:999px;background:var(--track);
+  border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 3px rgba(0,0,0,.18);transition:background .2s}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff 0 30%,#e6f2fa 100%);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}
+.switch input:checked+.track{background:var(--primary);border-color:transparent}
+.switch input:checked+.track::after{transform:translateX(16px)}
+.switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
 #unlock input{flex:1 1 200px}
 #msg{min-height:1.2em}
 body.locked .ctl,body.locked #add{display:none}
@@ -156,7 +186,9 @@ body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
 /* ------------------------------------------------------------------ chat */
 body.locked #chat{display:none}
 .chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
-#chat .log{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px}
+#chat .log{max-height:min(62vh,600px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:10px 12px 10px 2px;
+  -webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent);
+  mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent)}
 #chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
 #chat.full .log{max-height:none;flex:1}
 .msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:9px 14px;border-radius:20px;max-width:85%}
@@ -165,9 +197,9 @@ body.locked #chat{display:none}
   background:linear-gradient(180deg,rgba(150,225,255,.55),rgba(60,180,240,.32));border:1px solid rgba(255,255,255,.8);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(20,120,200,.14);
   backdrop-filter:blur(12px) saturate(170%);-webkit-backdrop-filter:blur(12px) saturate(170%)}
-@media (prefers-color-scheme:dark){.msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
+:root[data-theme=dark] .msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
   background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a);
-  border-color:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}}
+  border-color:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}
 .msg.assistant{align-self:flex-start;background:var(--bubble);border:1px solid var(--stroke-soft);border-bottom-left-radius:6px;
   box-shadow:inset 0 1px 0 var(--hi-soft)}
 .msg.note{color:var(--muted);font-size:13px}
@@ -187,6 +219,9 @@ body.locked #chat{display:none}
 .seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--primary);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 10px var(--glow);transition:transform .28s cubic-bezier(.3,1.4,.5,1)}
 .seg input:nth-of-type(2):checked~.thumb{transform:translateX(100%)}
+.seg.three{grid-template-columns:repeat(3,1fr)}.seg.three .thumb{width:calc(33.333% - 2px)}
+.seg.three input:nth-of-type(3):checked~.thumb{transform:translateX(200%)}
+.seg.icons label{padding:5px 9px}.seg.icons label svg{width:16px;height:16px}
 .seg input:checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
 .seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -218,6 +253,6 @@ main,#controls{gap:12px;padding:12px}
 .card{border-radius:20px;padding:14px}
 .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
 .tile .value{font-size:21px}
-form input[name=repo],form select[name=repo],form input[name=note]{flex-basis:100%}
+#add .fields{grid-template-columns:minmax(0,1fr)}
 .events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
 .cols h3:first-child{margin-top:14px}}
