@@ -8,6 +8,9 @@
 # Then a run whose push fails must say so loudly.
 # Finally agent-queue takes a job from the real status service and runs it.
 set -euo pipefail
+# CI runners have no git identity; the harness and agent-queue commit in fresh clones.
+export GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.com
+export GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.com
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
@@ -163,14 +166,21 @@ cd "${WORK}/repo"
 # runs used to hold locks and hang later runs).
 LOG="${WORK}/sh.log"
 MARK="selftest-orphan-$$"
-python3 - "${HERE}/../loop.py" "${MARK}" > "${LOG}" 2>&1 <<'PY' || fail "sh() timeout check failed"
+MARK="${MARK}" python3 - "${HERE}/../loop.py" > "${LOG}" 2>&1 <<'PY' || fail "sh() timeout check failed"
 import importlib.util, pathlib, subprocess, sys
 spec = importlib.util.spec_from_file_location("loop", sys.argv[1])
 loop = importlib.util.module_from_spec(spec); sys.modules["loop"] = loop; spec.loader.exec_module(loop)
-mark = sys.argv[2]
-res = loop.sh(f"exec -a {mark} sleep 60 & exec -a {mark} sleep 60", cwd=pathlib.Path("."), timeout=1)
+mark = __import__("os").environ["MARK"]   # not in argv: pgrep -f would match this process
+# /bin/sh is dash on Ubuntu (no `exec -a`), so bash renames the sleeps.
+res = loop.sh(f"bash -c 'exec -a {mark} sleep 60' & bash -c 'exec -a {mark} sleep 60'",
+              cwd=pathlib.Path("."), timeout=1)
 assert res.returncode == 124, res
-left = subprocess.run(["pgrep", "-f", mark], capture_output=True, text=True).stdout
+import time
+for _ in range(30):                    # SIGKILL is asynchronous: give the kernel a moment
+    left = subprocess.run(["pgrep", "-f", mark], capture_output=True, text=True).stdout
+    if not left.strip():
+        break
+    time.sleep(0.1)
 assert not left.strip(), f"left behind: {left}"
 PY
 echo "selftest passed"
