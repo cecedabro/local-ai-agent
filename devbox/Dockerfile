@@ -54,8 +54,10 @@ COPY devbox/opencode.json /etc/devbox/opencode.json
 COPY devbox/profile.sh /etc/profile.d/devbox.sh
 COPY harness/ /opt/harness/
 RUN chmod +x /usr/local/bin/devbox-entrypoint /usr/local/bin/fetch-docs /opt/harness/loop.py /opt/harness/watch.py \
+    /opt/harness/worker.py \
  && ln -s /opt/harness/loop.py /usr/local/bin/agent-loop \
- && ln -s /opt/harness/watch.py /usr/local/bin/agent-watch
+ && ln -s /opt/harness/watch.py /usr/local/bin/agent-watch \
+ && ln -s /opt/harness/worker.py /usr/local/bin/agent-queue
 
 USER agent
 WORKDIR /home/agent

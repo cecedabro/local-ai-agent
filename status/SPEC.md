@@ -1,11 +1,14 @@
 # SPEC: agent-status service
 
 A small web service that shows what the local coding agent is doing: is the model up, which
-run is active, which task it is on, what is queued, recent events, and a few stats. It also
-hands out the **lease** on the model: one GPU, so one `agent-loop` run at a time; the others
-wait in line. `harness/loop.py` is the client (class `Status`); it already speaks this API.
+run is active, which task it is on, what is queued, recent events, all-time numbers and token
+speed. It also hands out the **lease** on the model (one GPU, so one `agent-loop` run at a
+time; the others wait in line) and keeps a **job queue** that `agent-queue`
+(`harness/worker.py`) works through. `harness/loop.py` is the event and lease client (class
+`Status`).
 
-The contract tests in `status/tests/test_contract.py` are the judge. This file explains them.
+The tests are the judge: `status/tests/test_contract.py` (§1–§7) and
+`status/tests/test_unit_queue.py` (§8–§10). This file explains them.
 
 ## 0. Constraints
 
@@ -16,11 +19,13 @@ The contract tests in `status/tests/test_contract.py` are the judge. This file e
   ```python
   def make_server(host: str, port: int, *, db_path: str, token: str,
                   llama_url: str | None = None, lease_ttl: float = 180,
-                  probe_interval: float = 30, clock=time.time) -> ThreadingHTTPServer
+                  probe_interval: float = 30, clock=time.time,
+                  llama_key: str | None = None, job_ttl: float = 900) -> ThreadingHTTPServer
   ```
 
   It creates the database if needed, binds `(host, port)` (port 0 = any free port) and
   returns the server **without** starting it; the caller runs `serve_forever()`.
+  `server.app.sample_metrics()` takes one token sample (§9); `main()` calls it on a timer.
   Every notion of "now" (lease expiry, stale runs, stats windows, probe cache, retention)
   must come from `clock()`, never from `time.time()` directly. The tests move the clock.
 - `python3 status/app.py` runs it (see §7).
@@ -47,7 +52,8 @@ Body: a JSON object (max 256 KiB, else **413**). Required: `run_id`, `repo`, `ki
 
 Optional fields the harness sends: `branch`, `task_id`, `title`, `attempt`, `attempts`,
 `retries`, `seconds`, `reason`, `detail`, `plan`, `ended`, `done`, `skipped`, `pushed`, `pr`,
-`max_hours`, `fix_ci`. Store the **whole** body; ignore fields you don't know.
+`max_hours`, `fix_ci`, `job_id`, and on `task_done` the commit: `commit` (short sha),
+`files`, `insertions`, `deletions`. Store the **whole** body; ignore fields you don't know.
 
 `plan` is a list of `{"id": "T01", "title": "...", "state": "todo" | "done" | "skipped"}`.
 
@@ -152,6 +158,9 @@ Over all stored events:
 - `tasks_per_hour_24h`: `task_done` events received in the last 24 h (by `clock()`) / 24,
   rounded to 3 decimals.
 
+Besides these keys, `/api/status` has `jobs` (§8), `totals` and `daily` (§10) and `tokens`
+(§9). A run also carries `job_id`, `max_hours`, `task_since` and `retries`.
+
 ## 6. `GET /` (the page)
 
 `text/html; charset=utf-8`, rendered on the server from the same data as `/api/status`, so it
@@ -161,19 +170,28 @@ value with `html.escape`; event bodies come from the network.
 
 Sections, top to bottom:
 
-1. **Model**: a coloured badge with the state (`ready` green, `loading` amber,
-   `unreachable` red, `unknown` grey).
-2. **Now**: the running run (repo, branch, current task id + title + attempt, minutes since
-   `started`), or "Idle" when nothing runs.
-3. **Queue**: the lease holder and the waiters in order; then the running run's plan tasks
-   that are still `todo`, in order.
-4. **Recent**: the newest 20 events (received time, repo, kind, task id, title/detail/reason).
-5. **Stats**: the numbers from §5.4.
-6. **Runs**: the 10 runs with state, done/skipped, branch, PR link if any.
+1. **Header**: a coloured badge with the model state (`ready` green, `loading` amber,
+   `unreachable` red, `unknown` grey), always with its text.
+2. **Controls** (outside the refreshed part, so typing isn't interrupted): read-only until
+   the viewer pastes the token; it is kept in that browser's `localStorage` and checked with
+   `POST /api/auth`. Unlocked: a form to add a job (§8).
+3. **Now**: the running run (repo, branch, current task id + title + attempt, time on the
+   task and in the run, plan progress bar), or "Idle" when nothing runs.
+4. **Queue**: the running job (Stop) and the queued jobs in order (↑ ↓ ✕); the lease holder
+   and waiters; recent jobs (requeue); next to it the running run's `todo` plan tasks.
+5. **All time**: commits, lines, tokens written/read, PRs, agent hours, first-try rate.
+6. **Token speed**: writing/reading tok/s now (15 min) and on average, and a 24-bar chart of
+   tokens written per hour.
+7. **Commits per day**: 14 bars, plus a per-repo table.
+8. **Recent**: the newest 20 events (received time, repo, kind, task id, title/detail/reason,
+   commit sha and size).
+9. **Runs**: the 10 runs with state, done/skipped, branch, PR link if any.
 
-A small inline script fetches `/api/status` every 5 s and redraws (sections update
-without a full reload). Mobile friendly (single column under 700 px), dark by default, no
-horizontal scroll. Other paths → 404.
+`GET /partial` returns sections 3–9 only. The inline script fetches it every 5 s and swaps
+it in (same renderer as the full page, same data as `/api/status`), then shows times in the
+viewer's time zone (`<time datetime>`; UTC without JavaScript). `GET /api/status/head` gives
+the header badge. Mobile friendly (single column under 700 px; wide tables scroll inside
+their card), dark by default with a light variant, no horizontal page scroll. Other paths → 404.
 
 ## 7. Running it
 
@@ -187,7 +205,67 @@ horizontal scroll. Other paths → 404.
 | `LLAMA_BASE_URL` | (unset) | model probe off when unset |
 | `LEASE_TTL` | `180` | seconds |
 | `PROBE_INTERVAL` | `30` | seconds |
+| `LLAMA_API_KEY` | (unset) | sent to llama-server's `/metrics` |
+| `METRICS_INTERVAL` | `60` | seconds between token samples; `0` = off |
+| `JOB_TTL` | `900` | a running job without heartbeat for this long becomes `lost` |
+| `STATUS_QUIET` | (unset) | `1` = no request log |
 
 On start, delete events received more than 30 days ago (by `clock()`). This happens in
 `make_server`, so it applies to tests too. Log one line per request to stderr is fine;
 never log the token.
+
+## 8. Job queue
+
+Jobs are what `agent-queue` (on the devbox) runs, one at a time: clone or update the repo,
+check out the branch, run `agent-loop` with `AGENT_JOB_ID` set. All endpoints need the token.
+
+A job: `id`, `repo` (`owner/name`), `ref` (branch, `""` = the repo's default), `note`,
+`max_hours`, `ci`, `state` (`queued`, `running`, `done`, `failed`, `cancelled`, `lost`),
+`created`, `started`, `finished`, `worker`, `stopping`, `detail`, `exit_code`, `run_id`
+(the newest run whose events carry this `job_id`).
+
+- `POST /api/jobs` `{"repo", "ref"?, "note"? (≤200), "max_hours"? (0.1–24, default 24),
+  "ci"? (bool, default true)}` → **201** with the job. `repo` must match
+  `owner/name` (letters, digits, `_.-`); `ref` letters, digits, `._/-`. Else **400**.
+- `POST /api/jobs/claim` `{"worker"}` → `{"job": job | null}`. Null while any job is running
+  (one GPU) or none is queued; else the first queued job becomes `running`.
+- `POST /api/jobs/<id>/heartbeat` → `{"cancel": bool}`. Refreshes `seen`; a `lost` job comes
+  back to `running`. `cancel` is true once Stop was pressed or the job is no longer running.
+- `POST /api/jobs/<id>/finish` `{"state": "done"|"failed"|"cancelled", "detail"?, "exit_code"?}`;
+  only for `running`/`lost` jobs, else **409**.
+- `POST /api/jobs/<id>/cancel`: queued → `cancelled`; running → `stopping` (the worker
+  touches `.agent/STOP`, so the run ends after its current task); else **409**.
+- `POST /api/jobs/<id>/move` `{"to": "top"|"up"|"down"|"bottom"}`: queued only (**409**),
+  unknown `to` → **400**.
+- `POST /api/jobs/<id>/requeue`: a finished job is queued again as a new job; **409** while
+  it is queued or running.
+- Unknown id → **404**. A running job whose `seen` is older than `job_ttl` becomes `lost`.
+
+`/api/status` → `jobs`: `{"running": [...], "queued": [... in order], "recent": [10 newest
+finished in the last 7 days]}`. Jobs live in SQLite and survive a restart.
+
+## 9. Token speed
+
+With `llama_url` set, `sample_metrics()` reads `<root>/metrics` (llama-server needs
+`--metrics`; `Authorization: Bearer <llama_key>` when set): the counters
+`llamacpp:tokens_predicted_total`, `…tokens_predicted_seconds_total`,
+`…prompt_tokens_total`, `…prompt_seconds_total` and the gauge `…requests_processing`.
+Each sample stores the increase since the previous one; a counter that went down
+(llama-server restarted) counts from zero. Samples older than 30 days are dropped; the
+all-time totals are kept separately.
+
+`/api/status` → `tokens`: `available`, `error` (why the last sample failed, e.g.
+"llama-server runs without --metrics"), `last_sample`, `busy` (null if no sample in 5 min),
+`generated_total`, `prompt_total`, `gen_tps` and `prompt_tps` (all-time tokens ÷ seconds),
+`gen_tps_recent`, `prompt_tps_recent` (last 15 min), `generated_24h`, `hourly` (24 ×
+`{hour, generated, gen_tps}`, oldest first).
+
+## 10. All-time numbers
+
+Kept in their own tables when events arrive, so the 30-day event retention doesn't touch them.
+`/api/status` → `totals`: `since`, `commits` (`task_done` events), `tasks_skipped`,
+`lines_added`/`lines_removed` (sum of `insertions`/`deletions`), `runs` (`run_started`),
+`prs` (`run_finished` with a `pr`), `push_failures`, `agent_hours` (sum of task `seconds`),
+`first_try_rate`, and `repos` (the same per repo, newest activity first).
+`daily`: the last 14 days (UTC), oldest first: `{day, commits, skipped, lines_added,
+lines_removed, generated}`.

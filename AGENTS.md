@@ -28,7 +28,8 @@ changing architecture. Decisions below are settled unless the user says otherwis
 - Placeholders are literally `REPLACE_ME`.
 
 ## status/ (the agent-status service)
-- Spec: `status/SPEC.md`. Judge: `status/tests/test_contract.py` (protected; don't edit).
+- Spec: `status/SPEC.md`. Judge: `status/tests/test_contract.py` (protected; don't edit) and
+  `status/tests/test_unit_queue.py`.
 - One file, `status/app.py`, Python 3.11 **standard library only** (no pip packages).
 - Your own tests: `status/tests/test_unit_*.py` (`make check` runs them).
 - Paths in `.agent-protected` are human-owned; changes there reject the attempt.

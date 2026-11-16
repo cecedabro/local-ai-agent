@@ -5,13 +5,20 @@
 # T04 skipped (path from .agent-protected), then CI fails, CI1 fixes it, CI green.
 # The run first waits once in the status queue and reports its events there.
 # Then agent-watch sees a failure on main and opens a separate fix run.
-# Finally a run whose push fails must say so loudly.
+# Then a run whose push fails must say so loudly.
+# Finally agent-queue takes a job from the real status service and runs it.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 STATUS_PID=""
-trap '[[ -n "${STATUS_PID}" ]] && kill "${STATUS_PID}" 2>/dev/null; rm -rf "${WORK}"' EXIT
+APP_PID=""
+cleanup() {
+  [[ -n "${STATUS_PID}" ]] && kill "${STATUS_PID}" 2>/dev/null
+  [[ -n "${APP_PID}" ]] && kill "${APP_PID}" 2>/dev/null
+  rm -rf "${WORK}"
+}
+trap cleanup EXIT
 
 # Fake status service: logs events, refuses the first lease so the loop has to queue.
 EVENTS="${WORK}/events.jsonl"
@@ -112,6 +119,44 @@ grep -q '^## Push failed' REPORT.md || fail "push failure not in REPORT.md"
 grep -q '"kind": "push_failed"' "${EVENTS}" || fail "push failure not sent to the status service"
 grep '"kind": "run_finished"' "${EVENTS}" | tail -1 | grep -q '"pushed": false' || fail "run_finished should say not pushed"
 [[ "$(grep -c '\[notify\] Push failed' "${LOG}")" -eq 1 ]] || fail "push failure notified more than once"
+cd "${WORK}/repo"
+
+# agent-queue: a job queued on the real status service is cloned, run and reported.
+LOG="${WORK}/queue.log"
+APP_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+export APP_PORT
+STATUS_PORT="${APP_PORT}" STATUS_DB="${WORK}/status.db" STATUS_TOKEN=qtoken STATUS_QUIET=1 \
+  python3 "${HERE}/../../status/app.py" 2> "${WORK}/app.log" &
+APP_PID=$!
+api() {  # api METHOD PATH [JSON]; retries until the app is up
+  python3 "${HERE}/api.py" "$@"
+}
+mkdir -p "${WORK}/gh/local" "${WORK}/qsrc" && cd "${WORK}/qsrc"
+git init -q -b main
+git config user.name test; git config user.email test@example.com
+printf '# PLAN\n- [ ] T01: Create hello.txt\n  accept: test -f hello.txt\n' > PLAN.md
+printf 'check:\n\ttrue\n' > Makefile
+echo "# PROGRESS" > PROGRESS.md
+git add -A && git commit -qm init
+git clone -q --bare . "${WORK}/gh/local/proj.git"
+api POST /api/jobs '{"repo": "local/proj", "ci": false, "note": "selftest"}' > /dev/null || fail "could not queue a job"
+STATUS_URL="http://127.0.0.1:${APP_PORT}" STATUS_TOKEN=qtoken QUEUE_GIT_BASE="${WORK}/gh/" \
+  AGENT_LOOP_CMD="python3 ${HERE}/../loop.py --no-pc --no-pr --queue-poll 0" \
+  python3 "${HERE}/../worker.py" --once --repos "${WORK}/qrepos" --heartbeat 1 > "${LOG}" 2>&1 \
+  || fail "agent-queue exited non-zero"
+api GET /api/status > "${WORK}/state.json"
+python3 - "${WORK}/state.json" <<'PY' || fail "queue job not reported as done: $(cat "${LOG}")"
+import json, sys
+st = json.load(open(sys.argv[1]))
+recent = st["jobs"]["recent"]
+assert recent and recent[0]["state"] == "done", recent
+assert st["runs"][0]["job_id"] == str(recent[0]["id"]), st["runs"]
+assert st["totals"]["commits"] == 1, st["totals"]
+done = [e for e in st["events"] if e["kind"] == "task_done"]
+assert done and len(done[0]["commit"]) >= 7 and done[0]["insertions"] >= 1, done
+PY
+[[ -n "$(git --git-dir="${WORK}/gh/local/proj.git" for-each-ref refs/heads/agent/)" ]] \
+  || fail "queue run did not push its branch"
 cd "${WORK}/repo"
 
 # sh(): a timeout kills the whole process group, not only the shell (left-over test

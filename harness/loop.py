@@ -31,6 +31,7 @@ Environment (set by the devbox ConfigMap/Secret):
                     default: tests/,contract/,PLAN.md,SPEC.md,AGENTS.md
     STATUS_URL      agent-status service (status/ in this repo), optional
     STATUS_TOKEN    bearer token for it
+    AGENT_JOB_ID    set by agent-queue (worker.py): the job this run belongs to
 
 Status and queue: with STATUS_URL set, the run reports its progress there and first
 takes the service's lease on the model: one GPU, so one run at a time; others wait in
@@ -148,6 +149,17 @@ def notify(title: str, message: str, tags: str = "robot") -> None:
 
 # --------------------------------------------------------------------------- status service
 
+def commit_stats(repo: Path) -> dict:
+    """Short sha and size of HEAD, for the status page's all-time numbers."""
+    out = git(repo, "show", "--shortstat", "--format=%h", "HEAD", check=False).splitlines()
+    stats: dict = {"commit": out[0].strip() if out else ""}
+    text = " ".join(out[1:])
+    for key, word in (("files", "file"), ("insertions", "insertion"), ("deletions", "deletion")):
+        m = re.search(rf"(\d+) {word}", text)
+        stats[key] = int(m.group(1)) if m else 0
+    return stats
+
+
 def plan_snapshot(repo: Path) -> list[dict]:
     """Every task in PLAN.md with its state, for the status page."""
     plan = repo / "PLAN.md"
@@ -167,6 +179,8 @@ class Status:
         self.token = os.environ.get("STATUS_TOKEN", "")
         self.poll = poll
         self.ident: dict = {"run_id": f"{socket.gethostname()}-{os.getpid()}-{int(time.time())}"}
+        if os.environ.get("AGENT_JOB_ID"):
+            self.ident["job_id"] = os.environ["AGENT_JOB_ID"]
         self._stop = threading.Event()
         self._warned = False
 
@@ -586,11 +600,12 @@ class Run:
                     mark_task(self.repo / "PLAN.md", task, "x")
                 git(self.repo, "add", "-A")
                 git(self.repo, "commit", "-q", "-m", f"{task.id}: {task.title}")
+                size = commit_stats(self.repo)
                 self.push()
                 notify(f"{task.id} done", task.title, "white_check_mark")
                 seconds = time.monotonic() - t0
                 self.status.event("task_done", task_id=task.id, title=task.title[:200], attempts=n,
-                                  seconds=round(seconds), plan=plan_snapshot(self.repo))
+                                  seconds=round(seconds), plan=plan_snapshot(self.repo), **size)
                 return Result(task, "done", n, seconds=seconds)
             print(f"[{now()}] {task.id} attempt {n} failed: {failure.splitlines()[0] if failure else ''}")
             self.reset(head)
