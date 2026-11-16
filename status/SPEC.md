@@ -19,6 +19,9 @@ This file explains them.
 
 - One file: `status/app.py`. **Python 3.11, standard library only** (`http.server`,
   `sqlite3`, `json`, `threading`, `urllib`, `html`). No pip packages, no build step.
+  Static files (the stylesheet, later scripts) live in `status/static/` and are served at
+  `GET /static/<name>` (`.css`/`.js` only, read once at start); pages link them with a
+  `?v=<content hash>` so a new image never shows a stale stylesheet.
 - Must expose:
 
   ```python
@@ -314,4 +317,6 @@ Page: a **Model activity** section after Now (running, waiting in order, last re
 client). A **chat** card above the live sections (only when unlocked and the gateway is on)
 and a full-height `GET /chat` page: it streams from `/v1/chat/completions` with the status
 token, keeps the history in the browser's `localStorage` only, has Stop and Clear, and a
-"think" switch (`chat_template_kwargs.enable_thinking`; off = quick answers).
+**Quick / Think** switch (`chat_template_kwargs.enable_thinking`; the choice is remembered
+in the browser). While it waits, the answer bubble shows an animated orb with the step:
+waiting for the model, reading your message, thinking (Think only); the text replaces it.
