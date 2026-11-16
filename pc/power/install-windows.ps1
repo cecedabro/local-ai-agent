@@ -2,7 +2,7 @@
 # - Boot task running ai-power.ps1 as you, elevated (portproxy needs admin), no logon needed.
 #   -LogonType S4U (default) stores no password; Password asks for it (use that if the log
 #   shows WSL failing to start under S4U).
-# - Firewall: llama-server (8080) and WSL sshd (2222) from your LAN only. Windows 11 also gets
+# - Firewall: llama-server (8080) and WSL sshd (2223) from your LAN only. Windows 11 also gets
 #   the Hyper-V rule for mirrored networking; Windows 10 (NAT) goes through portproxy.
 # - Disables Fast Startup (breaks Wake-on-LAN from shutdown).
 param(
@@ -36,14 +36,14 @@ Start-Service iphlpsvc
 
 Get-NetFirewallRule -Name 'ai-wsl-in' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -Name 'ai-wsl-in' -DisplayName 'WSL llama-server + sshd (LAN)' -Direction Inbound `
-  -Protocol TCP -LocalPort 8080,2222 -RemoteAddress $LanSubnet -Action Allow | Out-Null
+  -Protocol TCP -LocalPort 8080,2223 -RemoteAddress $LanSubnet -Action Allow | Out-Null
 
 if (Get-Command New-NetFirewallHyperVRule -ErrorAction SilentlyContinue) {
   # WSL VM creator ID from Microsoft's WSL Hyper-V firewall docs. Verify with Get-NetFirewallHyperVVMCreator.
   $wsl = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'
   Get-NetFirewallHyperVRule -Name 'ai-wsl-in' -ErrorAction SilentlyContinue | Remove-NetFirewallHyperVRule
   New-NetFirewallHyperVRule -Name 'ai-wsl-in' -DisplayName 'WSL llama-server + sshd (LAN)' -Direction Inbound `
-    -VMCreatorId $wsl -Protocol TCP -LocalPorts 8080,2222 -RemoteAddresses $LanSubnet -Action Allow | Out-Null
+    -VMCreatorId $wsl -Protocol TCP -LocalPorts 8080,2223 -RemoteAddresses $LanSubnet -Action Allow | Out-Null
 }
 
 powercfg /hibernate off   # also turns off Fast Startup

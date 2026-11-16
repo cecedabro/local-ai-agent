@@ -28,7 +28,7 @@ echo "PC key (for pc/power/setup-wsl.sh): $(cat "${HOME}/.ssh/pc_key.pub")"
 cat > "${HOME}/.ssh/config" <<CONF
 Host pc
   HostName ${PC_HOST:-pc.invalid}
-  Port 2222
+  Port 2223
   User ${PC_SSH_USER:-agent}
   IdentityFile ~/.ssh/pc_key
   IdentitiesOnly yes

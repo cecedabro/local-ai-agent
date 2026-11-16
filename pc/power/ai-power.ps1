@@ -1,6 +1,6 @@
 # Keep-awake loop. Started at boot by install-windows.ps1 (hidden, as your user, elevated).
 # - Keeps the WSL distro running (a hidden `sleep infinity`), so systemd keeps llama-server up.
-# - NAT networking (Windows 10, or no networkingMode=mirrored): forwards LAN ports 8080/2222 to
+# - NAT networking (Windows 10, or no networkingMode=mirrored): forwards LAN ports 8080/2223 to
 #   the VM's current address with netsh portproxy. The address changes on every WSL start, so
 #   it is re-checked every few minutes. Mirrored mode needs none of this and is detected.
 # - While /run/ai/busy exists and is fresher than $BusyTtlMinutes, tells Windows
@@ -9,7 +9,7 @@ param(
   [string]$Distro = 'Ubuntu',
   [int]$PollSeconds = 30,
   [int]$BusyTtlMinutes = 20,
-  [int[]]$Ports = @(8080, 2222)
+  [int[]]$Ports = @(8080, 2223)
 )
 
 $ErrorActionPreference = 'Continue'

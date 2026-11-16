@@ -2,7 +2,7 @@
 # SSH forced command for the devbox key. Installed to /usr/local/bin/ai-power-remote.
 # authorized_keys line:
 #   command="/usr/local/bin/ai-power-remote",restrict ssh-ed25519 AAAA... devbox
-# The devbox calls: ssh -p 2222 agent@pc <verb>
+# The devbox calls: ssh -p 2223 agent@pc <verb>
 set -euo pipefail
 
 FLAGS=/run/ai
