@@ -598,7 +598,7 @@ def main() -> int:
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--retries", type=int, default=3)
     p.add_argument("--max-skips", type=int, default=3, help="stop after this many skips in a row")
-    p.add_argument("--max-hours", type=float, default=10)
+    p.add_argument("--max-hours", type=float, default=24, help="stop starting new tasks after this many hours")
     p.add_argument("--attempt-timeout", type=int, default=1800, help="seconds per agent session")
     p.add_argument("--check-timeout", type=int, default=900)
     p.add_argument("--no-pc", dest="pc", action="store_false", help="skip wake/keep-awake")
