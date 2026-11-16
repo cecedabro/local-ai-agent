@@ -13,7 +13,8 @@ and every request shows up on the page.
 
 The tests are the judge: `status/tests/test_contract.py` (§1–§7),
 `status/tests/test_unit_queue.py` (§8–§10), `status/tests/test_unit_gateway.py` (§8, §11) and
-`status/tests/test_accept_history.py` (§8 repo list, §11 `n_ctx`, §12).
+`status/tests/test_accept_history.py` (§8 repo list, §11 `n_ctx`, §12) and
+`status/tests/test_accept_pause.py` (§13).
 This file explains them.
 
 ## 0. Constraints
@@ -425,3 +426,34 @@ The module exposes these functions, which the tests call directly:
   oldest day first. Rows whose `data` is not valid JSON are skipped.
 - `send(url: str, token: str, events: list[dict], tokens: list[dict]) -> list[dict]`: does
   the requests described above and returns the parsed answers in order. An HTTP error raises.
+
+## 13. Pause a run
+
+Pause is pressed on the page; `agent-loop` obeys it **between tasks** (`harness/loop.py`,
+`Run.pause_point`): before each task it calls the control endpoint below. When `pause` is true
+it sends a `paused` event, releases the lease (§4) and the PC, polls until `pause` is false
+(or `.agent/STOP` appears), then queues for the lease again and sends `resumed`.
+
+- `KINDS` (§3) gains `paused` and `resumed`.
+- `POST /api/runs/<run_id>/pause` and `POST /api/runs/<run_id>/resume` (token, §1): set or
+  clear the pause request of that run. Answer **200** `{"run_id": "...", "pause": true|false}`.
+  A run with no stored event → **404**; a run with a `run_finished` event → **409**.
+  `<run_id>` is URL-encoded on the page and decoded by the server (it may contain `-` and `.`).
+- `POST /api/runs/<run_id>/control` (token): `{"pause": bool}`; an unknown run → `{"pause": false}`
+  (200). This is what the loop polls.
+- The request is kept in SQLite (table `run_control(run_id text primary key, pause int)`), so a
+  restart of the service does not resume a paused run. A `run_finished` event of the run
+  deletes its row.
+
+`/api/status` → each run (§5.2) gains `pause` (the request, bool). Its `state` becomes
+`paused` when its latest `paused`/`resumed` event is a `paused` one and it has no `run_finished`;
+`paused` wins over `stale`, so a long pause does not look like a dead run.
+
+Page (§6): the **Now** card shows the newest run whose state is `running` or `paused`
+(running first). For that run, when unlocked (class `ctl`, hidden while locked):
+- state `running`, no request: a `Pause` button
+  (`<button class="ctl" data-run="<run_id>" data-act="pause">Pause after this task</button>`);
+- state `running` with a request: a `<span class="pill warn">pausing after this task</span>`
+  and a `Resume` button (`data-act="resume"`, which cancels the request);
+- state `paused`: `<span class="pill warn">paused</span>` and the `Resume` button.
+The page script posts `data-act` to `/api/runs/<encodeURIComponent(run_id)>/<act>` and refreshes.

@@ -29,7 +29,7 @@ changing architecture. Decisions below are settled unless the user says otherwis
 
 ## status/ (the agent-status service)
 - Spec: `status/SPEC.md`. Judge: `status/tests/test_contract.py` and
-  `status/tests/test_accept_history.py` (both protected; don't edit) and
+  `status/tests/test_accept_history.py`, `status/tests/test_accept_pause.py` (all protected; don't edit) and
   `status/tests/test_unit_queue.py`, `status/tests/test_unit_gateway.py`.
 - One file, `status/app.py`, Python 3.11 **standard library only** (no pip packages).
   Exception: `status/backfill.py`, the history import script (SPEC §12.2), same rules.

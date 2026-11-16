@@ -23,9 +23,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Fake status service: logs events, refuses the first lease so the loop has to queue.
+# Fake status service: logs events, refuses the first lease so the loop has to queue, and
+# answers "pause" to the first 3 control polls (pause before T01, then 2 polls while paused).
 EVENTS="${WORK}/events.jsonl"
-python3 "${HERE}/fake_status.py" "${EVENTS}" 1 > "${WORK}/status.port" &
+python3 "${HERE}/fake_status.py" "${EVENTS}" 1 3 > "${WORK}/status.port" &
 STATUS_PID=$!
 for _ in $(seq 50); do [[ -s "${WORK}/status.port" ]] && break; sleep 0.1; done
 [[ -s "${WORK}/status.port" ]] || { echo "fake status service did not start"; exit 1; }
@@ -92,6 +93,14 @@ for kind in run_started task_started task_done task_skipped ci_waiting run_finis
   [[ "$(ev "\"kind\": \"${kind}\"")" -ge 1 ]] || fail "no ${kind} event"
 done
 grep -q '"action": "release"' "${EVENTS}" || fail "lease not released"
+# Pause: paused before the first task, lease released and taken again, then resumed.
+grep -q 'paused from the status page' "${LOG}" || fail "loop did not pause"
+[[ "$(ev '"kind": "paused"')" -eq 1 && "$(ev '"kind": "resumed"')" -eq 1 ]] || fail "expected one paused and one resumed event"
+[[ "$(ev '"action": "release"')" -ge 2 ]] || fail "lease not released during the pause"
+[[ "$(ev '"action": "acquire"')" -ge 3 ]] || fail "lease not taken again after the pause"
+first_task=$(grep -n '"kind": "task_started"' "${EVENTS}" | head -1 | cut -d: -f1)
+resumed=$(grep -n '"kind": "resumed"' "${EVENTS}" | cut -d: -f1)
+[[ "${resumed}" -lt "${first_task}" ]] || fail "a task started before the pause ended"
 grep -q '"_auth": "Bearer selftest"' "${EVENTS}" || fail "status token not sent"
 grep '"kind": "run_finished"' "${EVENTS}" | grep -q '"pushed": true' || fail "run_finished should say pushed"
 
