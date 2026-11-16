@@ -837,7 +837,7 @@ def render_live(st: dict) -> str:
                          f'<p class="muted small">{att} · for {e(dur(run["task_since"], now))}</p>')
         else:
             parts.append('<p class="muted">Between tasks (checking, pushing or waiting for CI).</p>')
-        parts.append(f'<div class="progress" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
+        parts.append(f'<div class="progress live" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
                      f'<p class="muted small">{finished} of {total} plan tasks · {run["done"]} done, '
                      f'{run["skipped"]} skipped this run · last event {e(ago(run["last_event"], now))}</p>')
         if tk.get("busy") is not None:
