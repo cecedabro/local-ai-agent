@@ -27,6 +27,14 @@ changing architecture. Decisions below are settled unless the user says otherwis
 - Secrets never committed. They live in OpenBao (`secret/ai-agent/*`) and reach the pods via External Secrets.
 - Placeholders are literally `REPLACE_ME`.
 
+## status/ (the agent-status service)
+- Spec: `status/SPEC.md`. Judge: `status/tests/test_contract.py` (protected; don't edit).
+- One file, `status/app.py`, Python 3.11 **standard library only** (no pip packages).
+- Your own tests: `status/tests/test_unit_*.py` (`make check` runs them).
+- Paths in `.agent-protected` are human-owned; changes there reject the attempt.
+
 ## Commands
 - `make lint` — must pass before committing.
 - `make test` — harness self-test.
+- `make check` — the agent loop's project check (compile + `status/tests/test_unit_*.py`).
+- `make status-test` — all contract tests of the status service.

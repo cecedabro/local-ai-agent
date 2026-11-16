@@ -29,6 +29,12 @@ Environment (set by the devbox ConfigMap/Secret):
     CHECK_CMD       project-wide check (default: make check)
     PROTECTED       comma-separated paths the agent may not change
                     default: tests/,contract/,PLAN.md,SPEC.md,AGENTS.md
+    STATUS_URL      agent-status service (status/ in this repo), optional
+    STATUS_TOKEN    bearer token for it
+
+Status and queue: with STATUS_URL set, the run reports its progress there and first
+takes the service's lease on the model: one GPU, so one run at a time; others wait in
+line. If the service is unreachable the run goes on without it (fail-open).
 Stdlib only: this runs in a minimal image.
 """
 from __future__ import annotations
@@ -41,6 +47,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -137,6 +144,83 @@ def notify(title: str, message: str, tags: str = "robot") -> None:
         urllib.request.urlopen(req, timeout=10).close()
     except (urllib.error.URLError, OSError) as exc:
         print(f"[notify failed] {exc}: {title}: {message}", file=sys.stderr)
+
+
+# --------------------------------------------------------------------------- status service
+
+def plan_snapshot(repo: Path) -> list[dict]:
+    """Every task in PLAN.md with its state, for the status page."""
+    plan = repo / "PLAN.md"
+    if not plan.exists():
+        return []
+    states = {" ": "todo", "x": "done", "~": "skipped"}
+    return [{"id": m["id"], "title": m["title"].split(" — ")[0], "state": states[m["mark"]]}
+            for m in map(TASK_RE.match, plan.read_text().splitlines()) if m]
+
+
+class Status:
+    """Reports to the agent-status service and holds its lease on the model.
+    Best effort: unset STATUS_URL or an unreachable service never stops a run."""
+
+    def __init__(self, enabled: bool, poll: float = 30) -> None:
+        self.url = os.environ.get("STATUS_URL", "").rstrip("/") if enabled else ""
+        self.token = os.environ.get("STATUS_TOKEN", "")
+        self.poll = poll
+        self.ident: dict = {"run_id": f"{socket.gethostname()}-{os.getpid()}-{int(time.time())}"}
+        self._stop = threading.Event()
+        self._warned = False
+
+    def _post(self, path: str, body: dict) -> dict | None:
+        if not self.url:
+            return None
+        req = urllib.request.Request(
+            self.url + path, data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                raw = resp.read()
+            return json.loads(raw) if raw else {}
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            if not self._warned:
+                print(f"[status] {self.url}{path} failed ({exc}); carrying on without it", file=sys.stderr)
+                self._warned = True
+            return None
+
+    def bind(self, repo: Path, branch: str) -> None:
+        self.ident.update(repo=repo.name, branch=branch)
+
+    def event(self, kind: str, **fields: object) -> None:
+        ts = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+        self._post("/api/events", {**self.ident, "kind": kind, "ts": ts, **fields})
+
+    def acquire(self, should_stop) -> None:
+        """Wait for our turn on the model. Returns early if the service is down or a STOP appears."""
+        told = False
+        while self.url:
+            res = self._post("/api/lease", {**self.ident, "action": "acquire"})
+            if res is None:
+                return
+            if res.get("granted"):
+                threading.Thread(target=self._renew, daemon=True).start()
+                return
+            holder = res.get("holder") or {}
+            msg = (f"queued (position {res.get('position', '?')}) behind "
+                   f"{holder.get('repo', '?')} {holder.get('branch', '')}").strip()
+            print(f"[{now()}] {msg}")
+            if not told:
+                notify("Agent run queued", f"{self.ident.get('repo')}: {msg}", "hourglass")
+                told = True
+            if should_stop():
+                return
+            time.sleep(self.poll)
+
+    def _renew(self) -> None:
+        while not self._stop.wait(60):
+            self._post("/api/lease", {**self.ident, "action": "renew"})
+
+    def release(self) -> None:
+        self._stop.set()
+        self._post("/api/lease", {**self.ident, "action": "release"})
 
 
 # --------------------------------------------------------------------------- PC power
@@ -364,7 +448,9 @@ class Run:
     repo: Path
     args: argparse.Namespace
     pc: Pc
+    status: Status = field(default_factory=lambda: Status(False))
     branch: str = ""
+    push_errors: list[str] = field(default_factory=list)
     results: list[Result] = field(default_factory=list)
     ci_notes: list[str] = field(default_factory=list)
     started: float = field(default_factory=time.monotonic)
@@ -412,6 +498,7 @@ class Run:
             stamp = f"ci-fix-{self.args.fix_ci}" if self.args.fix_ci else f"{dt.datetime.now():%Y-%m-%d-%H%M}"
             self.branch = f"agent/{stamp}"
             git(self.repo, "checkout", "-b", self.branch)
+        self.status.bind(self.repo, self.branch)
 
     # -- one attempt
     def prompt(self, task: Task, failure: str) -> str:
@@ -467,11 +554,22 @@ class Run:
         git(self.repo, "reset", "--hard", head)
         git(self.repo, "clean", "-fd")                    # .agent/ survives via exclude
 
-    def push(self) -> None:
-        if self.args.push:
-            res = sh(["git", "push", "-u", "origin", self.branch], cwd=self.repo, timeout=120)
-            if res.returncode != 0:
-                print(f"[push failed] {tail(res.stdout, 10)}", file=sys.stderr)
+    def push(self) -> bool:
+        """Push the branch. A failure is loud (ntfy, status page, report), never silent:
+        unpushed work only exists on the devbox."""
+        if not self.args.push:
+            return True
+        res = sh(["git", "push", "-u", "origin", self.branch], cwd=self.repo, timeout=120)
+        if res.returncode == 0:
+            return True
+        err = tail(res.stdout, 10)
+        print(f"[push failed] {err}", file=sys.stderr)
+        if not self.push_errors:
+            notify("Push failed", f"{self.repo.name} {self.branch}: commits stay on the devbox.\n{tail(err, 3)}",
+                   "rotating_light")
+        self.push_errors.append(err)
+        self.status.event("push_failed", detail=tail(err, 5))
+        return False
 
     # -- one task
     def run_task(self, task: Task) -> Result:
@@ -480,6 +578,8 @@ class Run:
         for n in range(1, self.args.retries + 1):
             head = git(self.repo, "rev-parse", "HEAD")
             print(f"[{now()}] {task.id} attempt {n}/{self.args.retries}: {task.title}")
+            self.status.event("task_started", task_id=task.id, title=task.title[:200], attempt=n,
+                              retries=self.args.retries)
             ok, failure = self.attempt(task, n, failure)
             if ok:
                 if task.line >= 0:
@@ -488,7 +588,10 @@ class Run:
                 git(self.repo, "commit", "-q", "-m", f"{task.id}: {task.title}")
                 self.push()
                 notify(f"{task.id} done", task.title, "white_check_mark")
-                return Result(task, "done", n, seconds=time.monotonic() - t0)
+                seconds = time.monotonic() - t0
+                self.status.event("task_done", task_id=task.id, title=task.title[:200], attempts=n,
+                                  seconds=round(seconds), plan=plan_snapshot(self.repo))
+                return Result(task, "done", n, seconds=seconds)
             print(f"[{now()}] {task.id} attempt {n} failed: {failure.splitlines()[0] if failure else ''}")
             self.reset(head)
             if self.stop_reason():
@@ -498,7 +601,11 @@ class Run:
             mark_task(self.repo / "PLAN.md", task, "~", f"skipped: {reason}")
             git(self.repo, "commit", "-q", "-am", f"{task.id}: skipped")
         notify(f"{task.id} skipped", f"{task.title}\n{reason}", "warning")
-        return Result(task, "skipped", self.args.retries, reason, time.monotonic() - t0)
+        seconds = time.monotonic() - t0
+        self.status.event("task_skipped", task_id=task.id, title=task.title[:200],
+                          attempts=self.args.retries, seconds=round(seconds), reason=reason,
+                          plan=plan_snapshot(self.repo))
+        return Result(task, "skipped", self.args.retries, reason, seconds)
 
     # -- whole run
     def loop(self) -> str:
@@ -517,12 +624,17 @@ class Run:
                 return f"{consecutive_skips} skips in a row (spec or environment problem?)"
 
     # -- CI feedback
+    def note_ci(self, note: str) -> None:
+        self.ci_notes.append(note)
+        self.status.event("ci", detail=note)
+
     def wait_ci(self) -> list[tuple[str, str]] | None:
         """Wait for every workflow run on the pushed HEAD. [] = green, None = no CI / unknown."""
         sha = git(self.repo, "rev-parse", "HEAD")
         appear_by = time.monotonic() + self.args.ci_appear
         deadline = time.monotonic() + self.args.ci_timeout
         print(f"[{now()}] waiting for CI on {sha[:7]}")
+        self.status.event("ci_waiting", detail=sha[:7])
         while True:
             runs = ci_runs(self.repo, self.branch, sha)
             if runs is None:
@@ -542,7 +654,7 @@ class Run:
         if not (self.args.ci and self.args.push):
             return
         if first is None and self.stop_reason():
-            self.ci_notes.append(f"CI not checked: {self.stop_reason()}.")
+            self.note_ci(f"CI not checked: {self.stop_reason()}.")
             return
         self.push()                                       # a trailing "skipped" commit is not pushed yet
         failed = first
@@ -550,30 +662,30 @@ class Run:
             if failed is None:
                 failed = self.wait_ci()
             if failed is None:
-                self.ci_notes.append("No CI runs found for the last commit (or gh failed).")
+                self.note_ci("No CI runs found for the last commit (or gh failed).")
                 return
             if not failed:
-                self.ci_notes.append(f"CI green on {git(self.repo, 'rev-parse', '--short', 'HEAD')}.")
+                self.note_ci(f"CI green on {git(self.repo, 'rev-parse', '--short', 'HEAD')}.")
                 notify("CI green", self.branch, "white_check_mark")
                 return
             names = ", ".join(name for name, _ in failed)
-            self.ci_notes.append(f"CI round {n}: failed ({names}).")
+            self.note_ci(f"CI round {n}: failed ({names}).")
             notify("CI failed", f"{self.branch}: {names}; starting fix task CI{n}", "rotating_light")
             if self.stop_reason():
                 return
             result = self.run_task(ci_fix_task(n, failed))
             self.results.append(result)
             if result.status != "done":
-                self.ci_notes.append(f"CI{n} could not fix it; needs a human.")
+                self.note_ci(f"CI{n} could not fix it; needs a human.")
                 return
             failed = None
-        self.ci_notes.append(f"CI still failing after {self.args.ci_rounds} fix rounds; needs a human.")
+        self.note_ci(f"CI still failing after {self.args.ci_rounds} fix rounds; needs a human.")
 
     def fix_ci_run(self, run_id: str) -> str:
         """agent-watch mode: one failed run (on main) becomes the first fix task."""
         res = sh(["gh", "run", "view", run_id, "--json", "name,conclusion,headSha"], cwd=self.repo, timeout=60)
         info = json.loads(res.stdout) if res.returncode == 0 else {"name": f"run {run_id}"}
-        self.ci_notes.append(f"Started for failed run {run_id} ({info.get('name')}) on main.")
+        self.note_ci(f"Started for failed run {run_id} ({info.get('name')}) on main.")
         self.ci_gate(first=[(info.get("name", run_id), ci_failure_log(self.repo, run_id))])
         return "CI fix run finished"
 
@@ -597,23 +709,30 @@ class Run:
             lines += ["", f"{len(remaining)} task(s) not started: " + ", ".join(t.id for t in remaining)]
         if self.ci_notes:
             lines += ["", "## CI", "", *[f"- {note}" for note in self.ci_notes]]
+        if self.push_errors:
+            lines += ["", "## Push failed", "",
+                      f"Pushing failed {len(self.push_errors)} time(s); commits may exist only in the "
+                      "devbox checkout. Last error:", "", "```", self.push_errors[-1], "```"]
         lines += ["", f"Logs: `{STATE_DIR}/logs/` in the devbox checkout."]
         return "\n".join(lines) + "\n"
 
     def finish(self, ended: str) -> None:
+        self.push()                                       # so the report knows whether pushing works
         report = self.report(ended)
         (self.repo / "REPORT.md").write_text(report)
         git(self.repo, "add", "REPORT.md")
         git(self.repo, "commit", "-q", "-m", "agent run report", check=False)
-        self.push()
+        pushed = self.push()
         pr = ""
-        if self.args.push and self.args.pr:
+        if self.args.push and self.args.pr and pushed:
             res = sh(["gh", "pr", "create", "--head", self.branch,
                       "--title", f"Agent run {self.branch}", "--body-file", "REPORT.md"],
                      cwd=self.repo, timeout=60)
             pr = res.stdout.strip().splitlines()[-1] if res.returncode == 0 and res.stdout.strip() else ""
         done = sum(r.status == "done" for r in self.results)
         notify("Agent run finished", f"{ended}: {done}/{len(self.results)} done. {pr}".strip(), "checkered_flag")
+        self.status.event("run_finished", ended=ended, done=done, skipped=len(self.results) - done,
+                          pushed=pushed, pr=pr or None, plan=plan_snapshot(self.repo))
         print(report)
         (self.state / "lock").unlink(missing_ok=True)
 
@@ -635,6 +754,9 @@ def main() -> int:
     p.add_argument("--ci-appear", type=int, default=180, help="seconds to wait for CI runs to show up")
     p.add_argument("--ci-poll", type=int, default=20)
     p.add_argument("--fix-ci", metavar="RUN_ID", help="skip PLAN.md; fix this failed GitHub Actions run")
+    p.add_argument("--no-status", dest="status", action="store_false",
+                   help="don't report to STATUS_URL or wait for its queue")
+    p.add_argument("--queue-poll", type=float, default=30, help="seconds between queue checks")
     args = p.parse_args()
     args.agent_cmd = shlex.split(env("AGENT_CMD", "opencode run --model pc/coder {prompt}"))
     args.check_cmd = env("CHECK_CMD", "make check")
@@ -644,11 +766,15 @@ def main() -> int:
         print("[ci] gh not found; not waiting for CI", file=sys.stderr)
         args.ci = False
 
-    run = Run(repo=args.repo.resolve(), args=args, pc=Pc(args.pc))
+    run = Run(repo=args.repo.resolve(), args=args, pc=Pc(args.pc), status=Status(args.status, args.queue_poll))
     run.prepare()
     notify("Agent run started", f"{run.repo.name} on {run.branch}", "rocket")
     ended = "error"
     try:
+        run.status.acquire(run.stop_reason)
+        run.started = time.monotonic()                    # waiting in line doesn't count
+        run.status.event("run_started", fix_ci=args.fix_ci, max_hours=args.max_hours,
+                         plan=plan_snapshot(run.repo))
         run.pc.up()
         run.pc.hold()
         if args.fix_ci:
@@ -663,6 +789,7 @@ def main() -> int:
     finally:
         run.finish(ended)
         run.pc.release()
+        run.status.release()
     return 0
 
 

@@ -1,0 +1,52 @@
+name: status-image
+on:
+  push:
+    branches: [main]
+    paths: [status/**, .github/workflows/status-image.yml]
+  pull_request:
+    paths: [status/**, .github/workflows/status-image.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  # Not on agent/* branch pushes: the contract suite is built up task by task, so it only has
+  # to be fully green on a PR and on main.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      # Until the agent has written status/app.py there is nothing to test or build.
+      - run: |
+          if [ ! -f status/app.py ]; then echo "status/app.py not written yet; skipping"; exit 0; fi
+          make check status-test
+  build:
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: app
+        run: echo "exists=$([ -f status/app.py ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v4
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: status/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:latest
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

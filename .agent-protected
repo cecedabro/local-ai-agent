@@ -1,0 +1,12 @@
+# Human-owned paths the agent may not change (checked by harness/loop.py).
+harness/
+status/SPEC.md
+status/tests/test_contract.py
+status/Dockerfile
+.github/
+devbox/
+pc/
+mac/
+Makefile
+docs/
+README.md
