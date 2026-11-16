@@ -55,5 +55,15 @@ tailscale --socket="${TS_SOCK}" up "${UP_ARGS[@]}" || echo "tailscale up failed;
 
 tmux has-session -t agent 2>/dev/null || tmux new-session -d -s agent -c "${HOME}/repos"
 
+# The job queue from the status page: agent-queue works through it, one job at a time.
+# Pause with `touch ~/.agent-queue-STOP`. Restarts itself if it crashes.
+if [[ -n "${STATUS_URL:-}" && -n "${STATUS_TOKEN:-}" && -n "${QUEUE_OWNERS:-}" ]]; then
+  tmux list-windows -t agent -F '#W' | grep -qx queue \
+    || tmux new-window -d -t agent -n queue -c "${HOME}/repos" \
+         'while true; do agent-queue; echo "agent-queue exited; restarting in 30 s"; sleep 30; done'
+else
+  echo "STATUS_URL/STATUS_TOKEN/QUEUE_OWNERS not set: agent-queue not started" >&2
+fi
+
 echo "devbox ready"
 wait "${TS_PID}"

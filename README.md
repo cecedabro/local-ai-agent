@@ -29,7 +29,7 @@ it in a browser (arrow keys to move, F for fullscreen, P to print to PDF).
 | `mac/` | `ai pause\|resume\|status`: control the model from the Mac over `ssh pc` | Mac |
 | (homelab repo) `apps/ai-agent/` | Cluster side: namespaces, devbox StatefulSet, waker, NetworkPolicy, ExternalSecrets | k3s (via Flux) |
 | `harness/` | `loop.py` and its prompt; project templates | devbox pod |
-| `status/` | Status page + model queue (stdlib Python); built by the agent from `status/SPEC.md` | k3s |
+| `status/` | Status page, job queue and model lease (stdlib Python, `status/SPEC.md`) | k3s |
 | `docs/` | Plan, runbook notes | — |
 
 ## Rollout
@@ -55,7 +55,9 @@ cluster objects such as the privileged waker namespace.
 | --- | --- |
 | Open the agent | `ssh agent@devbox` (lands in tmux session `agent`; `NO_TMUX=1` skips tmux) |
 | Run the loop | in the project repo on the devbox: `agent-loop` (stop after the current task: `touch .agent/STOP`; it stops starting new tasks after 24 h, change with `--max-hours N`). After the tasks it waits for CI and turns failures into fix tasks (`--no-ci` skips) |
-| See what the agent is doing | the status page (`status/`, reachable over Tailscale once deployed): model state, the running task, the queue, recent events, stats |
+| See what the agent is doing | the status page (`status/`, reachable over Tailscale once deployed): model state, the running task, the job queue, all-time commits and lines, token speed, recent events |
+| Queue work for the agent | add a job on the status page (unlock it with the status token). `agent-queue` (tmux window `queue` on the devbox, started automatically) runs the jobs one by one, only for repos of `QUEUE_OWNERS`. Pause: `touch ~/.agent-queue-STOP` |
+| Chat with the model | the chat on the status page, or `/chat` for a full page. It goes before agent work in the gateway's queue |
 | Fix failures on main automatically | in a tmux window in the project repo: `agent-watch` (checks every 10 min, one fix PR per failing commit; stop with `touch .agent/WATCH-STOP`) |
 | Tell it what to do | edit `PLAN.md` / `SPEC.md` / `AGENTS.md` in the project repo; the agent cannot edit them |
 | Free the GPU for myself | on the Mac: `ai pause`; give it back with `ai resume`; `ai status` |
