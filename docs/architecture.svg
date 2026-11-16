@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 1160 540" width="1160" height="540" role="img" aria-label="Architecture: devbox pod on k3s sends prompts to llama-server on the PC, controls power over SSH and wakes the PC through the waker pod">
+<style>
+text{font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+.node rect{fill:#1a2130;stroke:#263045;stroke-width:1.5}
+.node .t{fill:#e8ecf3;font-size:15px;font-weight:650}
+.node .s{fill:#9aa6bb;font-size:12px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.flow{stroke-dasharray:6 8;animation:dash 1.2s linear infinite}
+.flow.slow{animation-duration:2.4s}
+@keyframes dash{to{stroke-dashoffset:-28}}
+@media (prefers-reduced-motion:reduce){.flow{animation:none}}
+</style>
+<rect x="-20" y="-20" width="1160" height="540" rx="22" fill="#0a0c11"/>
+
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6a82"/></marker>
+    </defs>
+    <!-- zones -->
+    <rect x="10" y="10" width="470" height="450" rx="18" fill="#0f1420" stroke="#243049" stroke-dasharray="4 6"/>
+    <text x="30" y="40" fill="#3ad6c4" font-size="13" font-weight="700" font-family="ui-monospace,Menlo,monospace" letter-spacing="2">K3S HOMELAB · ALWAYS ON</text>
+    <rect x="640" y="10" width="470" height="450" rx="18" fill="#0f1420" stroke="#243049" stroke-dasharray="4 6"/>
+    <text x="660" y="40" fill="#ffb547" font-size="13" font-weight="700" font-family="ui-monospace,Menlo,monospace" letter-spacing="2">PC · WINDOWS + WSL2 · SLEEPS</text>
+
+    <!-- devbox -->
+    <g class="node"><rect x="40" y="64" width="410" height="190" rx="14"/>
+      <text class="t" x="62" y="96">devbox pod</text>
+      <text class="s" x="62" y="120">OpenCode · agent-loop · agent-watch</text>
+      <text class="s" x="62" y="140">git · gh · uv · node · Chromium · PlatformIO</text>
+      <text class="s" x="62" y="160">Postgres sidecar · tmux · Tailscale SSH</text>
+      <text class="s" x="62" y="180">home = persistent volume</text>
+    </g>
+    <g class="node"><rect x="62" y="196" width="170" height="42" rx="10" style="fill:#1f2740"/><text class="s" x="80" y="222" style="fill:#e8ecf3">PLAN.md → tasks</text></g>
+    <g class="node"><rect x="252" y="196" width="176" height="42" rx="10" style="fill:#1f2740"/><text class="s" x="268" y="222" style="fill:#e8ecf3">make check → verdict</text></g>
+
+    <g class="node"><rect x="40" y="290" width="190" height="78" rx="14"/><text class="t" x="60" y="322">ntfy</text><text class="s" x="60" y="346">push to my phone</text></g>
+    <g class="node"><rect x="260" y="290" width="190" height="78" rx="14"/><text class="t" x="280" y="322">waker</text><text class="s" x="280" y="346">hostNetwork · magic pkt</text></g>
+    <g class="node"><rect x="40" y="392" width="410" height="50" rx="12"/><text class="s" x="60" y="422">Flux GitOps · secrets from OpenBao via External Secrets</text></g>
+
+    <!-- PC -->
+    <g class="node"><rect x="670" y="64" width="410" height="150" rx="14"/>
+      <text class="t" x="692" y="96">llama-server (llama.cpp, CUDA)</text>
+      <text class="s" x="692" y="120">alias "coder" · OpenAI-compatible API</text>
+      <text class="s" x="692" y="140">Qwen3.6-35B-A3B · UD-Q4_K_XL · 22.8 GB</text>
+      <text class="s" x="692" y="160">48k context · MTP draft decoding</text>
+      <text class="s" x="692" y="180">API key · systemd in WSL2</text>
+    </g>
+    <g class="node"><rect x="670" y="236" width="196" height="96" rx="14"/><text class="t" x="690" y="266">RTX 3080 Ti</text><text class="s" x="690" y="290">12 GB GDDR6X</text><text class="s" x="690" y="310">shared layers + KV</text></g>
+    <g class="node"><rect x="884" y="236" width="196" height="96" rx="14"/><text class="t" x="904" y="266">32 GB DDR4</text><text class="s" x="904" y="290">most experts</text><text class="s" x="904" y="310">(26 of the layers)</text></g>
+    <g class="node"><rect x="670" y="354" width="410" height="88" rx="14"/>
+      <text class="t" x="692" y="384">power guard</text>
+      <text class="s" x="692" y="408">keep awake while the busy flag is fresh</text>
+      <text class="s" x="692" y="428">ai pause / resume (owner only)</text>
+    </g>
+
+    <!-- flows -->
+    <path d="M450 120 C 540 120, 580 120, 670 120" stroke="#ffb547" stroke-width="2.5" fill="none" class="flow" marker-end="url(#ar)"/>
+    <text x="512" y="108" fill="#ffb547" font-size="12" font-family="ui-monospace,Menlo,monospace">prompts / tokens</text>
+    <path d="M450 200 C 575 200, 565 380, 670 380" stroke="#9b8cff" stroke-width="2" fill="none" class="flow slow" marker-end="url(#ar)"/>
+    <text x="548" y="262" fill="#9b8cff" font-size="12" font-family="ui-monospace,Menlo,monospace">SSH: busy · status</text>
+    <path d="M450 340 C 545 340, 575 420, 670 420" stroke="#3ad6c4" stroke-width="2" fill="none" class="flow" marker-end="url(#ar)"/>
+    <text x="486" y="326" fill="#3ad6c4" font-size="12" font-family="ui-monospace,Menlo,monospace">Wake-on-LAN</text>
+    <path d="M135 254 L135 290" stroke="#5d6a82" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M355 254 L355 290" stroke="#5d6a82" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+  
+<text x="10" y="500" fill="#5d6a82" font-size="12.5" font-family="ui-monospace,Menlo,Consolas,monospace">GitHub sees branches and PRs only; I merge. I reach the devbox from laptop or phone over Tailscale SSH.</text>
+</svg>

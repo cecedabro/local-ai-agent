@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Coding Agent</title>
+<meta name="description" content="A 35B mixture-of-experts model on a gaming PC, driving an autonomous coding agent from a k3s homelab: setup, theory and lessons. November 2026.">
+<style>
+:root{
+  --bg:#0a0c11; --bg2:#10141c; --panel:#141924; --panel2:#1a2130; --line:#263045;
+  --text:#e8ecf3; --muted:#9aa6bb; --faint:#5d6a82;
+  --amber:#ffb547; --teal:#3ad6c4; --violet:#9b8cff; --rose:#ff6b8b; --green:#5fd38d; --blue:#5aa8ff;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1200px 700px at 80% -10%,#16203a 0%,transparent 60%),radial-gradient(900px 600px at -10% 110%,#1b1630 0%,transparent 55%),var(--bg)}
+
+/* stage: fixed 1280x720 canvas scaled to fit */
+#viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:1280px;height:720px;transform-origin:center center;flex:none}
+.slide{position:absolute;inset:0;padding:64px 80px 70px;display:flex;flex-direction:column;opacity:0;visibility:hidden;transform:translateX(40px);transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1),visibility 0s .55s}
+.slide.active{opacity:1;visibility:visible;transform:none;transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.slide.before{transform:translateX(-40px)}
+
+/* typography */
+.kicker{font:600 13px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.kicker::before{content:"";width:28px;height:2px;background:currentColor;border-radius:2px}
+h1{font-size:64px;line-height:1.02;letter-spacing:-.025em;font-weight:750}
+h2{font-size:40px;line-height:1.1;letter-spacing:-.02em;font-weight:700;margin-bottom:26px}
+h3{font-size:19px;font-weight:650;margin-bottom:8px;letter-spacing:-.005em}
+p,li{font-size:19px;line-height:1.5;color:#cfd6e3}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.small{font-size:15px} .tiny{font-size:13px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:#1d2535;border:1px solid #2a3550;padding:1px 6px;border-radius:6px;color:#e6edf8}
+.hl{color:var(--amber)} .tl{color:var(--teal)} .vl{color:var(--violet)} .rs{color:var(--rose)} .gr{color:var(--green)} .bl{color:var(--blue)}
+ul.clean{list-style:none} ul.clean li{position:relative;padding-left:22px;margin:7px 0}
+ul.clean li::before{content:"";position:absolute;left:2px;top:.62em;width:8px;height:8px;border-radius:2px;background:var(--teal);transform:rotate(45deg)}
+.grad{background:linear-gradient(90deg,var(--amber),var(--rose) 50%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* layout helpers */
+.row{display:flex;gap:28px} .col{display:flex;flex-direction:column;gap:14px}
+.grow{flex:1} .center{align-items:center} .between{justify-content:space-between}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden}
+.card p{font-size:16px;line-height:1.45}
+.card .big{font-size:38px;font-weight:750;letter-spacing:-.02em;line-height:1.05}
+.card .lbl{font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.pill{display:inline-block;font:600 12px/1 var(--mono);padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#121826}
+.note{position:absolute;left:80px;right:260px;bottom:26px;font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+
+/* fragments */
+.f{opacity:0;transform:translateY(14px);transition:opacity .45s ease,transform .45s cubic-bezier(.2,.8,.2,1)}
+.f.on{opacity:1;transform:none}
+
+/* entrance animation for children of active slide */
+.slide.active .rise{animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+.slide.active .rise.d1{animation-delay:.08s}.slide.active .rise.d2{animation-delay:.16s}.slide.active .rise.d3{animation-delay:.24s}.slide.active .rise.d4{animation-delay:.32s}.slide.active .rise.d5{animation-delay:.4s}.slide.active .rise.d6{animation-delay:.48s}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+/* chrome */
+#progress{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--rose),var(--violet));transition:width .5s cubic-bezier(.2,.8,.2,1);z-index:10}
+#hud{position:fixed;right:18px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:10;font:600 12px/1 var(--mono);color:var(--faint)}
+#hud button{background:#141a26cc;border:1px solid var(--line);color:var(--muted);width:34px;height:34px;border-radius:10px;cursor:pointer;font:600 15px/1 var(--mono);backdrop-filter:blur(6px)}
+#hud button:hover{color:var(--text);border-color:#3a4864}
+#hint{position:fixed;left:18px;bottom:16px;font:500 12px/1 var(--mono);color:var(--faint);z-index:10;transition:opacity 1s}
+
+/* --- title slide --- */
+.title-wrap{margin:auto 0}
+.title-wrap h1{font-size:76px}
+.orbs{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(2px);opacity:.75}
+.slide.active .orb{animation:float 9s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(-18px,14px)}}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}
+
+/* --- svg shared --- */
+svg text{font-family:var(--sans)}
+.flow{stroke-dasharray:6 8;animation:dash 1.2s linear infinite}
+.flow.slow{animation-duration:2.4s}
+@keyframes dash{to{stroke-dashoffset:-28}}
+.node rect{fill:var(--panel2);stroke:var(--line);stroke-width:1.5}
+.node .t{fill:var(--text);font-size:15px;font-weight:650}
+.node .s{fill:var(--muted);font-size:12px;font-family:var(--mono)}
+
+/* --- MoE --- */
+.experts{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}
+.ex{aspect-ratio:1;border-radius:7px;background:#182033;border:1px solid #243049;transition:background .25s,box-shadow .25s,border-color .25s}
+.ex.lit{background:var(--teal);border-color:var(--teal);box-shadow:0 0 18px #3ad6c488}
+.ex.shared{background:#2a2350;border-color:var(--violet)}
+.tok{display:inline-block;font:600 15px/1 var(--mono);padding:9px 12px;border-radius:10px;background:#1b2334;border:1px solid var(--line);margin:3px;transition:all .25s}
+.tok.cur{background:var(--amber);color:#1a1205;border-color:var(--amber);box-shadow:0 0 20px #ffb54766}
+
+/* --- bars --- */
+.bars{display:flex;flex-direction:column;gap:11px}
+.bar{display:grid;grid-template-columns:230px 1fr 120px;align-items:center;gap:14px}
+.bar .name{font-size:15px;color:#cfd6e3}
+.bar .track{height:22px;border-radius:7px;background:#151b28;border:1px solid #20293b;overflow:hidden}
+.bar .fill{height:100%;width:0;border-radius:6px;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.slide.active .bar .fill{width:var(--w)}
+.bar .val{font:600 14px/1 var(--mono);color:var(--muted);text-align:right}
+
+/* --- formula --- */
+.formula{font-size:30px;font-weight:650;letter-spacing:-.01em;padding:22px 26px;border-radius:16px;background:#121826;border:1px solid var(--line);display:inline-flex;gap:14px;align-items:center}
+.formula .frac{display:inline-flex;flex-direction:column;align-items:center;font-size:24px}
+.formula .frac span:first-child{border-bottom:2px solid var(--muted);padding:0 8px 4px}
+.formula .frac span:last-child{padding-top:4px}
+
+/* --- table --- */
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:16px}
+th{font:600 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+td{padding:10px 12px;border-bottom:1px solid #1c2435;color:#d5dcea;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);white-space:nowrap}
+.tbl{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+tr.me td{background:#ffb54714}
+
+/* --- loop --- */
+.loopwrap{position:relative;width:440px;height:440px;flex:none}
+.loopstep{position:absolute;width:150px;margin-left:-75px;margin-top:-34px;text-align:center;padding:10px 8px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-size:14px;font-weight:600;transition:all .3s}
+.loopstep small{display:block;font:500 11px/1.3 var(--mono);color:var(--muted);margin-top:4px}
+.loopstep.act{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber),0 0 26px #ffb54744;transform:scale(1.06)}
+.loopcenter{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
+
+/* --- kv cache --- */
+.kv{height:46px;border-radius:12px;background:#121826;border:1px solid var(--line);position:relative;overflow:hidden}
+.kv .seg{position:absolute;top:0;bottom:0;left:0;width:62%}
+.slide.active .kv .seg.a{animation:fillkv 6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes fillkv{0%{width:4%}70%{width:92%}78%{width:92%}86%{width:22%}100%{width:22%}}
+.kv .limit{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--rose)}
+
+/* --- quant --- */
+.qbtn{font:600 13px/1 var(--mono);padding:9px 12px;border-radius:10px;background:#141a26;border:1px solid var(--line);color:var(--muted);cursor:pointer}
+.qbtn.on{background:var(--amber);color:#1a1205;border-color:var(--amber)}
+
+/* --- timeline (wake) --- */
+.tl-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;position:relative}
+.tl-row::before{content:"";position:absolute;left:4%;right:4%;top:23px;height:2px;background:var(--line)}
+.tl-row .pulse{position:absolute;top:18px;left:4%;width:12px;height:12px;border-radius:50%;background:var(--amber);box-shadow:0 0 16px var(--amber)}
+.slide.active .tl-row .pulse{animation:travel 5s ease-in-out infinite}
+@keyframes travel{0%{left:4%}90%,100%{left:95%}}
+.tl-step{position:relative;text-align:center}
+.tl-step .dot{width:48px;height:48px;border-radius:50%;margin:0 auto 12px;background:var(--panel2);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font:700 16px/1 var(--mono);color:var(--amber);position:relative;z-index:1}
+.tl-step h3{font-size:16px}.tl-step p{font-size:14px;line-height:1.4}
+
+/* counters */
+.count{font-variant-numeric:tabular-nums}
+
+/* print: one slide per page, everything visible */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{overflow:visible;height:auto;background:var(--bg)}
+  #viewport{position:static;display:block}
+  #stage{transform:none!important;width:1280px;height:auto}
+  .slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;height:720px;page-break-after:always;break-after:page}
+  .f{opacity:1;transform:none}
+  #hud,#hint,#progress{display:none}
+  .bar .fill{width:var(--w)!important}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="viewport"><div id="stage">
+
+<!-- 1 TITLE -->
+<section class="slide" data-title="Title">
+  <div class="orbs">
+    <div class="orb" style="width:420px;height:420px;right:-90px;top:-80px;background:radial-gradient(circle at 35% 35%,#ffb54755,#ff6b8b22 45%,transparent 70%)"></div>
+    <div class="orb" style="width:320px;height:320px;right:220px;bottom:-120px;background:radial-gradient(circle at 40% 40%,#9b8cff44,transparent 70%);animation-delay:-3s"></div>
+    <svg style="position:absolute;right:70px;top:150px;opacity:.9" width="420" height="420" viewBox="0 0 420 420" class="rise d3">
+      <g fill="none" stroke="#2a3550" stroke-width="1">
+        <circle cx="210" cy="210" r="80"/><circle cx="210" cy="210" r="140"/><circle cx="210" cy="210" r="200"/>
+      </g>
+      <g class="flow slow" stroke="#3ad6c4" stroke-width="2" fill="none" opacity=".7"><circle cx="210" cy="210" r="140"/></g>
+      <g class="flow" stroke="#ffb547" stroke-width="2" fill="none" opacity=".7"><circle cx="210" cy="210" r="80"/></g>
+      <circle cx="210" cy="210" r="34" fill="#141924" stroke="#ffb547" stroke-width="2"/>
+      <text x="210" y="216" text-anchor="middle" fill="#ffb547" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700">coder</text>
+    </svg>
+  </div>
+  <div class="title-wrap" style="max-width:760px;position:relative">
+    <div class="kicker rise">Homelab · November 2026</div>
+    <h1 class="rise d1">A coding agent that runs on <span class="grad">a gaming PC</span></h1>
+    <p class="rise d2" style="font-size:22px;margin-top:22px;max-width:640px">A 35B mixture-of-experts model on a single 12 GB GPU, driven by an autonomous loop in a k3s homelab. The setup, the theory behind it, and what it has done so far.</p>
+    <div class="chips rise d3">
+      <span class="pill">Qwen3.6-35B-A3B</span><span class="pill">llama.cpp</span><span class="pill">RTX 3080 Ti · 12 GB</span><span class="pill">k3s + Flux</span><span class="pill">OpenCode</span><span class="pill">Ralph loop</span>
+    </div>
+  </div>
+  <div class="note">→ / space: next · ← back · F: fullscreen · P: print to PDF</div>
+</section>
+
+<!-- 2 WHY -->
+<section class="slide" data-title="Why">
+  <div class="kicker">The goal</div>
+  <h2>Why run the agent locally?</h2>
+  <div class="grid2" style="gap:20px">
+    <div class="card rise d1"><div class="lbl">Unattended work</div><h3>Overnight runs, no meter running</h3><p>The loop works through a task list for up to 24 hours. Token cost is electricity, not an API bill.</p></div>
+    <div class="card rise d2"><div class="lbl">Ownership</div><h3>The weights sit on my SSD</h3><p>No rate limits, no model changing under me, no code leaving the house. It keeps working whatever the vendor decides.</p></div>
+    <div class="card rise d3"><div class="lbl">Learning</div><h3>Every layer is visible</h3><p>Quantisation, expert offloading, KV cache, sampling. You tune them yourself and see the effect in tokens per second.</p></div>
+    <div class="card rise d4"><div class="lbl">Division of labour</div><h3>Frontier model plans, local model grinds</h3><p>A strong cloud model writes the spec and reviews the PRs. The local model does the many small, testable steps in between.</p></div>
+  </div>
+</section>
+
+<!-- 3 ARCHITECTURE -->
+<section class="slide" data-title="Architecture">
+  <div class="kicker">Architecture</div>
+  <h2>Three machines, one loop</h2>
+  <svg viewBox="0 0 1120 470" width="1120" height="470" class="rise d1">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6a82"/></marker>
+    </defs>
+    <!-- zones -->
+    <rect x="10" y="10" width="470" height="450" rx="18" fill="#0f1420" stroke="#243049" stroke-dasharray="4 6"/>
+    <text x="30" y="40" fill="#3ad6c4" font-size="13" font-weight="700" font-family="ui-monospace,Menlo,monospace" letter-spacing="2">K3S HOMELAB · ALWAYS ON</text>
+    <rect x="640" y="10" width="470" height="450" rx="18" fill="#0f1420" stroke="#243049" stroke-dasharray="4 6"/>
+    <text x="660" y="40" fill="#ffb547" font-size="13" font-weight="700" font-family="ui-monospace,Menlo,monospace" letter-spacing="2">PC · WINDOWS + WSL2 · SLEEPS</text>
+
+    <!-- devbox -->
+    <g class="node"><rect x="40" y="64" width="410" height="190" rx="14"/>
+      <text class="t" x="62" y="96">devbox pod</text>
+      <text class="s" x="62" y="120">OpenCode · agent-loop · agent-watch</text>
+      <text class="s" x="62" y="140">git · gh · uv · node · Chromium · PlatformIO</text>
+      <text class="s" x="62" y="160">Postgres sidecar · tmux · Tailscale SSH</text>
+      <text class="s" x="62" y="180">home = persistent volume</text>
+    </g>
+    <g class="node"><rect x="62" y="196" width="170" height="42" rx="10" style="fill:#1f2740"/><text class="s" x="80" y="222" style="fill:#e8ecf3">PLAN.md → tasks</text></g>
+    <g class="node"><rect x="252" y="196" width="176" height="42" rx="10" style="fill:#1f2740"/><text class="s" x="268" y="222" style="fill:#e8ecf3">make check → verdict</text></g>
+
+    <g class="node"><rect x="40" y="290" width="190" height="78" rx="14"/><text class="t" x="60" y="322">ntfy</text><text class="s" x="60" y="346">push to my phone</text></g>
+    <g class="node"><rect x="260" y="290" width="190" height="78" rx="14"/><text class="t" x="280" y="322">waker</text><text class="s" x="280" y="346">hostNetwork · magic pkt</text></g>
+    <g class="node"><rect x="40" y="392" width="410" height="50" rx="12"/><text class="s" x="60" y="422">Flux GitOps · secrets from OpenBao via External Secrets</text></g>
+
+    <!-- PC -->
+    <g class="node"><rect x="670" y="64" width="410" height="150" rx="14"/>
+      <text class="t" x="692" y="96">llama-server (llama.cpp, CUDA)</text>
+      <text class="s" x="692" y="120">alias "coder" · OpenAI-compatible API</text>
+      <text class="s" x="692" y="140">Qwen3.6-35B-A3B · UD-Q4_K_XL · 22.8 GB</text>
+      <text class="s" x="692" y="160">48k context · MTP draft decoding</text>
+      <text class="s" x="692" y="180">API key · systemd in WSL2</text>
+    </g>
+    <g class="node"><rect x="670" y="236" width="196" height="96" rx="14"/><text class="t" x="690" y="266">RTX 3080 Ti</text><text class="s" x="690" y="290">12 GB GDDR6X</text><text class="s" x="690" y="310">shared layers + KV</text></g>
+    <g class="node"><rect x="884" y="236" width="196" height="96" rx="14"/><text class="t" x="904" y="266">32 GB DDR4</text><text class="s" x="904" y="290">most experts</text><text class="s" x="904" y="310">(26 of the layers)</text></g>
+    <g class="node"><rect x="670" y="354" width="410" height="88" rx="14"/>
+      <text class="t" x="692" y="384">power guard</text>
+      <text class="s" x="692" y="408">keep awake while the busy flag is fresh</text>
+      <text class="s" x="692" y="428">ai pause / resume (owner only)</text>
+    </g>
+
+    <!-- flows -->
+    <path d="M450 120 C 540 120, 580 120, 670 120" stroke="#ffb547" stroke-width="2.5" fill="none" class="flow" marker-end="url(#ar)"/>
+    <text x="512" y="108" fill="#ffb547" font-size="12" font-family="ui-monospace,Menlo,monospace">prompts / tokens</text>
+    <path d="M450 200 C 575 200, 565 380, 670 380" stroke="#9b8cff" stroke-width="2" fill="none" class="flow slow" marker-end="url(#ar)"/>
+    <text x="548" y="262" fill="#9b8cff" font-size="12" font-family="ui-monospace,Menlo,monospace">SSH: busy · status</text>
+    <path d="M450 340 C 545 340, 575 420, 670 420" stroke="#3ad6c4" stroke-width="2" fill="none" class="flow" marker-end="url(#ar)"/>
+    <text x="486" y="326" fill="#3ad6c4" font-size="12" font-family="ui-monospace,Menlo,monospace">Wake-on-LAN</text>
+    <path d="M135 254 L135 290" stroke="#5d6a82" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+    <path d="M355 254 L355 290" stroke="#5d6a82" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+  </svg>
+  <div class="note">GitHub sees branches and PRs only; I merge. I reach the devbox from laptop or phone over Tailscale SSH.</div>
+</section>
+
+<!-- 4 HARDWARE + MODEL -->
+<section class="slide" data-title="Hardware & model">
+  <div class="kicker">The box</div>
+  <h2>A 2018 gaming PC and a 2026 model</h2>
+  <div class="row" style="gap:24px">
+    <div class="col grow">
+      <div class="grid2" style="gap:14px">
+        <div class="card rise d1"><div class="lbl">GPU</div><div class="big">12 GB</div><p class="muted">RTX 3080 Ti · ~912 GB/s</p></div>
+        <div class="card rise d2"><div class="lbl">RAM</div><div class="big">32 GB</div><p class="muted">DDR4, two channels · ~45 GB/s</p></div>
+        <div class="card rise d3"><div class="lbl">CPU / board</div><div class="big" style="font-size:30px">i7-8700K</div><p class="muted">Z370 · PCIe 3.0 x16</p></div>
+        <div class="card rise d4"><div class="lbl">Disk</div><div class="big" style="font-size:30px">NVMe</div><p class="muted">model inside WSL2's virtual disk</p></div>
+      </div>
+    </div>
+    <div class="card grow rise d3" style="padding:26px 28px">
+      <div class="lbl">The model</div>
+      <h3 style="font-size:26px;margin-bottom:14px">Qwen3.6-35B-A3B</h3>
+      <ul class="clean">
+        <li><b>35B</b> parameters in total, about <b class="tl">3B active</b> per token (mixture of experts)</li>
+        <li><code>UD-Q4_K_XL</code> GGUF: <b>22.8 GB</b>, about <b>5.2 bits</b> per parameter on average</li>
+        <li>A thinking model, post-trained for agentic coding and tool use</li>
+        <li>Multi-token-prediction (MTP) head used as a built-in draft model</li>
+        <li>Clients only ever see the alias <code>coder</code>, so swapping models is a server-side change</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 5 THEORY: TERMS -->
+<section class="slide" data-title="Terms">
+  <div class="kicker">Theory · 1</div>
+  <h2>Four words that explain everything after this</h2>
+  <div class="grid2">
+    <div class="card f"><div class="lbl">Token</div><h3>The unit of text</h3><p>A word or a piece of one. ¾ of an English word on average; code uses more. "43 tok/s" means 43 of these per second.</p></div>
+    <div class="card f"><div class="lbl">Parameter / weight</div><h3>One learned number</h3><p>Training sets billions of them. "The weights" is the file holding all of them: 35B parameters ≈ 22.8 GB at ~5 bits each.</p></div>
+    <div class="card f"><div class="lbl">Active parameters</div><h3>What one token actually uses</h3><p>Dense model: all of them, every token. Mixture of experts: only the shared parts plus the few experts the router picks.</p></div>
+    <div class="card f"><div class="lbl">Context / KV cache</div><h3>The model's working memory</h3><p>Every token in the conversation leaves a small summary in memory. It grows with the context and is re-read for every new token.</p></div>
+  </div>
+</section>
+
+<!-- 6 THEORY: MoE -->
+<section class="slide" data-title="Mixture of experts" id="moe">
+  <div class="kicker">Theory · 2</div>
+  <h2>Mixture of experts: a big library, a short read</h2>
+  <div class="row" style="gap:40px">
+    <div class="col" style="width:520px">
+      <div class="card" style="padding:18px 20px">
+        <div class="lbl">Tokens being generated</div>
+        <div id="moeTokens"></div>
+      </div>
+      <div class="card" style="padding:18px 20px">
+        <div class="lbl">One layer: router → experts</div>
+        <div class="experts" id="moeGrid"></div>
+        <p class="tiny muted" style="margin-top:12px"><span class="tl">■</span> picked for this token &nbsp; <span class="vl">■</span> shared, always used &nbsp; (illustration; real layers have more experts)</p>
+      </div>
+    </div>
+    <div class="col grow">
+      <ul class="clean">
+        <li>Each layer holds many small "expert" networks. A tiny <b>router</b> picks a handful per token.</li>
+        <li>Total parameters ≈ how much the model can <b class="hl">know</b>. Active parameters ≈ how much <b class="tl">thinking</b> happens per token.</li>
+        <li>Every token picks <b>different</b> experts, so all of them must sit in memory. MoE saves bandwidth, not memory.</li>
+        <li>Folk rule: smarts ≈ a dense model of √(total × active). Here √(35 × 3) ≈ <b>10B dense</b>. Newer MoEs and "thinking" beat this rule.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 7 THEORY: BANDWIDTH -->
+<section class="slide" data-title="Bandwidth">
+  <div class="kicker">Theory · 3</div>
+  <h2>Writing speed is a memory-bandwidth problem</h2>
+  <div class="row center" style="gap:30px;margin-bottom:26px">
+    <div class="formula rise d1">tokens/s ≈ <span class="frac"><span>memory bandwidth</span><span>bytes of active weights</span></span></div>
+    <p class="rise d2 grow small muted">For each new token the model reads every active weight once. The arithmetic is cheap; moving the bytes is not. Halve the bytes (fewer bits, fewer active parameters) or double the bandwidth, and you roughly double the speed.</p>
+  </div>
+  <div class="bars rise d2">
+    <div class="bar"><span class="name">PCIe 3.0 x16 (my board)</span><div class="track"><div class="fill" style="--w:1.4%;background:var(--rose)"></div></div><span class="val">~16 GB/s</span></div>
+    <div class="bar"><span class="name">DDR4, two channels (mine)</span><div class="track"><div class="fill" style="--w:4.9%;background:var(--amber)"></div></div><span class="val">~45 GB/s</span></div>
+    <div class="bar"><span class="name">DDR5-6000, two channels</span><div class="track"><div class="fill" style="--w:9.8%;background:var(--amber);opacity:.7"></div></div><span class="val">~90 GB/s</span></div>
+    <div class="bar"><span class="name">Apple M4 Pro (unified)</span><div class="track"><div class="fill" style="--w:29.9%;background:var(--violet)"></div></div><span class="val">273 GB/s</span></div>
+    <div class="bar"><span class="name">Apple M4 Max (unified)</span><div class="track"><div class="fill" style="--w:59.9%;background:var(--violet)"></div></div><span class="val">546 GB/s</span></div>
+    <div class="bar"><span class="name">Apple M3 Ultra (unified)</span><div class="track"><div class="fill" style="--w:89.8%;background:var(--violet)"></div></div><span class="val">819 GB/s</span></div>
+    <div class="bar"><span class="name">RTX 3080 Ti VRAM (mine)</span><div class="track"><div class="fill" style="--w:100%;background:var(--teal)"></div></div><span class="val">~912 GB/s</span></div>
+  </div>
+  <div class="note">Spec-sheet peaks; real throughput is lower. Experts in DDR4 are ~20× slower to read than experts in VRAM, so the RAM share dominates.</div>
+</section>
+
+<!-- 8 THEORY: PREFILL vs DECODE -->
+<section class="slide" data-title="Reading vs writing">
+  <div class="kicker">Theory · 4</div>
+  <h2>Reading a prompt ≠ writing a token</h2>
+  <div class="grid2" style="gap:24px">
+    <div class="card rise d1" style="padding:24px">
+      <div class="lbl">Writing (decode)</div>
+      <h3 style="font-size:22px">One token at a time → <span class="hl">bandwidth-bound</span></h3>
+      <ul class="clean small" style="margin-top:8px">
+        <li>Only the active experts are read, wherever they live</li>
+        <li>Each weight is read where it sits: VRAM is fast, DDR4 is slow</li>
+        <li>Speed ∝ 1 / (share of active bytes in RAM)</li>
+      </ul>
+      <div style="margin-top:16px;display:flex;gap:6px;align-items:flex-end;height:70px" id="decodeViz"></div>
+    </div>
+    <div class="card rise d2" style="padding:24px">
+      <div class="lbl">Reading (prefill)</div>
+      <h3 style="font-size:22px">2048 tokens at once → <span class="tl">compute + PCIe-bound</span></h3>
+      <ul class="clean small" style="margin-top:8px">
+        <li>Across 2048 tokens, nearly <b>every</b> expert gets picked</li>
+        <li>llama.cpp copies the RAM-resident experts to the GPU per batch</li>
+        <li>~15–18 GB over PCIe 3.0 per batch ≈ 1.3–1.5 s</li>
+      </ul>
+      <div style="margin-top:16px" class="col">
+        <div class="bar" style="grid-template-columns:120px 1fr 90px"><span class="name small">-ub 512</span><div class="track"><div class="fill" style="--w:35%;background:var(--rose)"></div></div><span class="val">~280 t/s</span></div>
+        <div class="bar" style="grid-template-columns:120px 1fr 90px"><span class="name small">-ub 2048</span><div class="track"><div class="fill" style="--w:100%;background:var(--teal)"></div></div><span class="val">~790 t/s</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="rise d3" style="margin-top:22px">Agents <b>read</b> far more than they write: every step re-sends files, diffs and test output. That makes prompt reading the number to watch, and it is why bigger batches (one copy serves more tokens) nearly tripled it here.</p>
+</section>
+
+<!-- 9 THEORY: QUANTISATION -->
+<section class="slide" data-title="Quantisation" id="quant">
+  <div class="kicker">Theory · 5</div>
+  <h2>Quantisation: rounding billions of numbers</h2>
+  <div class="row" style="gap:34px">
+    <div class="col" style="width:600px">
+      <div class="card" style="padding:16px 18px">
+        <svg id="qsvg" viewBox="0 0 560 250" width="560" height="250"></svg>
+        <div class="row" style="gap:8px;margin-top:10px" id="qbtns">
+          <button class="qbtn" data-b="16">16-bit</button><button class="qbtn" data-b="8">8-bit</button><button class="qbtn on" data-b="4">4-bit</button><button class="qbtn" data-b="2">2-bit</button>
+          <span class="tiny muted" style="margin-left:auto;align-self:center" id="qinfo"></span>
+        </div>
+      </div>
+    </div>
+    <div class="col grow">
+      <table class="tbl small">
+        <tr><th>Bits</th><th>35B model</th><th>Quality</th></tr>
+        <tr><td class="num">16</td><td class="num">~70 GB</td><td>original</td></tr>
+        <tr><td class="num">8</td><td class="num">~37 GB</td><td>practically identical</td></tr>
+        <tr class="me"><td class="num">~5.2 (mine)</td><td class="num">22.8 GB</td><td>small loss</td></tr>
+        <tr><td class="num">≤3</td><td class="num">≤13 GB</td><td>clearly dumber</td></tr>
+      </table>
+      <ul class="clean small">
+        <li><b>Block scaling:</b> every ~32 numbers share a scale factor, so 16 levels cover <i>that block's</i> range.</li>
+        <li><b>"UD" (dynamic):</b> sensitive layers keep more bits; the rest get fewer.</li>
+        <li>Rule of thumb: a bigger model at 4-bit beats a smaller one at 8-bit in the same memory.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 10 THEORY: CONTEXT -->
+<section class="slide" data-title="Context window">
+  <div class="kicker">Theory · 6</div>
+  <h2>The context window is a memory budget</h2>
+  <div class="grid3" style="margin-bottom:26px">
+    <div class="card rise d1"><div class="lbl">1 · Training</div><h3>What the model learned</h3><p>Past its trained length, quality collapses. Recent Qwen models advertise ~256k, so the model is not my limit.</p></div>
+    <div class="card rise d2" style="border-color:#ffb54766"><div class="lbl" style="color:var(--amber)">2 · Memory · my limit</div><h3>KV cache in VRAM</h3><p>Grows linearly with tokens and must fit next to the shared layers in 12 GB. So the server runs at <b>48k</b>.</p></div>
+    <div class="card rise d3"><div class="lbl">3 · Speed</div><h3>Every token looks back</h3><p>Writing slows as the cache fills; prompt reading grows faster than linearly. Models also get sloppier deep into long contexts.</p></div>
+  </div>
+  <div class="rise d4">
+    <div class="row between small muted" style="margin-bottom:8px"><span>OpenCode session context</span><span class="mono">0 → 48k tokens</span></div>
+    <div class="kv"><div class="seg a" style="background:linear-gradient(90deg,#3ad6c4,#5aa8ff 60%,#9b8cff)"></div><div class="limit" style="left:83%"></div><div class="limit" style="left:99.6%;background:#5d6a82"></div></div>
+    <div class="row between tiny mono" style="margin-top:8px"><span class="faint">task prompt + files</span><span class="rs" style="margin-left:auto;margin-right:9%">compact here (48k − 8k output)</span><span class="faint">server limit</span></div>
+  </div>
+  <div class="note">Lesson from run 2: without a model limit, OpenCode only compacted after llama-server rejected the request, and the agent lost the task. The client limit now matches the server.</div>
+</section>
+
+<!-- 11 FIT -->
+<section class="slide" data-title="Fitting it in">
+  <div class="kicker">Putting it together</div>
+  <h2>Fitting 22.8 GB into a 12 GB GPU</h2>
+  <div class="row" style="gap:30px">
+    <div class="col" style="width:560px">
+      <div class="card rise d1" style="padding:20px">
+        <div class="lbl">Where each part lives</div>
+        <div style="display:flex;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--line);margin:10px 0 8px">
+          <div style="flex:3.2;background:#3ad6c4;display:flex;align-items:center;justify-content:center;color:#062421;font:700 12px var(--mono)">shared</div>
+          <div style="flex:4.2;background:#2fb3a4;display:flex;align-items:center;justify-content:center;color:#062421;font:700 12px var(--mono)">experts L27+</div>
+          <div style="flex:3.6;background:#5aa8ff;display:flex;align-items:center;justify-content:center;color:#071628;font:700 12px var(--mono)">KV + draft</div>
+        </div>
+        <div class="row between tiny mono muted"><span>VRAM · ~11.9 of 12.3 GB</span><span class="tl">fast</span></div>
+        <div style="display:flex;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--line);margin:16px 0 8px">
+          <div style="flex:16;background:#ffb547;display:flex;align-items:center;justify-content:center;color:#2a1a02;font:700 12px var(--mono)">experts, layers 1–26 · ~16 GB</div>
+          <div style="flex:16;background:#1a2130"></div>
+        </div>
+        <div class="row between tiny mono muted"><span>DDR4 · 32 GB</span><span class="hl">slow</span></div>
+      </div>
+      <div class="card rise d2" style="padding:16px 20px">
+        <div class="lbl">llama-server flags that matter</div>
+        <p class="mono small" style="color:#d5dcea;line-height:1.7">-c 49152 · --n-cpu-moe 26 · -ub 2048<br>--spec-type draft-mtp --spec-draft-n-max 2<br>--temp 1.0 --top-p 0.95 --top-k 20 --min-p 0</p>
+      </div>
+    </div>
+    <div class="col grow">
+      <div class="grid2" style="gap:14px">
+        <div class="card rise d2"><div class="lbl">Writing</div><div class="big tl"><span class="count" data-to="43">43</span> <span style="font-size:18px" class="muted">tok/s</span></div><p class="muted">≈ 30 words/s</p></div>
+        <div class="card rise d3"><div class="lbl">Reading</div><div class="big hl"><span class="count" data-to="790">790</span> <span style="font-size:18px" class="muted">tok/s</span></div><p class="muted">20k-token prompt ≈ 25 s</p></div>
+      </div>
+      <ul class="clean small rise d4">
+        <li><code>--n-cpu-moe 26</code> is a cliff: <b>24</b> spills VRAM into shared memory and drops to <b class="rs">~4 tok/s</b>.</li>
+        <li>MTP drafts 2 tokens ahead; the big model verifies them in one pass. That lifts ~30 to ~43 tok/s.</li>
+        <li>Anything else on the GPU (a game, a browser) causes the same spill, hence <code>ai pause</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 12 DEVBOX -->
+<section class="slide" data-title="Devbox">
+  <div class="kicker">The agent</div>
+  <h2>The agent lives in the cluster, not on the PC</h2>
+  <div class="grid3">
+    <div class="card rise d1"><div class="lbl">devbox pod</div><h3>A StatefulSet on k3s</h3><p>Persistent home volume for repos, agent state and config. Restarting the pod loses nothing but the running loop.</p></div>
+    <div class="card rise d2"><div class="lbl">Agent CLI</div><h3>OpenCode first, Pi as fallback</h3><p>OpenCode talks to <code>pc/coder</code> through the OpenAI-compatible API, with a 48k / 8k limit matching the server.</p></div>
+    <div class="card rise d3"><div class="lbl">Access</div><h3>Tailscale SSH → tmux</h3><p>From laptop or phone. Userspace networking inside the container; no ingress opened.</p></div>
+    <div class="card rise d4"><div class="lbl">Tools in the image</div><p class="mono small" style="line-height:1.7">git gh make rg jq uv node platformio kubeconform kustomize shellcheck psql chromium bandit pip-audit schemathesis</p></div>
+    <div class="card rise d5"><div class="lbl">Tests run here</div><h3>Postgres sidecar</h3><p>A throwaway database on localhost, wiped on restart. No Docker, nothing privileged.</p></div>
+    <div class="card rise d6"><div class="lbl">Constraint</div><h3>7.6 GB node</h3><p>One headless browser, no parallel heavy jobs. The heavy lifting happens on the PC.</p></div>
+  </div>
+</section>
+
+<!-- 13 LOOP -->
+<section class="slide" data-title="The loop" id="loopSlide">
+  <div class="kicker">The harness</div>
+  <h2>A Ralph-style loop: the harness decides "done"</h2>
+  <div class="row center" style="gap:46px">
+    <div class="loopwrap rise d1" id="loopwrap">
+      <svg width="440" height="440" style="position:absolute;inset:0"><circle cx="220" cy="220" r="160" fill="none" stroke="#263045" stroke-width="2"/><circle cx="220" cy="220" r="160" fill="none" stroke="#ffb547" stroke-width="2" class="flow slow" opacity=".55"/></svg>
+      <div class="loopcenter"><div class="mono tiny muted">one task =</div><div style="font-size:20px;font-weight:700">fresh session</div><div class="mono tiny muted" style="margin-top:4px">PLAN.md is the only state</div></div>
+    </div>
+    <div class="col grow">
+      <ul class="clean">
+        <li class="f">The model never judges its own work. The harness runs the task's <b>acceptance command</b> plus <code>make check</code>.</li>
+        <li class="f">Fail → <code>git reset</code>, retry with the failure output (3 tries). Still failing → <b>skip</b>; 3 skips in a row → stop.</li>
+        <li class="f"><b>Protected paths</b> (tests, contract, spec, plan) may not change: "fix the code, not the tests".</li>
+        <li class="f">After the tasks: wait for <b>CI</b>, turn failures into fix tasks (max 3 rounds), open a PR. <code>agent-watch</code> does the same for <code>main</code>.</li>
+        <li class="f">Limits: 30 min per attempt, 24 h per run. ntfy pings my phone per task.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 14 SAFETY -->
+<section class="slide" data-title="Guardrails">
+  <div class="kicker">Guardrails</div>
+  <h2>Assume the agent will do something dumb</h2>
+  <div class="grid2" style="gap:18px">
+    <div class="card f"><div class="lbl">Blast radius</div><ul class="clean small"><li>Own namespace, no service-account token</li><li>Repo-scoped GitHub token: branches and PRs, I merge</li><li>The cluster manifests live in another repo it can't touch</li></ul></div>
+    <div class="card f"><div class="lbl">Network</div><ul class="clean small"><li>Egress: DNS, internet on 80/443, the PC's API + SSH, the waker</li><li>Private ranges and other pods blocked; ingress closed</li></ul></div>
+    <div class="card f"><div class="lbl">The PC</div><ul class="clean small"><li>The devbox SSH key runs a forced command: busy / status / restart only</li><li>It cannot pause or resume the model; that switch is mine</li></ul></div>
+    <div class="card f"><div class="lbl">Secrets & review</div><ul class="clean small"><li>Secrets in OpenBao → External Secrets; never in git</li><li>Protected paths enforced by the harness, not by the prompt</li><li>CI results read by the harness with <code>gh</code>, never self-reported</li></ul></div>
+  </div>
+</section>
+
+<!-- 15 POWER -->
+<section class="slide" data-title="Power">
+  <div class="kicker">Power</div>
+  <h2>The PC sleeps; the cluster wakes it</h2>
+  <div class="tl-row rise d1" style="margin-top:10px">
+    <div class="pulse"></div>
+    <div class="tl-step"><div class="dot">1</div><h3>Work appears</h3><p class="muted">The loop needs the model; the API doesn't answer.</p></div>
+    <div class="tl-step"><div class="dot">2</div><h3>Magic packet</h3><p class="muted">A hostNetwork waker pod broadcasts Wake-on-LAN.</p></div>
+    <div class="tl-step"><div class="dot">3</div><h3>Model loads</h3><p class="muted">WSL starts llama-server; the harness polls health.</p></div>
+    <div class="tl-step"><div class="dot">4</div><h3>Busy heartbeat</h3><p class="muted">A flag file with a TTL keeps Windows from sleeping.</p></div>
+    <div class="tl-step"><div class="dot">5</div><h3>Idle → S3</h3><p class="muted">Heartbeat stops (or the harness crashes); the PC sleeps.</p></div>
+  </div>
+  <div class="grid2" style="margin-top:34px;gap:18px">
+    <div class="card rise d2"><div class="lbl">Owner controls</div><p><code>ai pause</code> stops the model, drops WSL's page cache so Windows gets the RAM back, and blocks restarts. <code>ai resume</code> gives the GPU back.</p></div>
+    <div class="card rise d3" style="border-color:#ff6b8b55"><div class="lbl" style="color:var(--rose)">Honest status</div><p>Wake-on-LAN doesn't work yet: Windows and the NIC are configured, the BIOS still needs ErP off and PCI-E wake on. Until then the PC stays on during runs.</p></div>
+  </div>
+</section>
+
+<!-- 16 RESULTS -->
+<section class="slide" data-title="Results">
+  <div class="kicker">Results so far</div>
+  <h2>Real projects, built unattended</h2>
+  <div class="col" style="gap:16px">
+    <div class="card rise d1" style="padding:18px 22px">
+      <div class="row between center"><div><h3>Weather station website <span class="pill">FastAPI · Jinja · HTMX · Postgres</span></h3><p class="small muted">First real run</p></div><div class="mono small"><span class="gr">13 done</span> · <span class="hl">2 skipped</span> · 4.9 h</div></div>
+      <div style="display:flex;height:14px;border-radius:6px;overflow:hidden;margin-top:12px"><div style="flex:13;background:var(--green)"></div><div style="flex:2;background:var(--amber)"></div></div>
+    </div>
+    <div class="card rise d2" style="padding:18px 22px">
+      <div class="row between center"><div><h3>Scrum assistant for a school team <span class="pill">Teams webhook · worker</span></h3><p class="small muted">Second run, with hand-written tests</p></div><div class="mono small"><span class="gr">28 done</span> · <span class="hl">1 left</span> · 8.7 h</div></div>
+      <div style="display:flex;height:14px;border-radius:6px;overflow:hidden;margin-top:12px"><div style="flex:28;background:var(--green)"></div><div style="flex:1;background:var(--amber)"></div></div>
+    </div>
+    <div class="card rise d3" style="padding:18px 22px">
+      <div class="row between center"><div><h3>Guitar practice app <span class="pill">migration-heavy run</span></h3><p class="small muted">Second run: hit context overflow and 3 skips in a row</p></div><div class="mono small"><span class="gr">11 done</span> · <span class="hl">8 skipped</span> · <span class="faint">26 not started</span> · 7.7 h</div></div>
+      <div style="display:flex;height:14px;border-radius:6px;overflow:hidden;margin-top:12px"><div style="flex:11;background:var(--green)"></div><div style="flex:8;background:var(--amber)"></div><div style="flex:26;background:#232c3f"></div></div>
+    </div>
+  </div>
+  <p class="rise d4 small muted" style="margin-top:16px">Pace: roughly 10–20 minutes per task. Small, testable tasks pass on the first or second try; vague or cross-cutting ones get skipped.</p>
+</section>
+
+<!-- 17 LESSONS -->
+<section class="slide" data-title="Lessons">
+  <div class="kicker">Lessons</div>
+  <h2>What actually moved the needle</h2>
+  <div class="grid2" style="gap:18px">
+    <div class="card f"><div class="lbl">1 · Task size beats model size</div><p>One change per task with a concrete acceptance command. "Read only these files" in the task text keeps the context lean.</p></div>
+    <div class="card f"><div class="lbl">2 · Smarts beat speed</div><p>A model that's right first time at 20 tok/s finishes before one that loops at 60. Retries cost time, CI runs and review effort.</p></div>
+    <div class="card f"><div class="lbl">3 · Match every limit</div><p>Client context limit = server context. Otherwise the failure looks like "agent made no changes", not "context full".</p></div>
+    <div class="card f"><div class="lbl">4 · Make failures loud</div><p>A push failure is only logged, so finished work has sat unpushed on the devbox more than once. Every side effect needs a visible check.</p></div>
+    <div class="card f"><div class="lbl">5 · Hardware cliffs are sharp</div><p>One MoE layer too many on the GPU: 43 → 4 tok/s. Benchmark every flag change.</p></div>
+    <div class="card f"><div class="lbl">6 · Humans own the spec</div><p>The agent can't edit tests, spec or plan. That one rule prevents most "make the test pass" cheating.</p></div>
+  </div>
+</section>
+
+<!-- 18 COMPARISON -->
+<section class="slide" data-title="Where it stands">
+  <div class="kicker">Perspective</div>
+  <h2>Roughly where the frontier was 1.5–2 years ago</h2>
+  <div class="tbl rise d1">
+    <table>
+      <tr><th style="width:280px">Model</th><th style="width:90px">Year</th><th>Compared with this 35B-A3B (my estimate)</th></tr>
+      <tr><td>GPT-3 (175B)</td><td class="num">2020</td><td>Far better, at 1/5 the size. GPT-3 didn't follow instructions.</td></tr>
+      <tr><td>ChatGPT (GPT-3.5)</td><td class="num">2022</td><td>Clearly better at code and reasoning.</td></tr>
+      <tr><td>GPT-4</td><td class="num">2023</td><td>Similar or better at coding, much better as an agent; GPT-4 knew more.</td></tr>
+      <tr><td>Claude 3.5 Sonnet</td><td class="num">2024</td><td>Same neighbourhood on small tasks, behind on long, hard ones.</td></tr>
+      <tr><td>Frontier 2025–2026</td><td class="num">2025+</td><td>Clearly ahead, especially at staying on track over many steps.</td></tr>
+    </table>
+  </div>
+  <div class="grid2 rise d2" style="margin-top:18px;gap:18px">
+    <div class="card"><div class="lbl gr" style="color:var(--green)">Why it beats old giants</div><p>Better data, RL on real edit–test–fix loops, distillation from big models, and thinking tokens.</p></div>
+    <div class="card"><div class="lbl" style="color:var(--rose)">Why it trails today's frontier</div><p>Less stored knowledge (guesses APIs), shallow thinking per token (3B active), 48k context, drifts on long tasks.</p></div>
+  </div>
+</section>
+
+<!-- 19 UPGRADES -->
+<section class="slide" data-title="Upgrades">
+  <div class="kicker">What next · prices November 2026</div>
+  <h2>Upgrading in a memory shortage</h2>
+  <div class="row" style="gap:26px">
+    <div class="tbl grow rise d1" style="align-self:flex-start">
+      <table class="small">
+        <tr><th>Option</th><th>Rough cost</th><th>Gets you</th></tr>
+        <tr><td>Used 2×32 GB DDR4</td><td class="num">€200–300</td><td>~70–100B MoE at 10–18 tok/s: smarter, slower</td></tr>
+        <tr><td>New 2×32 GB DDR4</td><td class="num">€400–560</td><td>same, at peak prices</td></tr>
+        <tr><td>Used RTX 3090 (swap)</td><td class="num">€500–1000 net</td><td>24 GB VRAM: faster, not smarter</td></tr>
+        <tr><td>DDR5 + 96 GB rebuild</td><td class="num">€2000+</td><td>~120B MoE at 20–30 tok/s</td></tr>
+        <tr><td>Mac Studio, Max, 128 GB</td><td class="num">€4000+</td><td>always on, quiet, ~120B MoE</td></tr>
+      </table>
+    </div>
+    <div class="col" style="width:380px">
+      <div class="card rise d2"><div class="lbl">Why it's expensive</div><p>HBM for AI accelerators eats DRAM wafer capacity; DDR4 is being phased out; used 24 GB GPUs are wanted for exactly this hobby.</p></div>
+      <div class="card rise d3"><div class="lbl">When it eases</div><p>New fab capacity lands from late 2027, volume in 2028. Data-centre pushback and new Chinese capacity could make the turn sharper.</p></div>
+      <div class="card rise d4" style="border-color:#3ad6c466"><div class="lbl tl" style="color:var(--teal)">My plan</div><p>Wait. Test a bigger model on a hosted API first; buy used DDR4 only if it clearly wins.</p></div>
+    </div>
+  </div>
+  <div class="note">Prices from public trackers and shop listings, Oct–Nov 2026, converted roughly; they move weekly.</div>
+</section>
+
+<!-- 20 END -->
+<section class="slide" data-title="Questions">
+  <div class="orbs"><div class="orb" style="width:520px;height:520px;left:-140px;bottom:-200px;background:radial-gradient(circle at 50% 50%,#3ad6c433,transparent 70%)"></div></div>
+  <div style="margin:auto 0;position:relative">
+    <div class="kicker rise">Thanks</div>
+    <h1 class="rise d1" style="font-size:80px">Questions?</h1>
+    <div class="grid3 rise d2" style="margin-top:40px;max-width:1000px">
+      <div class="card"><div class="lbl">Try it cheaply</div><p>Any OpenAI-compatible endpoint works. A llama.cpp server on a 12–16 GB GPU runs this class of model.</p></div>
+      <div class="card"><div class="lbl">Steal the loop</div><p>Fresh session per task, harness-owned verdict, protected tests. That pattern works with any model.</p></div>
+      <div class="card"><div class="lbl">Measure everything</div><p>tok/s for reading and writing, tasks done per hour, retries per task. Intuition is wrong half the time.</p></div>
+    </div>
+  </div>
+</section>
+
+</div></div>
+
+<div id="hud"><span id="counter">1 / 20</span><button id="prev" aria-label="Previous">‹</button><button id="next" aria-label="Next">›</button><button id="fs" aria-label="Fullscreen">⤢</button></div>
+
+<script>
+(function(){
+  const stage=document.getElementById('stage');
+  const slides=[...document.querySelectorAll('.slide')];
+  const prog=document.getElementById('progress');
+  const counter=document.getElementById('counter');
+  let idx=0;
+
+  function fit(){
+    const s=Math.min(innerWidth/1280,innerHeight/720);
+    stage.style.transform='scale('+s+')';
+  }
+  addEventListener('resize',fit);fit();
+
+  function frags(s){return [...s.querySelectorAll('.f')];}
+
+  function show(n,fromBack){
+    n=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,i)=>{
+      s.classList.toggle('before',i<n);
+      if(i!==n) s.classList.remove('active');
+    });
+    const s=slides[n];
+    s.classList.remove('active'); void s.offsetWidth; s.classList.add('active');
+    frags(s).forEach(f=>f.classList.toggle('on',!!fromBack));
+    idx=n;
+    prog.style.width=((n+1)/slides.length*100)+'%';
+    counter.textContent=(n+1)+' / '+slides.length;
+    try{history.replaceState(null,'','#'+(n+1));}catch(e){}
+    onEnter(s);
+  }
+  function next(){
+    const hidden=frags(slides[idx]).filter(f=>!f.classList.contains('on'));
+    if(hidden.length){hidden[0].classList.add('on');return;}
+    if(idx<slides.length-1) show(idx+1);
+  }
+  function prev(){
+    const shown=frags(slides[idx]).filter(f=>f.classList.contains('on'));
+    if(shown.length){shown[shown.length-1].classList.remove('on');return;}
+    if(idx>0) show(idx-1,true);
+  }
+  addEventListener('keydown',e=>{
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();next();}
+    else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();prev();}
+    else if(e.key==='Home') show(0);
+    else if(e.key==='End') show(slides.length-1,true);
+    else if(e.key==='f'||e.key==='F') toggleFs();
+    else if(e.key==='p'||e.key==='P') window.print();
+  });
+  document.getElementById('next').onclick=next;
+  document.getElementById('prev').onclick=prev;
+  function toggleFs(){
+    if(!document.fullscreenElement) document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>{});
+    else document.exitFullscreen&&document.exitFullscreen();
+  }
+  document.getElementById('fs').onclick=toggleFs;
+  let tx=null,ty=null;
+  addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+  addEventListener('touchend',e=>{
+    if(tx===null) return;
+    const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)) (dx<0?next:prev)();
+    tx=null;
+  },{passive:true});
+
+  /* ---------- per-slide behaviour ---------- */
+  const timers={};
+  function clearT(k){if(timers[k]){clearInterval(timers[k]);timers[k]=null;}}
+
+  function onEnter(s){
+    Object.keys(timers).forEach(clearT);
+    s.querySelectorAll('.count').forEach(countUp);
+    if(s.id==='moe') startMoe();
+    if(s.id==='loopSlide') startLoop();
+    if(s.querySelector('#decodeViz')) startDecode();
+    if(s.id==='quant') drawQuant(curBits);
+  }
+
+  const calm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function countUp(el){
+    if(calm) return;
+    const to=+el.dataset.to, t0=performance.now(), dur=1400;
+    (function step(t){
+      const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+      el.textContent=Math.round(to*e);
+      if(p<1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  /* MoE */
+  const grid=document.getElementById('moeGrid'), toks=document.getElementById('moeTokens');
+  const N=32;
+  for(let i=0;i<N;i++){const d=document.createElement('div');d.className='ex'+(i===0?' shared':'');grid.appendChild(d);}
+  const words=['def','load','_plan','(','path',')',':','return','parse','(','path','.read','())'];
+  words.forEach(w=>{const t=document.createElement('span');t.className='tok';t.textContent=w;toks.appendChild(t);});
+  function startMoe(){
+    const cells=[...grid.children], tk=[...toks.children]; let k=0;
+    const tick=()=>{
+      tk.forEach((t,i)=>t.classList.toggle('cur',i===k%tk.length));
+      cells.forEach((c,i)=>{if(i) c.classList.remove('lit');});
+      const pick=new Set(); while(pick.size<4) pick.add(1+Math.floor(Math.random()*(N-1)));
+      pick.forEach(i=>cells[i].classList.add('lit'));
+      k++;
+    };
+    tick(); timers.moe=setInterval(tick,850);
+  }
+
+  /* decode bars: per-token time split VRAM vs RAM */
+  function startDecode(){
+    const v=document.getElementById('decodeViz'); v.innerHTML='';
+    const bars=[];
+    for(let i=0;i<22;i++){
+      const b=document.createElement('div');
+      b.style.cssText='width:16px;border-radius:4px 4px 2px 2px;display:flex;flex-direction:column;justify-content:flex-end;height:100%;opacity:.15;transition:opacity .3s';
+      b.innerHTML='<div style="height:70%;background:#ffb547;border-radius:4px 4px 0 0"></div><div style="height:12%;background:#3ad6c4"></div>';
+      v.appendChild(b); bars.push(b);
+    }
+    const lab=document.createElement('div');
+    lab.className='tiny mono muted'; lab.style.cssText='margin-left:12px;align-self:center;line-height:1.5';
+    lab.innerHTML='per token:<br><span class="hl">■</span> reading RAM experts<br><span class="tl">■</span> reading VRAM';
+    v.appendChild(lab);
+    let k=0;
+    timers.dec=setInterval(()=>{bars.forEach((b,i)=>b.style.opacity=i<=k%bars.length?1:.15);k++;},180);
+  }
+
+  /* loop */
+  const steps=[
+    ['Pick next task','from PLAN.md'],['Wake + hold PC','busy heartbeat'],['Fresh agent session','task + progress + last failure'],
+    ['Guard paths','protected → reject'],['Run checks','accept cmd + make check'],['Commit + push','or reset & retry']
+  ];
+  const wrap=document.getElementById('loopwrap'); const els=[];
+  steps.forEach((s,i)=>{
+    const a=-Math.PI/2+i*2*Math.PI/steps.length, r=160;
+    const d=document.createElement('div'); d.className='loopstep';
+    d.style.left=(220+r*Math.cos(a))+'px'; d.style.top=(220+r*Math.sin(a))+'px';
+    d.innerHTML=s[0]+'<small>'+s[1]+'</small>'; wrap.appendChild(d); els.push(d);
+  });
+  function startLoop(){
+    let k=0; const tick=()=>{els.forEach((e,i)=>e.classList.toggle('act',i===k%els.length));k++;};
+    tick(); timers.loop=setInterval(tick,1100);
+  }
+
+  /* quantisation */
+  const qsvg=document.getElementById('qsvg'), qinfo=document.getElementById('qinfo');
+  let curBits=4;
+  const W=560,H=250,P=14;
+  function f(x){return Math.sin(x*2.1)*0.55+Math.sin(x*5.3+1)*0.25+Math.sin(x*11+2)*0.1;}
+  function drawQuant(bits){
+    curBits=bits;
+    const levels=bits>=16?65536:Math.pow(2,bits);
+    const xs=[];for(let i=0;i<=240;i++) xs.push(i/240*3.2);
+    const lo=-0.95,hi=0.95;
+    const y=v=>H-P-((v-lo)/(hi-lo))*(H-2*P), x=t=>P+t/3.2*(W-2*P);
+    let orig='',q='',err=0;
+    xs.forEach((t,i)=>{
+      const v=f(t);
+      const step=(hi-lo)/(levels-1);
+      const qv=bits>=16?v:Math.round((v-lo)/step)*step+lo;
+      err+=Math.abs(qv-v);
+      orig+=(i?'L':'M')+x(t).toFixed(1)+','+y(v).toFixed(1);
+      q+=(i?'L':'M')+x(t).toFixed(1)+','+y(qv).toFixed(1);
+    });
+    let gridLines='';
+    if(levels<=16){for(let l=0;l<levels;l++){const v=lo+l*(hi-lo)/(levels-1);gridLines+='<line x1="'+P+'" x2="'+(W-P)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#1f2839" stroke-width="1"/>';}}
+    qsvg.innerHTML=gridLines+
+      '<path d="'+orig+'" fill="none" stroke="#5d6a82" stroke-width="2" stroke-dasharray="3 4"/>'+
+      '<path d="'+q+'" fill="none" stroke="#ffb547" stroke-width="2.5" style="transition:d .4s"/>'+
+      '<text x="'+P+'" y="18" fill="#9aa6bb" font-size="12" font-family="ui-monospace,Menlo,monospace">original (dashed) vs stored (amber)</text>';
+    const avg=err/xs.length;
+    qinfo.textContent=(bits>=16?'65,536':levels)+' levels · avg error '+(bits>=16?'≈0':avg.toFixed(3));
+    document.querySelectorAll('#qbtns .qbtn').forEach(b=>b.classList.toggle('on',+b.dataset.b===bits));
+  }
+  document.querySelectorAll('#qbtns .qbtn').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();drawQuant(+b.dataset.b);}));
+  drawQuant(4);
+
+  /* start */
+  const start=parseInt((location.hash||'').slice(1),10);
+  show(isNaN(start)?0:start-1);
+})();
+</script>
+</body>
+</html>
