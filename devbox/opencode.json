@@ -10,7 +10,13 @@
         "apiKey": "{env:LLAMA_API_KEY}"
       },
       "models": {
-        "coder": { "name": "coder (local)" }
+        "coder": {
+          "name": "coder (local)",
+          "limit": {
+            "context": 49152,
+            "output": 8192
+          }
+        }
       }
     }
   }
