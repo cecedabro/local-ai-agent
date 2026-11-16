@@ -7,8 +7,13 @@ time; the others wait in line) and keeps a **job queue** that `agent-queue`
 (`harness/worker.py`) works through. `harness/loop.py` is the event and lease client (class
 `Status`).
 
-The tests are the judge: `status/tests/test_contract.py` (§1–§7) and
-`status/tests/test_unit_queue.py` (§8–§10). This file explains them.
+It is also the **model gateway** (§11): an OpenAI-compatible front door to llama-server with
+per-client keys and a priority queue, so chat and scrum replies go before agent-loop work,
+and every request shows up on the page.
+
+The tests are the judge: `status/tests/test_contract.py` (§1–§7),
+`status/tests/test_unit_queue.py` (§8–§10) and `status/tests/test_unit_gateway.py` (§8, §11).
+This file explains them.
 
 ## 0. Constraints
 
@@ -209,6 +214,9 @@ their card), dark by default with a light variant, no horizontal page scroll. Ot
 | `METRICS_INTERVAL` | `60` | seconds between token samples; `0` = off |
 | `JOB_TTL` | `900` | a running job without heartbeat for this long becomes `lost` |
 | `STATUS_QUIET` | (unset) | `1` = no request log |
+| `JOB_OWNERS` | (unset) | GitHub owners whose repos may be queued; unset = any |
+| `GATEWAY_CLIENTS` | (unset) | `name:lane:key,...`, lane `interactive` or `batch`, key ≥ 8 chars |
+| `GATEWAY_CONCURRENCY` | `1` | requests sent to llama-server at the same time |
 
 On start, delete events received more than 30 days ago (by `clock()`). This happens in
 `make_server`, so it applies to tests too. Log one line per request to stderr is fine;
@@ -240,6 +248,11 @@ A job: `id`, `repo` (`owner/name`), `ref` (branch, `""` = the repo's default), `
 - `POST /api/jobs/<id>/requeue`: a finished job is queued again as a new job; **409** while
   it is queued or running.
 - Unknown id → **404**. A running job whose `seen` is older than `job_ttl` becomes `lost`.
+- `JOB_OWNERS` (comma-separated, case-insensitive): when set, only repos of those owners can
+  be queued (else **400**). The worker checks its own `QUEUE_OWNERS` again before running.
+- `POST /api/workers/ping` `{"worker", "paused"}`: a paused worker (`~/.agent-queue-STOP`
+  exists) says so instead of claiming. Claims count as pings. `jobs.workers` lists workers
+  seen in the last 10 minutes: `{name, seen, paused}`; the page warns when there are none.
 
 `/api/status` → `jobs`: `{"running": [...], "queued": [... in order], "recent": [10 newest
 finished in the last 7 days]}`. Jobs live in SQLite and survive a restart.
@@ -269,3 +282,36 @@ Kept in their own tables when events arrive, so the 30-day event retention doesn
 `first_try_rate`, and `repos` (the same per repo, newest activity first).
 `daily`: the last 14 days (UTC), oldest first: `{day, commits, skipped, lines_added,
 lines_removed, generated}`.
+
+## 11. Model gateway
+
+Active when `llama_url` is set (else `/v1/*` → **404**).
+
+- `POST /v1/chat/completions`, `POST /v1/completions`: the body (≤ 16 MiB, a JSON object)
+  goes unchanged to `<root>/v1/...` with `Authorization: Bearer <llama_key>`; the answer
+  comes back unchanged, streamed line by line when it is `text/event-stream`.
+  `GET /v1/models` is passed through without queueing. Other `/v1/` paths → 404.
+- Callers authenticate with `Authorization: Bearer <key>`: a key from `GATEWAY_CLIENTS`
+  (`name:lane:key`), or the status token, which is client `chat` in lane `interactive` (the
+  page's chat). Unknown key → **401**. Errors use OpenAI's shape `{"error": {"message"}}`.
+- Queue: at most `concurrency` requests upstream at once. The next one is the oldest
+  `interactive` request, else the oldest `batch` one. A caller that hangs up while waiting
+  is dropped (recorded as 499).
+- llama-server unreachable → **502** "model unreachable (PC asleep?)". Upstream HTTP errors
+  pass through with their status.
+- Every request is recorded: client, lane, queued/started/finished, status, prompt and
+  generated tokens and their milliseconds (from llama-server's `timings`, or `usage`).
+  **Prompts and answers are never stored.** Per-client all-time totals are kept separately
+  from the 30-day request retention.
+
+`/api/status` → `gateway`: `enabled`, `clients`, `waiting` (in the order they will run:
+`{id, client, lane, waited_s}`), `running` (`{id, client, lane, stream, for_s, tokens}`;
+`tokens` counts streamed chunks so far), `recent` (15 newest: `client, lane, finished,
+waited_s, took_s, status, prompt, generated, gen_tps, error`), `by_client` (all-time
+`requests, prompt, generated, errors, gen_tps` plus `requests_24h`, `generated_24h`).
+
+Page: a **Model activity** section after Now (running, waiting in order, last requests, per
+client). A **chat** card above the live sections (only when unlocked and the gateway is on)
+and a full-height `GET /chat` page: it streams from `/v1/chat/completions` with the status
+token, keeps the history in the browser's `localStorage` only, has Stop and Clear, and a
+"think" switch (`chat_template_kwargs.enable_thinking`; off = quick answers).

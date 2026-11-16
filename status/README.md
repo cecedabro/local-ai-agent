@@ -3,10 +3,15 @@
 The status page for the local coding agent, plus its job queue and the lease on the model.
 One stdlib-only Python file (`app.py`); the full contract is in [SPEC.md](SPEC.md).
 
-What it shows: the model state, the running run and task, the job queue and the model lease,
-all-time commits/lines/tokens/PRs, token speed (now, average, per hour), commits per day,
-recent events and runs. Reading is open (it is only reachable over Tailscale); changing the
-queue needs the token.
+What it shows: the model state, the running run and task, live model activity (every request
+through the gateway, per client), the job queue and the model lease, all-time
+commits/lines/tokens/PRs, token speed, commits per day, recent events and runs. Plus a quick
+chat with the model on the page and a full one at `/chat`. Reading is open (it is only
+reachable over Tailscale); the queue and the chat need the token.
+
+**Gateway:** clients that use the model (agent-loop/OpenCode, scrum-agent, the chat) point at
+`http://<status>/v1` with their own key instead of at llama-server. Interactive clients go
+first; batch ones wait. Only sizes and timings are recorded, never prompts or answers.
 
 ## Run it locally
 
@@ -25,6 +30,9 @@ Then open http://localhost:8080 and paste `dev` to unlock the controls.
 | `LLAMA_API_KEY` | (unset) | llama-server key, for `/metrics` |
 | `METRICS_INTERVAL` | `60` | seconds between token samples |
 | `LEASE_TTL`, `PROBE_INTERVAL`, `JOB_TTL` | `180`, `30`, `900` | seconds |
+| `JOB_OWNERS` | (unset) | e.g. `cecedabro`: only those repos can be queued |
+| `GATEWAY_CLIENTS` | (unset) | `agent-loop:batch:<key>,scrum-agent:interactive:<key>` |
+| `GATEWAY_CONCURRENCY` | `1` | parallel requests to llama-server |
 
 Token speed needs llama-server started with `--metrics` (in `pc/llama/llama-server.env`).
 
@@ -32,8 +40,11 @@ Token speed needs llama-server started with `--metrics` (in `pc/llama/llama-serv
 
 - `agent-loop` (`harness/loop.py`) with `STATUS_URL` + `STATUS_TOKEN`: sends events and
   takes the model lease (`/api/events`, `/api/lease`).
-- `agent-queue` (`harness/worker.py`) on the devbox: takes jobs (`/api/jobs/claim`), runs
-  `agent-loop` for each, sends heartbeats and the result.
+- `agent-queue` (`harness/worker.py`) on the devbox, started by the entrypoint in tmux window
+  `queue` (needs `STATUS_URL`, `STATUS_TOKEN`, `QUEUE_OWNERS`): takes jobs, runs `agent-loop`
+  for each, sends heartbeats and the result. Pause: `touch ~/.agent-queue-STOP`.
+- Anything OpenAI-compatible, through the gateway: `LLAMA_BASE_URL=http://<status>/v1` and
+  its own key as the API key.
 
 ## Endpoints
 
@@ -45,7 +56,8 @@ curl -H "Authorization: Bearer $T" -d '{"repo":"cecedabro/woodshed","note":"next
 curl -H "Authorization: Bearer $T" -d '{"to":"top"}' $U/api/jobs/3/move
 curl -H "Authorization: Bearer $T" -d '{}' $U/api/jobs/3/cancel
 curl -H "Authorization: Bearer $T" -d '{"action":"acquire","run_id":"r1","repo":"woodshed"}' $U/api/lease
+curl -H "Authorization: Bearer $T" -d '{"model":"coder","messages":[{"role":"user","content":"hi"}]}' $U/v1/chat/completions
 curl -H "Authorization: Bearer $T" -d '{"run_id":"r1","repo":"woodshed","kind":"ci","ts":"2026-11-16T10:00:00Z","detail":"hi"}' $U/api/events
 ```
 
-Tests: `make check` (queue, totals, tokens) and `make status-test` (the original contract).
+Tests: `make check` (queue, totals, tokens, gateway) and `make status-test` (the original contract).

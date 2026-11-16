@@ -7,11 +7,13 @@ runs agent-loop there with AGENT_JOB_ID set, so the run shows up under its job. 
 run is going it sends a heartbeat; a Stop on the page makes it touch .agent/STOP, so the
 run ends after its current task.
 
-Run it in a tmux window on the devbox:
-    agent-queue                 # until stopped (Ctrl-C, or touch ~/.agent-queue-STOP)
+The devbox starts it in tmux window `queue` of session `agent` (devbox/entrypoint.sh):
+    agent-queue                 # until Ctrl-C
     agent-queue --once          # take at most one job, then exit
+    touch ~/.agent-queue-STOP   # pause: take no new jobs (the page shows it); rm to resume
 
 Environment: STATUS_URL, STATUS_TOKEN (required), plus everything agent-loop reads.
+    QUEUE_OWNERS     comma-separated GitHub owners whose repos may be run (required)
     QUEUE_GIT_BASE   clone URL prefix (default https://github.com/; the job's repo + .git is appended)
     AGENT_LOOP_CMD   the loop command (default: agent-loop)
 Stdlib only.
@@ -102,6 +104,12 @@ def checkout(job: dict, repos: Path, git_base: str) -> tuple[Path | None, str]:
 def run_job(client: Client, job: dict, args: argparse.Namespace) -> None:
     jid = job["id"]
     print(f"[{now()}] job #{jid}: {job['repo']} {job.get('ref') or ''}".rstrip())
+    owner = job["repo"].split("/", 1)[0].lower()
+    if owner not in args.owners:
+        err = f"owner {owner} is not in QUEUE_OWNERS"
+        print(f"[{now()}] job #{jid} refused: {err}")
+        client.post(f"/api/jobs/{jid}/finish", {"state": "failed", "detail": err})
+        return
     path, err = checkout(job, args.repos, args.git_base)
     if path is None:
         print(f"[{now()}] job #{jid} failed: {err}")
@@ -163,12 +171,30 @@ def main() -> int:
     url, token = os.environ.get("STATUS_URL", ""), os.environ.get("STATUS_TOKEN", "")
     if not url or not token:
         sys.exit("STATUS_URL and STATUS_TOKEN must be set")
+    args.owners = {o.strip().lower() for o in os.environ.get("QUEUE_OWNERS", "").split(",") if o.strip()}
+    if not args.owners:
+        sys.exit("QUEUE_OWNERS must be set (e.g. your GitHub user)")
     args.repos.mkdir(parents=True, exist_ok=True)
     client = Client(url, token)
     worker = socket.gethostname()
-    print(f"[{now()}] agent-queue on {worker}: polling {url} (stop: touch {STOP_FILE})")
-    told_down = False
-    while not STOP_FILE.exists():
+    print(f"[{now()}] agent-queue on {worker}: polling {url} (pause: touch {STOP_FILE})")
+    told_down = told_paused = False
+    while True:
+        if STOP_FILE.exists():
+            if not told_paused:
+                print(f"[{now()}] paused ({STOP_FILE} exists); rm it to resume")
+                told_paused = True
+            client.post("/api/workers/ping", {"worker": worker, "paused": True})
+            if args.once:
+                return 0
+            try:
+                time.sleep(args.poll)
+            except KeyboardInterrupt:
+                return 130
+            continue
+        if told_paused:
+            print(f"[{now()}] resumed")
+            told_paused = False
         res = client.post("/api/jobs/claim", {"worker": worker})
         if res is None and not told_down:
             print(f"[{now()}] status service unreachable; retrying every {args.poll:g} s")
@@ -188,9 +214,6 @@ def main() -> int:
                 time.sleep(args.poll)
             except KeyboardInterrupt:
                 return 130
-    STOP_FILE.unlink(missing_ok=True)
-    print(f"[{now()}] stop file found; exiting")
-    return 0
 
 
 if __name__ == "__main__":

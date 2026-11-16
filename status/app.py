@@ -11,6 +11,8 @@ import html
 import json
 import os
 import re
+import select
+import socket
 import sqlite3
 import sys
 import threading
@@ -45,6 +47,11 @@ create table if not exists daily(day text primary key, commits int default 0, sk
   added int default 0, removed int default 0, gen int default 0, prompt int default 0);
 create table if not exists samples(t real, gen int, gen_s real, prompt int, prompt_s real, busy int);
 create table if not exists meta(key text primary key, value text);
+create table if not exists requests(id integer primary key, client text, lane text, path text, queued real,
+  started real, finished real, status int, prompt_n int, gen_n int, prompt_ms real, gen_ms real, error text);
+create index if not exists requests_finished on requests(finished);
+create table if not exists client_tally(client text primary key, requests int default 0, prompt int default 0,
+  gen int default 0, prompt_ms real default 0, gen_ms real default 0, errors int default 0);
 create table if not exists jobs(id integer primary key, repo text, ref text, note text, max_hours real,
   ci int, state text, pos real, created real, started real, finished real, worker text, seen real,
   cancel int default 0, detail text, exit_code int);
@@ -65,7 +72,11 @@ def num(v: object, default: float = 0) -> float:
 
 class App:
     def __init__(self, *, db_path: str, token: str, llama_url: str | None, llama_key: str | None,
-                 lease_ttl: float, probe_interval: float, job_ttl: float, clock: Callable[[], float]) -> None:
+                 lease_ttl: float, probe_interval: float, job_ttl: float, clock: Callable[[], float],
+                 job_owners: list[str] | None = None) -> None:
+        self.job_owners = {o.lower() for o in job_owners or []}
+        self.gateway: Gateway | None = None
+        self.workers: dict[str, dict] = {}
         self.token, self.lease_ttl, self.probe_interval, self.job_ttl = token, lease_ttl, probe_interval, job_ttl
         self.clock, self.llama_key = clock, llama_key
         self.root = None
@@ -78,6 +89,7 @@ class App:
         cutoff = clock() - RETENTION
         self.db.execute("delete from events where received < ?", (cutoff,))
         self.db.execute("delete from samples where t < ?", (cutoff,))
+        self.db.execute("delete from requests where finished < ?", (cutoff,))
         self.db.commit()
         self.holder: dict | None = None
         self.waiters: list[dict] = []
@@ -195,6 +207,8 @@ class App:
         repo = body.get("repo")
         if not isinstance(repo, str) or not REPO_RE.match(repo.strip()):
             return 400, {"error": "repo must look like owner/name"}
+        if self.job_owners and repo.strip().split("/", 1)[0].lower() not in self.job_owners:
+            return 400, {"error": f"only repos of {', '.join(sorted(self.job_owners))} may be queued"}
         ref = body.get("ref") or ""
         if not isinstance(ref, str) or (ref and not REF_RE.match(ref)):
             return 400, {"error": "bad ref"}
@@ -215,9 +229,16 @@ class App:
             self.db.commit()
             return 201, self.job_pub(self.job_row(cur.lastrowid))
 
+    def ping(self, body: dict) -> dict:
+        worker = str(body.get("worker") or "worker")[:100]
+        with self.lock:
+            self.workers[worker] = {"seen": self.clock(), "paused": bool(body.get("paused"))}
+        return {"ok": True}
+
     def claim(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
+            self.workers[worker] = {"seen": self.clock(), "paused": False}
             self.expire_jobs()
             if self.db.execute("select 1 from jobs where state='running'").fetchone():
                 self.db.commit()
@@ -504,11 +525,207 @@ class App:
             "queued": [p for j, p in sorted(pub_jobs, key=lambda x: (x[0]["pos"] or 0, x[0]["id"]))
                        if j["state"] == "queued"],
             "recent": [p for j, p in pub_jobs if j["state"] not in ("queued", "running")][:10],
+            "workers": [{"name": n, "seen": iso(w["seen"]), "paused": w["paused"]}
+                        for n, w in sorted(self.workers.items()) if now - w["seen"] < 600],
         }
         events = [{**json.loads(b), "received": iso(r)} for r, b in ev_rows]
-        return {"now": iso(now), "model": model, "lease": {"holder": holder, "queue": queue},
+        gateway = self.gateway.snapshot(now) if self.gateway else None
+        return {"now": iso(now), "model": model, "lease": {"holder": holder, "queue": queue}, "gateway": gateway,
                 "jobs": job_out, "runs": out_runs, "events": events, "stats": stats, "totals": totals,
                 "tokens": tokens, "daily": daily}
+
+
+# ---------------------------------------------------------------------------- gateway
+
+LANES = {"interactive": 0, "batch": 1}
+GATEWAY_PATHS = {"/v1/chat/completions", "/v1/completions"}
+GATEWAY_MAX_BODY = 16 * 1024 * 1024
+
+
+def parse_clients(spec: str) -> dict[str, tuple[str, str]]:
+    """GATEWAY_CLIENTS: comma-separated name:lane:key -> {key: (name, lane)}."""
+    out: dict[str, tuple[str, str]] = {}
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        name, lane, key = (item.split(":", 2) + ["", ""])[:3]
+        if not name or lane not in LANES or len(key) < 8:
+            raise SystemExit(f"GATEWAY_CLIENTS: bad entry for {name or '?'} (need name:interactive|batch:key, "
+                             "key of 8+ characters)")
+        out[key] = (name, lane)
+    return out
+
+
+class Gateway:
+    """OpenAI-compatible front door for llama-server: per-client keys, a priority queue
+    (interactive before batch, FIFO within a lane, `concurrency` requests upstream at a time)
+    and a record of every request. Prompts and answers are never stored."""
+
+    def __init__(self, app: App, clients: dict[str, tuple[str, str]], concurrency: int = 1) -> None:
+        self.app, self.clients, self.concurrency = app, clients, max(1, concurrency)
+        self.cond = threading.Condition()
+        self.waiting: list[dict] = []
+        self.running: list[dict] = []
+        self.seq = 0
+
+    @property
+    def enabled(self) -> bool:
+        return self.app.root is not None
+
+    def client_for(self, header: str) -> tuple[str, str] | None:
+        got = header.removeprefix("Bearer ").strip().encode()
+        found = None
+        for key, client in self.clients.items():         # compare against all keys: constant-ish time
+            if hmac.compare_digest(got, key.encode()):
+                found = client
+        if self.app.token and hmac.compare_digest(got, self.app.token.encode()):
+            found = found or ("chat", "interactive")
+        return found
+
+    def _next(self) -> dict | None:
+        return min(self.waiting, key=lambda r: (LANES[r["lane"]], r["seq"]), default=None)
+
+    def enter(self, client: tuple[str, str], path: str, stream: bool, gone: Callable[[], bool]) -> dict | None:
+        """Wait for a turn. None if the caller hung up while waiting."""
+        with self.cond:
+            self.seq += 1
+            req = {"seq": self.seq, "client": client[0], "lane": client[1], "path": path, "stream": stream,
+                   "queued": self.app.clock(), "started": None, "gen_live": 0}
+            self.waiting.append(req)
+            while True:
+                if len(self.running) < self.concurrency and self._next() is req:
+                    self.waiting.remove(req)
+                    req["started"] = self.app.clock()
+                    self.running.append(req)
+                    return req
+                if gone():
+                    self.waiting.remove(req)
+                    self.cond.notify_all()
+                    self.record(req, 499, error="caller left while waiting")
+                    return None
+                self.cond.wait(0.5)
+
+    def leave(self, req: dict) -> None:
+        with self.cond:
+            if req in self.running:
+                self.running.remove(req)
+            self.cond.notify_all()
+
+    def record(self, req: dict, status: int, timings: dict | None = None, error: str = "") -> None:
+        t = timings or {}
+        prompt_n, gen_n = int(num(t.get("prompt_n"))), int(num(t.get("predicted_n"), req["gen_live"]))
+        prompt_ms, gen_ms = num(t.get("prompt_ms")), num(t.get("predicted_ms"))
+        now = self.app.clock()
+        with self.app.lock:
+            self.app.db.execute(
+                "insert into requests(client, lane, path, queued, started, finished, status, prompt_n, gen_n, "
+                "prompt_ms, gen_ms, error) values (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (req["client"], req["lane"], req["path"], req["queued"], req["started"], now, status, prompt_n,
+                 gen_n, prompt_ms, gen_ms, error[:300]))
+            self.app.db.execute("insert or ignore into client_tally(client) values (?)", (req["client"],))
+            self.app.db.execute("update client_tally set requests=requests+1, prompt=prompt+?, gen=gen+?, "
+                                "prompt_ms=prompt_ms+?, gen_ms=gen_ms+?, errors=errors+? where client=?",
+                                (prompt_n, gen_n, prompt_ms, gen_ms, int(status >= 400), req["client"]))
+            self.app.db.commit()
+
+    @staticmethod
+    def timings_of(obj: object) -> dict | None:
+        if not isinstance(obj, dict):
+            return None
+        if isinstance(obj.get("timings"), dict):
+            return obj["timings"]
+        u = obj.get("usage")
+        if isinstance(u, dict) and "completion_tokens" in u:
+            return {"prompt_n": u.get("prompt_tokens"), "predicted_n": u.get("completion_tokens")}
+        return None
+
+    def upstream(self, method: str, path: str, data: bytes | None) -> urllib.request.Request:
+        req = urllib.request.Request(self.app.root + path, data=data, method=method,
+                                     headers={"Content-Type": "application/json"})
+        if self.app.llama_key:
+            req.add_header("Authorization", f"Bearer {self.app.llama_key}")
+        return req
+
+    def forward(self, handler: BaseHTTPRequestHandler, req: dict, raw: bytes) -> None:
+        """Send the request upstream and copy the answer back, streaming as it comes."""
+        try:
+            resp = urllib.request.urlopen(self.upstream("POST", req["path"], raw), timeout=900)
+        except urllib.error.HTTPError as exc:
+            data = exc.read()
+            handler.send(exc.code, data, exc.headers.get("Content-Type", "application/json"))
+            self.record(req, exc.code, error=data[:200].decode(errors="replace"))
+            return
+        except (OSError, ValueError) as exc:
+            handler.send(502, {"error": {"message": "model unreachable (PC asleep?)", "type": "gateway"}})
+            self.record(req, 502, error=str(exc))
+            return
+        timings, status, error = None, resp.status, ""
+        with resp:
+            ctype = resp.headers.get("Content-Type", "application/json")
+            try:
+                if ctype.startswith("text/event-stream"):
+                    handler.close_connection = True
+                    handler.send_response(resp.status)
+                    handler.send_header("Content-Type", ctype)
+                    handler.send_header("Cache-Control", "no-store")
+                    handler.end_headers()
+                    for line in iter(resp.readline, b""):
+                        handler.wfile.write(line)
+                        if line.startswith(b"data: ") and line[6:].strip() != b"[DONE]":
+                            try:
+                                obj = json.loads(line[6:])
+                            except ValueError:
+                                continue
+                            req["gen_live"] += 1
+                            timings = self.timings_of(obj) or timings
+                        elif line.strip() == b"":
+                            handler.wfile.flush()
+                else:
+                    data = resp.read()
+                    handler.send(resp.status, data, ctype)
+                    try:
+                        timings = self.timings_of(json.loads(data))
+                    except ValueError:
+                        pass
+            except (BrokenPipeError, ConnectionResetError) as exc:
+                status, error = 499, f"caller left during the answer ({exc.__class__.__name__})"
+            except (OSError, ValueError) as exc:
+                status, error = 502, f"upstream broke off: {exc}"
+        self.record(req, status, timings, error)
+
+    def snapshot(self, now: float) -> dict:
+        with self.cond:
+            order = sorted(self.waiting, key=lambda r: (LANES[r["lane"]], r["seq"]))
+            waiting = [{"id": r["seq"], "client": r["client"], "lane": r["lane"], "waited_s": round(now - r["queued"])}
+                       for r in order]
+            running = [{"id": r["seq"], "client": r["client"], "lane": r["lane"], "stream": r["stream"],
+                        "for_s": round(now - r["started"]), "tokens": r["gen_live"]} for r in self.running]
+        with self.app.lock:
+            recent = self.app.db.execute(
+                "select client, lane, queued, started, finished, status, prompt_n, gen_n, gen_ms, error "
+                "from requests order by id desc limit 15").fetchall()
+            tally = self.app.db.execute(
+                "select client, requests, prompt, gen, gen_ms, errors from client_tally order by requests desc"
+            ).fetchall()
+            day = self.app.db.execute(
+                "select client, count(*), sum(gen_n) from requests where finished >= ? group by client",
+                (now - 86400,)).fetchall()
+        last24 = {c: (n, g or 0) for c, n, g in day}
+        return {
+            "enabled": self.enabled,
+            "clients": sorted({n for n, _ in self.clients.values()} | {"chat"}),
+            "waiting": waiting,
+            "running": running,
+            "recent": [{"client": c, "lane": ln, "finished": iso(f), "waited_s": round((s or f) - q),
+                        "took_s": round(f - (s or f)), "status": st, "prompt": p, "generated": g,
+                        "gen_tps": round(g / (ms / 1000), 1) if ms else None, "error": err}
+                       for c, ln, q, s, f, st, p, g, ms, err in recent],
+            "by_client": [{"client": c, "requests": n, "prompt": p, "generated": g, "errors": er,
+                           "gen_tps": round(g / (ms / 1000), 1) if ms else None,
+                           "requests_24h": last24.get(c, (0, 0))[0], "generated_24h": last24.get(c, (0, 0))[1]}
+                          for c, n, p, g, ms, er in tally],
+        }
 
 
 # ---------------------------------------------------------------------------- page
@@ -626,6 +843,46 @@ def render_live(st: dict) -> str:
                      '<code>agent-loop</code> in a repo on the devbox.</p>')
     parts.append("</section>")
 
+    # -- Model activity (gateway)
+    gw = st.get("gateway")
+    if gw and gw["enabled"]:
+        lane_pill = {"interactive": "ok", "batch": "off"}
+        parts.append('<section class="card wide" id="activity-live"><h2>Model activity</h2><div class="cols"><div>')
+        rows = []
+        for r in gw["running"]:
+            rate = f' · ~{r["tokens"] / r["for_s"]:.0f} tok/s' if r["stream"] and r["for_s"] and r["tokens"] else ""
+            rows.append(f'<li class="job running"><span class="pos">▶</span><div><b>{e(r["client"])}</b> '
+                        f'<span class="pill {lane_pill[r["lane"]]}">{e(r["lane"])}</span><div class="muted small">'
+                        f'answering for {r["for_s"]} s{" · " + str(r["tokens"]) + " tokens so far" if r["stream"] else ""}'
+                        f'{rate}</div></div></li>')
+        for i, r in enumerate(gw["waiting"], 1):
+            rows.append(f'<li class="job"><span class="pos">{i}</span><div><b>{e(r["client"])}</b> '
+                        f'<span class="pill {lane_pill[r["lane"]]}">{e(r["lane"])}</span>'
+                        f'<div class="muted small">waiting {r["waited_s"]} s</div></div></li>')
+        parts.append(f'<ol class="jobs">{"".join(rows)}</ol>' if rows else
+                     '<p class="muted">No requests right now. Chat and scrum requests go before agent-loop ones.</p>')
+        if gw["recent"]:
+            parts.append('<h3>Last requests</h3><div class="table-wrap"><table class="small"><tbody>')
+            for r in gw["recent"][:8]:
+                ok = r["status"] and r["status"] < 400
+                what = f'{big(r["generated"])} tok' if ok else f'<span class="pill bad">{e(str(r["status"]))}</span>'
+                parts.append(f'<tr><td class="muted">{clock_tag(r["finished"])}</td><td>{e(r["client"])}</td>'
+                             f'<td>{what}</td>'
+                             f'<td class="muted">{str(r["gen_tps"]) + " tok/s" if r["gen_tps"] else ""}</td>'
+                             f'<td class="muted">{"waited " + str(r["waited_s"]) + " s" if r["waited_s"] else ""}</td></tr>')
+            parts.append("</tbody></table></div>")
+        parts.append('</div><div><h3>By client</h3>')
+        if gw["by_client"]:
+            parts.append('<div class="table-wrap"><table class="small"><thead><tr><th>Client</th><th>Requests</th>'
+                         '<th>Written</th><th>tok/s</th><th>24 h</th></tr></thead><tbody>')
+            parts += [f'<tr><td>{e(c["client"])}</td><td>{c["requests"]}</td><td>{big(c["generated"])}</td>'
+                      f'<td>{c["gen_tps"] or "–"}</td><td>{c["requests_24h"]} req · {big(c["generated_24h"])} tok</td></tr>'
+                      for c in gw["by_client"]]
+            parts.append("</tbody></table></div>")
+        else:
+            parts.append('<p class="muted small">Nothing has gone through the gateway yet.</p>')
+        parts.append("</div></div></section>")
+
     # -- Queue
     jobs = st["jobs"]
     parts.append('<section class="card wide" id="queue"><h2>Queue</h2><div class="cols"><div>')
@@ -647,6 +904,14 @@ def render_live(st: dict) -> str:
                     f'<button data-job="{j["id"]}" data-act="move" data-to="down" title="Move down">↓</button>'
                     f'<button data-job="{j["id"]}" data-act="cancel" title="Remove">✕</button></span></li>')
     parts.append(f'<ol class="jobs">{"".join(rows)}</ol>' if rows else '<p class="muted">No jobs queued.</p>')
+    ws = jobs["workers"]
+    if not ws:
+        parts.append('<p class="small"><span class="pill warn">no worker</span> <span class="muted">agent-queue '
+                     'is not polling; queued jobs wait.</span></p>')
+    for w in ws:
+        pill = '<span class="pill warn">paused</span>' if w["paused"] else '<span class="pill ok">worker</span>'
+        parts.append(f'<p class="small">{pill} {e(w["name"])} <span class="muted">seen {e(ago(w["seen"], now))}'
+                     f'{" · rm ~/.agent-queue-STOP to resume" if w["paused"] else ""}</span></p>')
     lease = st["lease"]
     if lease["holder"] or lease["queue"]:
         parts.append('<h3>Model lease</h3><ul class="plain small">')
@@ -835,8 +1100,22 @@ form input[name=repo]{flex:1 1 180px}form input[name=note]{flex:2 1 200px}
 form input[name=max_hours]{width:80px}
 #msg{min-height:1.2em}
 body.locked .ctl,body.locked #add{display:none}
-body:not(.locked) #unlock{display:none}
+body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
 footer{padding:8px 16px 24px;text-align:center}
+.chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
+#chat .log{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 0}
+#chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
+#chat.full .log{max-height:none;flex:1}
+.msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 12px;border-radius:12px;max-width:85%}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+.msg.assistant{align-self:flex-start;border:1px solid var(--line)}
+.msg.note{color:var(--muted);font-size:13px}
+.meta{font-size:12px;color:var(--muted);margin:-4px 0 0 4px}
+#chat form{flex-wrap:nowrap;align-items:flex-end;margin-top:8px}
+#chat textarea{flex:1;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+padding:8px 10px;resize:vertical;min-height:44px}
+.chat-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+body.locked #chat{display:none}
 @media (max-width:700px){main,#controls,.cols{grid-template-columns:minmax(0,1fr)}
 .events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
 .cols h3:first-child{margin-top:14px}
@@ -871,31 +1150,96 @@ async function refresh(){
     document.getElementById('updated').textContent='updated '+new Date().toLocaleTimeString();
   }catch(e){document.getElementById('updated').textContent='offline, retrying'}
 }
-setInterval(refresh,5000);  // same data as /api/status, rendered on the server
+if(document.getElementById('live'))setInterval(refresh,5000);  // same data as /api/status, rendered on the server
 document.addEventListener('click',async ev=>{
   const b=ev.target.closest('button[data-job]');if(!b)return;
   if(b.dataset.act==='cancel'&&!confirm(b.closest('.running')?'Stop this run after its current task?':'Remove this job from the queue?'))return;
   b.disabled=true;await post('/api/jobs/'+b.dataset.job+'/'+b.dataset.act,b.dataset.to?{to:b.dataset.to}:{});refresh();
 });
-document.getElementById('unlock').addEventListener('submit',async ev=>{
+document.getElementById('unlock')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const t=ev.target.token.value.trim();
   try{localStorage.setItem(TK,t)}catch(e){}
   if(await post('/api/auth',{})){ev.target.reset();msg('Controls unlocked in this browser.')}
   lockState();
 });
-document.getElementById('add').addEventListener('submit',async ev=>{
+document.getElementById('add')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const f=ev.target;
   const ok=await post('/api/jobs',{repo:f.repo.value.trim(),ref:f.ref.value.trim(),note:f.note.value.trim(),
     max_hours:parseFloat(f.max_hours.value||'24'),ci:f.ci.checked});
   if(ok){f.ref.value='';f.note.value='';msg('Job added.')}
   refresh();
 });
-document.getElementById('lock').addEventListener('click',()=>{try{localStorage.removeItem(TK)}catch(e){};lockState()});
+document.getElementById('lock')?.addEventListener('click',()=>{try{localStorage.removeItem(TK)}catch(e){};lockState()});
 lockState();localTimes();
 """
 
+CHAT_SCRIPT = r"""
+(function(){
+const box=document.getElementById('chat');if(!box)return;
+const KEY='agent-status-chat';
+const log=box.querySelector('.log'),form=box.querySelector('form'),ta=form.q,stopB=box.querySelector('.stop');
+let hist=[];try{hist=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){}
+let ctl=null;
+const sys=()=>'You are a helpful assistant running on a local model in a home lab. Today is '+
+  new Date().toDateString()+'. Answer concisely; use plain text or simple Markdown.';
+function save(){try{localStorage.setItem(KEY,JSON.stringify(hist.slice(-40)))}catch(e){}}
+function bubble(role,text){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+function draw(){log.textContent='';hist.forEach(m=>bubble(m.role,m.content));
+  if(!hist.length)bubble('note','Ask the local model anything. Chat requests go before agent work; the history stays in this browser.')}
+draw();
+box.querySelector('.clear').addEventListener('click',()=>{if(ctl)ctl.abort();hist=[];save();draw()});
+stopB.addEventListener('click',()=>{if(ctl)ctl.abort()});
+ta.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();form.requestSubmit()}});
+form.addEventListener('submit',async ev=>{
+  ev.preventDefault();const q=ta.value.trim();if(!q||ctl)return;
+  if(!hist.length)log.textContent='';
+  hist.push({role:'user',content:q});bubble('user',q);ta.value='';save();
+  const out=bubble('assistant','');const meta=document.createElement('div');meta.className='meta';
+  log.appendChild(meta);meta.textContent='waiting for the model…';
+  ctl=new AbortController();stopB.hidden=false;let text='',n=0,tps='';
+  const think=form.think.checked;
+  try{
+    const r=await fetch('/v1/chat/completions',{method:'POST',signal:ctl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok()},
+      body:JSON.stringify({model:'coder',stream:true,max_tokens:think?8192:2048,
+        messages:[{role:'system',content:sys()},...hist.slice(-20)],chat_template_kwargs:{enable_thinking:think}})});
+    if(!r.ok){let j={};try{j=await r.json()}catch(e){}
+      if(r.status===401){try{localStorage.removeItem(TK)}catch(e){};lockState()}
+      throw new Error((j.error&&j.error.message)||('HTTP '+r.status))}
+    const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+    for(;;){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+      let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+        if(!line.startsWith('data: ')||line==='data: [DONE]')continue;
+        let o;try{o=JSON.parse(line.slice(6))}catch(e){continue}
+        const d=(o.choices&&o.choices[0]&&o.choices[0].delta)||{};
+        if(d.reasoning_content&&!text)meta.textContent='thinking…';
+        if(d.content){text+=d.content;n++;out.textContent=text;log.scrollTop=log.scrollHeight}
+        if(o.timings&&o.timings.predicted_per_second)tps=' · '+o.timings.predicted_per_second.toFixed(1)+' tok/s';
+      }
+      if(text)meta.textContent=n+' tokens'+tps;
+    }
+    if(!text)meta.textContent='(empty answer)';
+  }catch(e){meta.textContent=e.name==='AbortError'?'stopped':'error: '+e.message;if(!text)out.remove()}
+  ctl=null;stopB.hidden=true;
+  if(text){hist.push({role:'assistant',content:text});save()}
+});
+})();
+"""
 
-def render_page(st: dict, known_repos: list[str]) -> str:
+
+def chat_box(full: bool) -> str:
+    link = '' if full else '<a class="small" href="/chat">full chat →</a>'
+    return (f'<div id="chat" class="card wide{" full" if full else ""}"><div class="chat-head"><h2>Chat</h2>{link}'
+            '<button type="button" class="clear link small">clear</button></div>'
+            '<div class="log" aria-live="polite"></div>'
+            '<form autocomplete="off"><textarea name="q" rows="2" placeholder="Message the local model (Enter to send, '
+            'Shift+Enter for a new line)" aria-label="Message" required></textarea>'
+            '<div class="chat-actions"><label class="small"><input name="think" type="checkbox"> think</label>'
+            '<button type="button" class="stop" hidden>Stop</button><button>Send</button></div></form></div>')
+
+
+def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
     e = html.escape
     state = st["model"]["state"]
     options = "".join(f'<option value="{e(r)}">' for r in known_repos)
@@ -918,25 +1262,46 @@ def render_page(st: dict, known_repos: list[str]) -> str:
         '<form id="unlock"><span class="small muted">Read-only. Paste the status token to add and manage jobs:</span>'
         '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
         '<button>Unlock</button></form>'
-        '<div id="msg" class="small muted"></div></div></section>'
+        '<div id="msg" class="small muted"></div></div>'
+        f'{chat_box(False) if chat else ""}</section>'
         f'<main id="live">{render_live(st)}</main>'
         '<footer class="small muted">JSON: <a href="/api/status">/api/status</a> · refreshes every 5 s</footer>'
-        f'<script>{SCRIPT}</script></body></html>')
+        f'<script>{SCRIPT}{CHAT_SCRIPT}</script></body></html>')
+
+
+def render_chat_page() -> str:
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>Agent chat</title><style>{CSS}</style></head><body class="locked">'
+        '<header><h1>Chat</h1><a class="small" href="/">← status</a></header>'
+        '<section id="controls"><div class="card wide" id="unlock-card">'
+        '<form id="unlock"><span class="small muted">Paste the status token to chat:</span>'
+        '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
+        '<button>Unlock</button></form><div id="msg" class="small muted"></div></div>'
+        f'{chat_box(True)}</section>'
+        f'<script>{SCRIPT}{CHAT_SCRIPT}</script></body></html>')
 
 
 # ---------------------------------------------------------------------------- http
 
 def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: str | None = None,
                 lease_ttl: float = 180, probe_interval: float = 30, clock=time.time,
-                llama_key: str | None = None, job_ttl: float = 900) -> ThreadingHTTPServer:
+                llama_key: str | None = None, job_ttl: float = 900,
+                job_owners: list[str] | None = None, gateway_clients: dict[str, tuple[str, str]] | None = None,
+                gateway_concurrency: int = 1) -> ThreadingHTTPServer:
     app = App(db_path=db_path, token=token, llama_url=llama_url, llama_key=llama_key, lease_ttl=lease_ttl,
-              probe_interval=probe_interval, job_ttl=job_ttl, clock=clock)
+              probe_interval=probe_interval, job_ttl=job_ttl, clock=clock, job_owners=job_owners)
+    gw = Gateway(app, gateway_clients or {}, gateway_concurrency)
+    app.gateway = gw
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "agent-status"
 
         def send(self, code: int, body: object, ctype: str = "application/json") -> None:
-            if isinstance(body, str):
+            if isinstance(body, bytes):
+                data = body
+            elif isinstance(body, str):
                 data = body.encode()
             else:
                 data = json.dumps(body).encode()
@@ -948,8 +1313,57 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
             self.end_headers()
             self.wfile.write(data)
 
+        def client_gone(self) -> bool:
+            try:
+                readable, _, _ = select.select([self.connection], [], [], 0)
+                return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b""
+            except OSError:
+                return True
+
+        def gateway(self, method: str) -> None:
+            path = self.path.split("?", 1)[0]
+            if not gw.enabled:
+                return self.send(404, {"error": {"message": "gateway off: LLAMA_BASE_URL not set"}})
+            client = gw.client_for(self.headers.get("Authorization", ""))
+            if client is None:
+                return self.send(401, {"error": {"message": "unknown key"}})
+            if method == "GET":
+                if path != "/v1/models":
+                    return self.send(404, {"error": {"message": "not found"}})
+                try:
+                    with urllib.request.urlopen(gw.upstream("GET", path, None), timeout=10) as r:
+                        return self.send(r.status, r.read(), r.headers.get("Content-Type", "application/json"))
+                except urllib.error.HTTPError as exc:
+                    return self.send(exc.code, exc.read())
+                except (OSError, ValueError):
+                    return self.send(502, {"error": {"message": "model unreachable (PC asleep?)"}})
+            if path not in GATEWAY_PATHS:
+                return self.send(404, {"error": {"message": "not found"}})
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                return self.send(400, {"error": {"message": "bad length"}})
+            if n > GATEWAY_MAX_BODY:
+                return self.send(413, {"error": {"message": "too large"}})
+            raw = self.rfile.read(n)
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                return self.send(400, {"error": {"message": "bad json"}})
+            if not isinstance(body, dict):
+                return self.send(400, {"error": {"message": "not an object"}})
+            req = gw.enter(client, path, bool(body.get("stream")), self.client_gone)
+            if req is None:
+                return
+            try:
+                gw.forward(self, req, raw)
+            finally:
+                gw.leave(req)
+
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
             path = self.path.split("?", 1)[0]
+            if path.startswith("/v1/"):
+                return self.gateway("GET")
             if path == "/healthz":
                 return self.send(200, "ok", "text/plain")
             if path == "/api/status":
@@ -962,10 +1376,14 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 if path == "/partial":
                     return self.send(200, render_live(st), "text/html; charset=utf-8")
                 repos = sorted({j["repo"] for k in ("queued", "running", "recent") for j in st["jobs"][k]})
-                return self.send(200, render_page(st, repos), "text/html; charset=utf-8")
+                return self.send(200, render_page(st, repos, gw.enabled), "text/html; charset=utf-8")
+            if path == "/chat":
+                return self.send(200, render_chat_page(), "text/html; charset=utf-8")
             return self.send(404, {"error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path.startswith("/v1/"):
+                return self.gateway("POST")
             if not app.authorized(self.headers.get("Authorization", "")):
                 return self.send(401, {"error": "unauthorized"})
             try:
@@ -998,6 +1416,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 return self.send(*app.add_job(body))
             if path == "/api/jobs/claim":
                 return self.send(200, app.claim(body))
+            if path == "/api/workers/ping":
+                return self.send(200, app.ping(body))
             m = re.fullmatch(r"/api/jobs/(\d+)/([a-z]+)", path)
             if m and m.group(2) in JOB_ACTIONS:
                 return self.send(*app.job_action(int(m.group(1)), m.group(2), body))
@@ -1020,7 +1440,10 @@ def main() -> None:
                       llama_key=os.environ.get("LLAMA_API_KEY") or None,
                       lease_ttl=float(os.environ.get("LEASE_TTL", "180")),
                       probe_interval=float(os.environ.get("PROBE_INTERVAL", "30")),
-                      job_ttl=float(os.environ.get("JOB_TTL", "900")))
+                      job_ttl=float(os.environ.get("JOB_TTL", "900")),
+                      job_owners=[o.strip() for o in os.environ.get("JOB_OWNERS", "").split(",") if o.strip()],
+                      gateway_clients=parse_clients(os.environ.get("GATEWAY_CLIENTS", "")),
+                      gateway_concurrency=int(os.environ.get("GATEWAY_CONCURRENCY", "1")))
     interval = float(os.environ.get("METRICS_INTERVAL", "60"))
     app: App = srv.app  # type: ignore[attr-defined]
 

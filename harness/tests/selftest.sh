@@ -140,7 +140,7 @@ echo "# PROGRESS" > PROGRESS.md
 git add -A && git commit -qm init
 git clone -q --bare . "${WORK}/gh/local/proj.git"
 api POST /api/jobs '{"repo": "local/proj", "ci": false, "note": "selftest"}' > /dev/null || fail "could not queue a job"
-STATUS_URL="http://127.0.0.1:${APP_PORT}" STATUS_TOKEN=qtoken QUEUE_GIT_BASE="${WORK}/gh/" \
+STATUS_URL="http://127.0.0.1:${APP_PORT}" STATUS_TOKEN=qtoken QUEUE_OWNERS=local QUEUE_GIT_BASE="${WORK}/gh/" \
   AGENT_LOOP_CMD="python3 ${HERE}/../loop.py --no-pc --no-pr --queue-poll 0" \
   python3 "${HERE}/../worker.py" --once --repos "${WORK}/qrepos" --heartbeat 1 > "${LOG}" 2>&1 \
   || fail "agent-queue exited non-zero"
