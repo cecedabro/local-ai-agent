@@ -662,7 +662,7 @@ class Gateway:
             handler.send(502, {"error": {"message": "model unreachable (PC asleep?)", "type": "gateway"}})
             self.record(req, 502, error=str(exc))
             return
-        timings, status, error = None, resp.status, ""
+        timings, status, error, recorded = None, resp.status, "", False
         with resp:
             ctype = resp.headers.get("Content-Type", "application/json")
             try:
@@ -685,16 +685,20 @@ class Gateway:
                             handler.wfile.flush()
                 else:
                     data = resp.read()
-                    handler.send(resp.status, data, ctype)
                     try:
                         timings = self.timings_of(json.loads(data))
                     except ValueError:
                         pass
+                    # Record before answering, so the caller sees its request on the page at once.
+                    self.record(req, status, timings)
+                    recorded = True
+                    handler.send(resp.status, data, ctype)
             except (BrokenPipeError, ConnectionResetError) as exc:
                 status, error = 499, f"caller left during the answer ({exc.__class__.__name__})"
             except (OSError, ValueError) as exc:
                 status, error = 502, f"upstream broke off: {exc}"
-        self.record(req, status, timings, error)
+        if not recorded:
+            self.record(req, status, timings, error)
 
     def snapshot(self, now: float) -> dict:
         with self.cond:
