@@ -61,3 +61,13 @@ curl -H "Authorization: Bearer $T" -d '{"run_id":"r1","repo":"woodshed","kind":"
 ```
 
 Tests: `make check` (queue, totals, tokens, gateway) and `make status-test` (the original contract).
+
+## Releases and deploy
+
+Every change under `status/` merged to `main` that passes the tests is a release:
+`.github/workflows/status-image.yml` pushes `ghcr.io/cecedabro/local-ai-agent-status:X.Y.Z`
+(patch bumped from the newest `status-vX.Y.Z` git tag; the first is `0.1.0`) plus
+`sha-<short>`, and tags the commit `status-vX.Y.Z`. Flux image automation in the homelab repo
+(ImagePolicy `agent-status`, semver) picks up the new `X.Y.Z` and rolls the pod by itself.
+The devbox image is deliberately not versioned this way: a new devbox image restarts the pod
+and kills a running loop, so it is bumped by hand.
