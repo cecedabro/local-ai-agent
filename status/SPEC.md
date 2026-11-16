@@ -328,11 +328,16 @@ Active when `llama_url` is set (else `/v1/*` → **404**).
 waited_s, took_s, status, prompt, generated, gen_tps, error`), `by_client` (all-time
 `requests, prompt, generated, errors, gen_tps` plus `requests_24h`, `generated_24h`).
 
+<<<<<<< HEAD
 `gateway` also has `n_ctx`: the model's context size in tokens, from llama-server's
 `GET <root>/props` (`default_generation_settings.n_ctx`, falling back to a top-level `n_ctx`;
 `Authorization: Bearer <llama_key>` when set; 2 s timeout). It is fetched at most once per
 `probe_interval` while unknown, and kept once known (a later failure keeps the last value).
 `null` until the first success, and when the gateway is off.
+=======
+Theme: an Auto / Light / Dark switch in the header of `/` and `/chat` (kept in the browser's
+`localStorage`, applied before the first paint; Auto follows the device).
+>>>>>>> status-polish
 
 Page: a **Model activity** section after Now (running, waiting in order, last requests, per
 client). A **chat** card above the live sections (only when unlocked and the gateway is on)

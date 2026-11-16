@@ -21,3 +21,11 @@ class StaticTest(Base):
     def test_chart_gradient_outside_live(self) -> None:
         page = self.req("GET", "/", token=None)[2].decode()
         self.assertLess(page.index('id="bar-fill"'), page.index('<main id="live">'))
+
+
+class ThemeTest(Base):
+    def test_switch_on_both_pages(self) -> None:
+        for path in ("/", "/chat"):
+            page = self.req("GET", path, token=None)[2].decode()
+            self.assertIn('class="seg three icons theme"', page)
+            self.assertLess(page.index("agent-status-theme"), page.index('rel="stylesheet"'))  # before paint
