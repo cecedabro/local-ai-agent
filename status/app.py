@@ -6,6 +6,7 @@ See status/SPEC.md. One file, Python 3.11 standard library only. Run: python3 st
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import hmac
 import html
 import json
@@ -20,6 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Callable
 
 KINDS = {"run_started", "task_started", "task_done", "task_skipped", "push_failed", "ci_waiting", "ci",
@@ -660,7 +662,7 @@ class Gateway:
             handler.send(502, {"error": {"message": "model unreachable (PC asleep?)", "type": "gateway"}})
             self.record(req, 502, error=str(exc))
             return
-        timings, status, error = None, resp.status, ""
+        timings, status, error, recorded = None, resp.status, "", False
         with resp:
             ctype = resp.headers.get("Content-Type", "application/json")
             try:
@@ -683,16 +685,20 @@ class Gateway:
                             handler.wfile.flush()
                 else:
                     data = resp.read()
-                    handler.send(resp.status, data, ctype)
                     try:
                         timings = self.timings_of(json.loads(data))
                     except ValueError:
                         pass
+                    # Record before answering, so the caller sees its request on the page at once.
+                    self.record(req, status, timings)
+                    recorded = True
+                    handler.send(resp.status, data, ctype)
             except (BrokenPipeError, ConnectionResetError) as exc:
                 status, error = 499, f"caller left during the answer ({exc.__class__.__name__})"
             except (OSError, ValueError) as exc:
                 status, error = 502, f"upstream broke off: {exc}"
-        self.record(req, status, timings, error)
+        if not recorded:
+            self.record(req, status, timings, error)
 
     def snapshot(self, now: float) -> dict:
         with self.cond:
@@ -831,7 +837,7 @@ def render_live(st: dict) -> str:
                          f'<p class="muted small">{att} · for {e(dur(run["task_since"], now))}</p>')
         else:
             parts.append('<p class="muted">Between tasks (checking, pushing or waiting for CI).</p>')
-        parts.append(f'<div class="progress" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
+        parts.append(f'<div class="progress live" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
                      f'<p class="muted small">{finished} of {total} plan tasks · {run["done"]} done, '
                      f'{run["skipped"]} skipped this run · last event {e(ago(run["last_event"], now))}</p>')
         if tk.get("busy") is not None:
@@ -1038,89 +1044,27 @@ def render_live(st: dict) -> str:
     return "".join(parts)
 
 
-CSS = """
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--ink:#e7e9ee;--muted:#8b93a4;--accent:#6ea8fe;
---ok:#3ecf8e;--warn:#f5b041;--bad:#f0605d;--off:#6b7280;color-scheme:dark}
-@media (prefers-color-scheme: light){:root{--bg:#f5f6f8;--card:#fff;--line:#e3e6ec;--ink:#1b1f27;
---muted:#5f6878;--accent:#2f6fde;--ok:#18935d;--warn:#b7791f;--bad:#c93c3a;--off:#6b7280;color-scheme:light}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:14px 16px;border-bottom:1px solid var(--line)}
-header h1{font-size:18px;margin:0 auto 0 0}
-main,#controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:14px 16px;max-width:1200px;margin:0 auto}
-#controls{padding-bottom:0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
-.wide{grid-column:1/-1}
-h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
-h3{font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
-.muted{color:var(--muted)}.small{font-size:13px}
-code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--line);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
-.badge,.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:12px;padding:2px 9px;
-border:1px solid currentColor;white-space:nowrap}
-.badge{font-size:13px;padding:3px 11px}
-.badge::before,.dot{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.off{color:var(--off)}
-.dot.ok{background:var(--ok)}.dot.off{background:var(--off)}
-.now-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
-.repo{font-size:20px;font-weight:650}
-.task{font-size:17px;margin:10px 0 2px}
-.idle{font-size:20px;font-weight:600;margin:4px 0}
-.progress{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:12px 0 4px}
-.progress i{display:block;height:100%;background:var(--accent);border-radius:4px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.tiles.four{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
-.tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.tile .label{font-size:12px;color:var(--muted)}
-.tile .value{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
-.tile small{font-size:12px;color:var(--muted);font-weight:400}
-.chart{width:100%;height:auto;display:block}
-.chart .bar{fill:var(--accent)}.chart .axis{stroke:var(--line)}.chart .hit{fill:transparent}
-.chart g:hover .bar{opacity:.75}.chart .tick{fill:var(--muted);font-size:11px}
-ol.jobs{list-style:none;margin:0;padding:0}
-.job{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.job>div{flex:1;min-width:0;overflow-wrap:anywhere}
-.job .pos{width:22px;text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
-.job.running .pos{color:var(--ok)}
-ul.plain{list-style:none;padding:0;margin:0}ul.plain li{padding:3px 0}
-ol.plan{margin:0;padding-left:20px}ol.plan li{padding:2px 0}
-table{width:100%;border-collapse:collapse;margin-top:8px}
-th{text-align:left;color:var(--muted);font-weight:500}
-th,td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-td.text{overflow-wrap:anywhere}
-.table-wrap{overflow-x:auto}
-.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 28px}
-.cols h3:first-child{margin-top:0}
-a{color:var(--accent)}
-button,input,select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--accent)}
-button.link{border:0;background:none;color:var(--accent);padding:0 4px}
-.btns{display:flex;gap:4px}.btns button{padding:3px 8px}
-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-form input[name=repo]{flex:1 1 180px}form input[name=note]{flex:2 1 200px}
-form input[name=max_hours]{width:80px}
-#msg{min-height:1.2em}
-body.locked .ctl,body.locked #add{display:none}
-body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
-footer{padding:8px 16px 24px;text-align:center}
-.chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
-#chat .log{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 0}
-#chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
-#chat.full .log{max-height:none;flex:1}
-.msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 12px;border-radius:12px;max-width:85%}
-.msg.user{align-self:flex-end;background:var(--accent);color:#fff}
-.msg.assistant{align-self:flex-start;border:1px solid var(--line)}
-.msg.note{color:var(--muted);font-size:13px}
-.meta{font-size:12px;color:var(--muted);margin:-4px 0 0 4px}
-#chat form{flex-wrap:nowrap;align-items:flex-end;margin-top:8px}
-#chat textarea{flex:1;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;
-padding:8px 10px;resize:vertical;min-height:44px}
-.chat-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
-body.locked #chat{display:none}
-@media (max-width:700px){main,#controls,.cols{grid-template-columns:minmax(0,1fr)}
-.events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
-.cols h3:first-child{margin-top:14px}
-.tile .value{font-size:20px}}
-"""
+STATIC = Path(__file__).resolve().parent / "static"
+STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
+
+
+def static_files() -> dict[str, tuple[bytes, str]]:
+    """status/static/*.css|js, read once at start: name -> (bytes, content type)."""
+    out: dict[str, tuple[bytes, str]] = {}
+    if STATIC.is_dir():
+        for f in sorted(STATIC.iterdir()):
+            if f.suffix in STATIC_TYPES and f.is_file():
+                out[f.name] = (f.read_bytes(), STATIC_TYPES[f.suffix])
+    return out
+
+
+STATIC_FILES = static_files()
+STATIC_VERSION = hashlib.sha256(b"".join(b for b, _ in STATIC_FILES.values())).hexdigest()[:10]
+HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">')
+# Gradient for the chart bars; outside #live so the 5 s refresh keeps it.
+DEFS = ('<svg class="defs" aria-hidden="true" focusable="false"><defs><linearGradient id="bar-fill" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="var(--bar-top)"/><stop offset="1" stop-color="var(--bar-bottom)"/></linearGradient></defs></svg>')
 
 SCRIPT = """
 const TK='agent-status-token';
@@ -1190,15 +1134,22 @@ function draw(){log.textContent='';hist.forEach(m=>bubble(m.role,m.content));
 draw();
 box.querySelector('.clear').addEventListener('click',()=>{if(ctl)ctl.abort();hist=[];save();draw()});
 stopB.addEventListener('click',()=>{if(ctl)ctl.abort()});
+const MODE='agent-status-chat-mode';
+try{const m=localStorage.getItem(MODE);if(m&&form.mode)form.mode.value=m}catch(e){}
+form.addEventListener('change',ev=>{if(ev.target.name==='mode'){try{localStorage.setItem(MODE,ev.target.value)}catch(e){}}});
 ta.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();form.requestSubmit()}});
 form.addEventListener('submit',async ev=>{
   ev.preventDefault();const q=ta.value.trim();if(!q||ctl)return;
   if(!hist.length)log.textContent='';
   hist.push({role:'user',content:q});bubble('user',q);ta.value='';save();
   const out=bubble('assistant','');const meta=document.createElement('div');meta.className='meta';
-  log.appendChild(meta);meta.textContent='waiting for the model…';
+  log.appendChild(meta);
+  const load=document.createElement('div');load.className='loading';
+  load.innerHTML='<span class="orb"><i></i></span><span class="shimmer"></span>';out.appendChild(load);
+  const say=(t,fast)=>{load.lastChild.textContent=t;load.classList.toggle('fast',!!fast)};
+  say('Waiting for the model…');log.scrollTop=log.scrollHeight;
   ctl=new AbortController();stopB.hidden=false;let text='',n=0,tps='';
-  const think=form.think.checked;
+  const think=form.mode.value==='think';
   try{
     const r=await fetch('/v1/chat/completions',{method:'POST',signal:ctl.signal,
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok()},
@@ -1207,25 +1158,32 @@ form.addEventListener('submit',async ev=>{
     if(!r.ok){let j={};try{j=await r.json()}catch(e){}
       if(r.status===401){try{localStorage.removeItem(TK)}catch(e){};lockState()}
       throw new Error((j.error&&j.error.message)||('HTTP '+r.status))}
+    say('Reading your message…');
     const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
       let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
         if(!line.startsWith('data: ')||line==='data: [DONE]')continue;
         let o;try{o=JSON.parse(line.slice(6))}catch(e){continue}
         const d=(o.choices&&o.choices[0]&&o.choices[0].delta)||{};
-        if(d.reasoning_content&&!text)meta.textContent='thinking…';
+        if(d.reasoning_content&&!text)say('Thinking…',true);
         if(d.content){text+=d.content;n++;out.textContent=text;log.scrollTop=log.scrollHeight}
         if(o.timings&&o.timings.predicted_per_second)tps=' · '+o.timings.predicted_per_second.toFixed(1)+' tok/s';
       }
       if(text)meta.textContent=n+' tokens'+tps;
     }
-    if(!text)meta.textContent='(empty answer)';
+    if(!text){load.remove();out.remove();meta.textContent='(empty answer)'}
   }catch(e){meta.textContent=e.name==='AbortError'?'stopped':'error: '+e.message;if(!text)out.remove()}
   ctl=null;stopB.hidden=true;
   if(text){hist.push({role:'assistant',content:text});save()}
 });
 })();
 """
+
+
+BOLT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>'
+SPARKLE = ('<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9'
+           'l5.2-1.8zM19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9zM5 15l.7 1.6L7.3 17l-1.6.7L5 19.3l-.7-1.6L2.7 17'
+           'l1.6-.4z"/></svg>')
 
 
 def chat_box(full: bool) -> str:
@@ -1235,8 +1193,13 @@ def chat_box(full: bool) -> str:
             '<div class="log" aria-live="polite"></div>'
             '<form autocomplete="off"><textarea name="q" rows="2" placeholder="Message the local model (Enter to send, '
             'Shift+Enter for a new line)" aria-label="Message" required></textarea>'
-            '<div class="chat-actions"><label class="small"><input name="think" type="checkbox"> think</label>'
-            '<button type="button" class="stop" hidden>Stop</button><button>Send</button></div></form></div>')
+            '<div class="composer-bar"><div class="seg" role="radiogroup" aria-label="Answer mode">'
+            f'<input type="radio" name="mode" value="quick" id="mode-quick" checked><label for="mode-quick" '
+            f'title="Answer straight away">{BOLT}Quick</label>'
+            f'<input type="radio" name="mode" value="think" id="mode-think"><label for="mode-think" '
+            f'title="Reason first: slower, better for hard questions">{SPARKLE}Think</label><span class="thumb"></span></div>'
+            '<span class="spacer"></span>'
+            '<button type="button" class="stop" hidden>Stop</button><button class="primary">Send</button></div></form></div>')
 
 
 def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
@@ -1244,9 +1207,8 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
     state = st["model"]["state"]
     options = "".join(f'<option value="{e(r)}">' for r in known_repos)
     return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<title>Agent status</title><style>{CSS}</style></head><body class="locked">'
+        f'<!doctype html><html lang="en"><head>{HEAD}'
+        f'<title>Agent status</title></head><body class="locked">{DEFS}'
         '<header><h1>Agent status</h1>'
         f'<span id="model" class="badge {BADGE.get(state, "off")}">model {e(state)}</span>'
         '<span id="updated" class="muted small"></span></header>'
@@ -1271,9 +1233,8 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
 
 def render_chat_page() -> str:
     return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<title>Agent chat</title><style>{CSS}</style></head><body class="locked">'
+        f'<!doctype html><html lang="en"><head>{HEAD}'
+        '<title>Agent chat</title></head><body class="locked">'
         '<header><h1>Chat</h1><a class="small" href="/">← status</a></header>'
         '<section id="controls"><div class="card wide" id="unlock-card">'
         '<form id="unlock"><span class="small muted">Paste the status token to chat:</span>'
@@ -1379,6 +1340,9 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 return self.send(200, render_page(st, repos, gw.enabled), "text/html; charset=utf-8")
             if path == "/chat":
                 return self.send(200, render_chat_page(), "text/html; charset=utf-8")
+            if path.startswith("/static/") and path[8:] in STATIC_FILES:
+                body, ctype = STATIC_FILES[path[8:]]
+                return self.send(200, body, ctype)
             return self.send(404, {"error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802
