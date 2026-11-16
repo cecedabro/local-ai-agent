@@ -21,4 +21,4 @@ check:
 	python3 -m unittest discover -q -s status/tests -p 'test_unit_*.py' || [ $$? -eq 5 ]
 
 status-test:
-	python3 -m unittest -q status/tests/test_contract.py
+	python3 -m unittest -q status/tests/test_contract.py status/tests/test_accept_history.py
