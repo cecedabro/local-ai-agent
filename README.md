@@ -12,18 +12,11 @@ station website: 13 of 15 tasks passed unattended in 4.9 h). Open items are at t
 Full plan with rationale and sources: [docs/PLAN.md](docs/PLAN.md) and the
 [plan doc](https://claude.ai/artifact/VtJfAgPfNyxZrbmQnLrLMp).
 
-```
-k3s (always on)                                 PC (Windows + WSL2)
-┌──────────────────────────────────┐            ┌───────────────────────────┐
-│ devbox pod  tmux · opencode ·    │── API ────▶│ llama-server  (alias      │
-│             loop.py · tests      │            │   "coder", :8080)         │
-│     │              │             │── SSH ────▶│ ai-power-remote (:2222)   │
-│     ▼              ▼             │            │   busy / status / restart │
-│  ntfy          waker (hostNet)───┼─ magic ───▶│ ai-power.ps1 keeps PC     │
-└─────┬────────────────────────────┘  packet    │   awake while busy        │
-      ▼                                         └───────────────────────────┘
-   phone (Tailscale SSH, ntfy)        GitHub (branches + PRs only)
-```
+![Architecture: the devbox pod on k3s sends prompts to llama-server on the PC, controls power over SSH and wakes the PC through the waker pod](docs/architecture.svg)
+
+A 20-slide explainer of the setup and the theory behind it (MoE, bandwidth, quantisation, KV cache,
+the loop) is in [docs/local-ai-setup-talk.html](docs/local-ai-setup-talk.html): download it and open
+it in a browser (arrow keys to move, F for fullscreen, P to print to PDF).
 
 ## Layout
 
