@@ -16,6 +16,8 @@ Environment: STATUS_URL, STATUS_TOKEN (required), plus everything agent-loop rea
     QUEUE_OWNERS     comma-separated GitHub owners whose repos may be run (required)
     QUEUE_GIT_BASE   clone URL prefix (default https://github.com/; the job's repo + .git is appended)
     AGENT_LOOP_CMD   the loop command (default: agent-loop)
+The worker also tells the page which repos the owners have (`gh repo list`, every 10 min),
+so the page can offer them in a dropdown.
 Stdlib only.
 """
 from __future__ import annotations
@@ -57,6 +59,24 @@ class Client:
         except (urllib.error.URLError, OSError, ValueError) as exc:
             print(f"[{now()}] {path}: {exc}", file=sys.stderr)
             return None
+
+
+REPO_REFRESH = 600
+
+
+def owner_repos(owners: set[str]) -> list[str]:
+    """owner/name of every non-archived repo of the owners, via gh; [] if gh fails."""
+    found: list[str] = []
+    for owner in sorted(owners):
+        try:
+            res = subprocess.run(["gh", "repo", "list", owner, "--no-archived", "--limit", "200",
+                                  "--json", "nameWithOwner", "-q", ".[].nameWithOwner"],
+                                 capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if res.returncode == 0:
+            found += [r.strip() for r in res.stdout.splitlines() if r.strip().count("/") == 1]
+    return sorted(set(found), key=str.lower)
 
 
 def git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
@@ -179,12 +199,16 @@ def main() -> int:
     worker = socket.gethostname()
     print(f"[{now()}] agent-queue on {worker}: polling {url} (pause: touch {STOP_FILE})")
     told_down = told_paused = False
+    repos: list[str] = []
+    repos_at = -REPO_REFRESH
     while True:
+        if time.monotonic() - repos_at >= REPO_REFRESH:
+            repos, repos_at = owner_repos(args.owners) or repos, time.monotonic()
         if STOP_FILE.exists():
             if not told_paused:
                 print(f"[{now()}] paused ({STOP_FILE} exists); rm it to resume")
                 told_paused = True
-            client.post("/api/workers/ping", {"worker": worker, "paused": True})
+            client.post("/api/workers/ping", {"worker": worker, "paused": True, "repos": repos})
             if args.once:
                 return 0
             try:
@@ -195,7 +219,7 @@ def main() -> int:
         if told_paused:
             print(f"[{now()}] resumed")
             told_paused = False
-        res = client.post("/api/jobs/claim", {"worker": worker})
+        res = client.post("/api/jobs/claim", {"worker": worker, "repos": repos})
         if res is None and not told_down:
             print(f"[{now()}] status service unreachable; retrying every {args.poll:g} s")
             told_down = True

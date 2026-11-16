@@ -12,7 +12,8 @@ per-client keys and a priority queue, so chat and scrum replies go before agent-
 and every request shows up on the page.
 
 The tests are the judge: `status/tests/test_contract.py` (§1–§7),
-`status/tests/test_unit_queue.py` (§8–§10) and `status/tests/test_unit_gateway.py` (§8, §11).
+`status/tests/test_unit_queue.py` (§8–§10), `status/tests/test_unit_gateway.py` (§8, §11) and
+`status/tests/test_accept_history.py` (§8 repo list, §11 `n_ctx`, §12).
 This file explains them.
 
 ## 0. Constraints
@@ -254,8 +255,21 @@ A job: `id`, `repo` (`owner/name`), `ref` (branch, `""` = the repo's default), `
   exists) says so instead of claiming. Claims count as pings. `jobs.workers` lists workers
   seen in the last 10 minutes: `{name, seen, paused}`; the page warns when there are none.
 
+- **Repo list.** Pings and claims may carry `"repos": ["owner/name", ...]` (the worker asks
+  `gh repo list` for its `QUEUE_OWNERS` every 10 minutes). The newest non-empty list a worker
+  sent is kept with that worker (in memory; a restart forgets it until the next ping, ≤ 30 s).
+  Items that are not strings matching `owner/name`, or (with `JOB_OWNERS` set) belong to
+  another owner, are dropped; at most 500 are kept.
+
 `/api/status` → `jobs`: `{"running": [...], "queued": [... in order], "recent": [10 newest
-finished in the last 7 days]}`. Jobs live in SQLite and survive a restart.
+finished in the last 7 days], "workers": [...], "repos": [...]}`. Jobs live in SQLite and
+survive a restart. `repos` is the sorted (case-insensitive), de-duplicated union of the repo
+lists of the workers in `workers` and the `repo` of every stored job, without repos of other
+owners when `JOB_OWNERS` is set.
+
+Page: the add-job form picks the repo from a `<select name="repo">` with one `<option>` per
+`jobs.repos` entry (value and text `owner/name`), in that order. When `jobs.repos` is empty it
+shows `<input name="repo">` instead, as before.
 
 ## 9. Token speed
 
@@ -310,8 +324,99 @@ Active when `llama_url` is set (else `/v1/*` → **404**).
 waited_s, took_s, status, prompt, generated, gen_tps, error`), `by_client` (all-time
 `requests, prompt, generated, errors, gen_tps` plus `requests_24h`, `generated_24h`).
 
+`gateway` also has `n_ctx`: the model's context size in tokens, from llama-server's
+`GET <root>/props` (`default_generation_settings.n_ctx`, falling back to a top-level `n_ctx`;
+`Authorization: Bearer <llama_key>` when set; 2 s timeout). It is fetched at most once per
+`probe_interval` while unknown, and kept once known (a later failure keeps the last value).
+`null` until the first success, and when the gateway is off.
+
 Page: a **Model activity** section after Now (running, waiting in order, last requests, per
 client). A **chat** card above the live sections (only when unlocked and the gateway is on)
 and a full-height `GET /chat` page: it streams from `/v1/chat/completions` with the status
 token, keeps the history in the browser's `localStorage` only, has Stop and Clear, and a
 "think" switch (`chat_template_kwargs.enable_thinking`; off = quick answers).
+
+## 12. History import
+
+The page only counts what was reported to it. `status/backfill.py` (run by hand on the devbox)
+rebuilds the earlier history from git and from OpenCode's own database and sends it here.
+
+### 12.1 `POST /api/import`
+
+Token required (§1). Body (≤ 8 MiB, else **413**; not a JSON object → **400**):
+
+```json
+{"events": [{"key": "woodshed:f16676e", "repo": "woodshed", "kind": "task_done",
+             "ts": "2026-11-16T19:41:43+00:00", "task_id": "T77", "title": "Cover art",
+             "commit": "f16676e", "insertions": 120, "deletions": 4, "attempts": 1}],
+ "tokens": [{"day": "2026-11-15", "source": "opencode", "generated": 51234, "prompt": 2345678}]}
+```
+
+Both lists are optional (missing = `[]`), each at most 5000 items. Validation happens first;
+any bad item → **400** `{"error": "..."}` naming the list and index, and nothing is stored.
+
+- An **event** needs `key` (non-empty string ≤ 200), `repo` (non-empty string), `kind`
+  (`run_started`, `task_done`, `task_skipped` or `run_finished`) and `ts` (ISO 8601 with a
+  time zone, e.g. `2026-11-16T19:41:43+00:00` or `...Z`). Other fields as in §3.
+- A **tokens** row needs `day` (`YYYY-MM-DD`), `source` (non-empty string ≤ 50), and
+  `generated`, `prompt` (integers ≥ 0).
+
+Events: a `key` that was imported before is skipped (keys are kept forever, in SQLite). A new
+event updates the all-time numbers of §10 exactly like a live event of that kind would
+(`tally` of its repo, `daily` of **the UTC day of its `ts`**, not of now), and `since`
+becomes the earlier of `since` and `ts`; the repo's last activity becomes the later of the
+stored one and `ts`. Imported events are **not** stored as events: they do not show in
+`events`, `runs` or `stats` (§5), which describe the live window.
+
+Tokens: each `(day, source)` row replaces the earlier import of the same `(day, source)`, so
+running the import twice counts once. Rows for a day on or after the UTC day of the first
+live token sample (§9; remembered even after the samples are pruned) are ignored, because the
+live counters cover those days. Imported tokens add to `tokens.generated_total`,
+`tokens.prompt_total` and to `generated` of the matching `daily` days; they do not change any
+tok/s figure, `generated_24h` or `hourly`.
+
+Answer **200**:
+`{"events_added": 3, "events_skipped": 1, "token_days": 2, "token_days_ignored": 0}`.
+
+### 12.2 `status/backfill.py`
+
+Python 3.11, standard library only, runnable as `python3 status/backfill.py`:
+
+```
+backfill.py [--repos DIR] [--opencode-db FILE] [--dry-run]
+```
+
+- `--repos` (default `~/repos`): every direct subdirectory with a `.git` is one repo, named
+  by the directory name (the same `repo` agent-loop reports).
+- `--opencode-db` (default `~/.local/share/opencode/opencode.db`): skipped when missing.
+- Sends to `STATUS_URL` + `/api/import` with `Authorization: Bearer $STATUS_TOKEN`, in
+  requests of at most 1000 events each (the tokens go with the first request). Prints one line
+  per request with the answer's numbers. `--dry-run` prints the counts and sends nothing.
+  Missing `STATUS_URL`/`STATUS_TOKEN` (without `--dry-run`) → exit 2 with a message.
+
+The module exposes these functions, which the tests call directly:
+
+- `git_events(repo_dir: Path, name: str, gh=None) -> list[dict]`
+  - From `git log --all` (each commit once): every commit whose author name is `local-agent`
+    and whose subject matches `^(T\d+): (.*)` becomes a `task_done` event: `key`
+    `"<name>:<full sha>"`, `repo` name, `ts` the author date as ISO 8601 UTC
+    (`+00:00`), `task_id`, `title` (the rest of the subject, cut to 200 characters), `commit`
+    (the first 7 characters of the sha), `insertions`, `deletions` (from `--shortstat`; 0
+    when absent), and `attempts`: the highest `N` among files `.agent/logs/<task_id>-a<N>.log`
+    and `.agent/logs-*/<task_id>-a<N>.log` in the repo, or 1 when there are none.
+  - Every commit by `local-agent` with the subject `agent run report` becomes a
+    `run_started` event with key `"<name>:run:<full sha>"` and its `ts`.
+  - `gh` is a callable `gh(args: list[str], cwd: Path) -> str` returning stdout (default: run
+    the `gh` CLI; any failure → `"[]"`). It is called once with
+    `["pr", "list", "--state", "all", "--limit", "500", "--json", "number,headRefName,createdAt,url"]`;
+    every PR whose `headRefName` starts with `agent/` becomes a `run_finished` event with key
+    `"<name>:pr:<number>"`, `ts` its `createdAt`, and `pr` its `url`.
+  - Sorted by `ts`, then `key`.
+- `opencode_tokens(db_path: Path) -> list[dict]`: opens the SQLite file read-only, reads the
+  `data` JSON of every row of table `message` whose `role` is `assistant` and that has
+  `tokens`, and sums per UTC day of `time.created` (milliseconds since the epoch):
+  `generated` = `tokens.output` + `tokens.reasoning`, `prompt` = `tokens.input` (missing
+  numbers count as 0). Returns `[{"day", "source": "opencode", "generated", "prompt"}]`,
+  oldest day first. Rows whose `data` is not valid JSON are skipped.
+- `send(url: str, token: str, events: list[dict], tokens: list[dict]) -> list[dict]`: does
+  the requests described above and returns the parsed answers in order. An HTTP error raises.
