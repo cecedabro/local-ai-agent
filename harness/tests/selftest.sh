@@ -3,12 +3,24 @@
 # and a fake gh (CI fails until ci-fixed.txt exists).
 # Expect: T01 done, T02 skipped (protected path), T03 done on the 2nd attempt,
 # T04 skipped (path from .agent-protected), then CI fails, CI1 fixes it, CI green.
+# The run first waits once in the status queue and reports its events there.
 # Then agent-watch sees a failure on main and opens a separate fix run.
+# Finally a run whose push fails must say so loudly.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
-trap 'rm -rf "${WORK}"' EXIT
+STATUS_PID=""
+trap '[[ -n "${STATUS_PID}" ]] && kill "${STATUS_PID}" 2>/dev/null; rm -rf "${WORK}"' EXIT
+
+# Fake status service: logs events, refuses the first lease so the loop has to queue.
+EVENTS="${WORK}/events.jsonl"
+python3 "${HERE}/fake_status.py" "${EVENTS}" 1 > "${WORK}/status.port" &
+STATUS_PID=$!
+for _ in $(seq 50); do [[ -s "${WORK}/status.port" ]] && break; sleep 0.1; done
+[[ -s "${WORK}/status.port" ]] || { echo "fake status service did not start"; exit 1; }
+STATUS_URL="http://127.0.0.1:$(cat "${WORK}/status.port")"
+export STATUS_URL STATUS_TOKEN=selftest
 
 LOG="${WORK}/run.log"
 git init -q --bare "${WORK}/remote.git"
@@ -35,7 +47,7 @@ git push -q origin main
 
 export AGENT_CMD="python3 ${HERE}/fake_agent.py {prompt}" CHECK_CMD="make -s check" NTFY_URL=""
 export PATH="${HERE}/fakebin:${PATH}"
-CI_FAST=(--ci-poll 0 --ci-appear 0)
+CI_FAST=(--ci-poll 0 --ci-appear 0 --queue-poll 0)
 
 python3 "${HERE}/../loop.py" --no-pc --retries 2 --max-skips 5 "${CI_FAST[@]}" > "${LOG}" 2>&1 || {
   cat "${LOG}"; echo "loop exited non-zero"; exit 1; }
@@ -62,6 +74,17 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$(git log --oneline)" == *'T01: Create hello.txt'* ]] || fail "T01 commit missing"
 [[ "$(git log --oneline)" == *'CI1: CI failed on this branch'* ]] || fail "CI1 commit missing"
 
+# Status service: queued once, then the run's events, then the lease released.
+grep -q 'queued (position 1) behind other-repo' "${LOG}" || fail "loop did not wait in the queue"
+ev() { grep -c "$1" "${EVENTS}" || true; }
+[[ "$(ev '"action": "acquire"')" -ge 2 ]] || fail "lease not acquired after queueing"
+for kind in run_started task_started task_done task_skipped ci_waiting run_finished; do
+  [[ "$(ev "\"kind\": \"${kind}\"")" -ge 1 ]] || fail "no ${kind} event"
+done
+grep -q '"action": "release"' "${EVENTS}" || fail "lease not released"
+grep -q '"_auth": "Bearer selftest"' "${EVENTS}" || fail "status token not sent"
+grep '"kind": "run_finished"' "${EVENTS}" | grep -q '"pushed": true' || fail "run_finished should say pushed"
+
 # agent-watch: main itself has no ci-fixed.txt, so its CI "fails".
 LOG="${WORK}/watch.log"
 git checkout -q main
@@ -72,6 +95,25 @@ git --git-dir="${WORK}/remote.git" rev-parse -q --verify agent/ci-fix-1 >/dev/nu
 grep -q "$(git rev-parse origin/main)" .agent/watch-handled || fail "failing main commit not recorded"
 python3 "${HERE}/../watch.py" --once -- --no-pc "${CI_FAST[@]}" > "${LOG}" 2>&1 || fail "second watch exited non-zero"
 ! grep -q 'fixing' "${LOG}" || fail "watch fixed the same commit twice"
+# A push that fails must be loud: ntfy, the status service and REPORT.md all say so.
+LOG="${WORK}/push.log"
+mkdir "${WORK}/repo2" && cd "${WORK}/repo2"
+git init -q -b main
+git config user.name test; git config user.email test@example.com
+printf '# PLAN\n- [ ] T01: Create hello.txt\n  accept: test -f hello.txt\n' > PLAN.md
+printf 'check:\n\ttrue\n' > Makefile
+echo "# PROGRESS" > PROGRESS.md
+git add -A && git commit -qm init
+git remote add origin "${WORK}/missing.git"
+python3 "${HERE}/../loop.py" --no-pc --no-ci --no-pr --queue-poll 0 > "${LOG}" 2>&1 || fail "push-failure run exited non-zero"
+grep -q '^- \[x\] T01:' PLAN.md || fail "T01 not done in the push-failure run"
+grep -q '\[notify\] Push failed' "${LOG}" || fail "push failure not notified"
+grep -q '^## Push failed' REPORT.md || fail "push failure not in REPORT.md"
+grep -q '"kind": "push_failed"' "${EVENTS}" || fail "push failure not sent to the status service"
+grep '"kind": "run_finished"' "${EVENTS}" | tail -1 | grep -q '"pushed": false' || fail "run_finished should say not pushed"
+[[ "$(grep -c '\[notify\] Push failed' "${LOG}")" -eq 1 ]] || fail "push failure notified more than once"
+cd "${WORK}/repo"
+
 # sh(): a timeout kills the whole process group, not only the shell (left-over test
 # runs used to hold locks and hang later runs).
 LOG="${WORK}/sh.log"

@@ -29,6 +29,7 @@ it in a browser (arrow keys to move, F for fullscreen, P to print to PDF).
 | `mac/` | `ai pause\|resume\|status`: control the model from the Mac over `ssh pc` | Mac |
 | (homelab repo) `apps/ai-agent/` | Cluster side: namespaces, devbox StatefulSet, waker, NetworkPolicy, ExternalSecrets | k3s (via Flux) |
 | `harness/` | `loop.py` and its prompt; project templates | devbox pod |
+| `status/` | Status page + model queue (stdlib Python); built by the agent from `status/SPEC.md` | k3s |
 | `docs/` | Plan, runbook notes | — |
 
 ## Rollout
@@ -54,6 +55,7 @@ cluster objects such as the privileged waker namespace.
 | --- | --- |
 | Open the agent | `ssh agent@devbox` (lands in tmux session `agent`; `NO_TMUX=1` skips tmux) |
 | Run the loop | in the project repo on the devbox: `agent-loop` (stop after the current task: `touch .agent/STOP`; it stops starting new tasks after 24 h, change with `--max-hours N`). After the tasks it waits for CI and turns failures into fix tasks (`--no-ci` skips) |
+| See what the agent is doing | the status page (`status/`, reachable over Tailscale once deployed): model state, the running task, the queue, recent events, stats |
 | Fix failures on main automatically | in a tmux window in the project repo: `agent-watch` (checks every 10 min, one fix PR per failing commit; stop with `touch .agent/WATCH-STOP`) |
 | Tell it what to do | edit `PLAN.md` / `SPEC.md` / `AGENTS.md` in the project repo; the agent cannot edit them |
 | Free the GPU for myself | on the Mac: `ai pause`; give it back with `ai resume`; `ai status` |
@@ -78,6 +80,11 @@ browser and no parallel heavy jobs.
 - Protected paths the agent may not change (checked by the harness): `tests/`, `contract/`,
   `PLAN.md`, `SPEC.md`, `AGENTS.md` (set with `PROTECTED`), plus every path listed in the project's
   committed `.agent-protected` file (which protects itself).
+- One run on the model at a time: with `STATUS_URL` set, `agent-loop` takes the status service's
+  lease first and waits in line while another run holds it (`--no-status` skips this). If the
+  service is down, runs go ahead without it.
+- Push failures are loud: an ntfy alert, a `push_failed` event and a "Push failed" section in
+  `REPORT.md`; no PR is opened for a branch that didn't push.
 - CI feedback: the agent never judges CI itself. The harness reads the GitHub Actions results with
   `gh` (the token needs Actions: read; pushing workflow files needs Workflows: write) and gives a
   failed log to a fresh fix task, at most 3 rounds per run.
