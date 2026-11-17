@@ -11,8 +11,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -422,7 +424,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     #  File API                                                           #
     # ------------------------------------------------------------------ #
     @app.post("/api/files")
-    async def api_upload_file(request: Request) -> JSONResponse:
+    async def api_upload_file(request: Request) -> Response:
         session = _session_from_cookie(request, app.state.db)
         if not session:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -432,24 +434,27 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if file_obj is None:
             return JSONResponse({"error": "no file"}, status_code=400)
         content = file_obj.file.read()
-        name = file_obj.filename or "upload"
+        filename = file_obj.filename or "upload"
+        name = os.path.basename(filename).replace("\\", "/")
+        while "/" in name and name != name.split("/", 1)[-1]:
+            name = name.rsplit("/", 1)[-1]
+        name = name[:120]
+        if not name:
+            name = "upload"
         size = len(content)
+        if size > 200000:
+            return JSONResponse({"error": "file too large"}, status_code=413)
+        try:
+            content.decode("utf-8")
+        except UnicodeDecodeError:
+            return JSONResponse({"error": "file must be valid UTF-8"}, status_code=415)
+        if b"\x00" in content:
+            return JSONResponse({"error": "file must not contain NUL bytes"}, status_code=415)
         file_id = app.state.db.add_file(username, name, size, content)
-        return JSONResponse({"id": file_id}, status_code=201)
+        return JSONResponse({"id": file_id, "name": name, "size": size}, status_code=201)
 
     @app.get("/api/files/{file_id}")
-    async def api_get_file(request: Request, file_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        f = app.state.db.get_file(file_id, username)
-        if f is None:
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse(f)
-
-    @app.get("/api/files/{file_id}/content")
-    async def api_file_content(request: Request, file_id: int) -> Response:
+    async def api_get_file(request: Request, file_id: int) -> Response:
         session = _session_from_cookie(request, app.state.db)
         if not session:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -460,7 +465,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
         content = app.state.db.get_file_content(file_id)
         if content is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return Response(content=content, media_type="application/octet-stream")
+        resp = Response(content=content)
+        resp.headers["Content-Disposition"] = f'attachment; filename="{f["name"]}"'
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        return resp
 
     # ── POST /api/chats/{chat_id}/messages (streaming) ─────────────────────
 
@@ -476,15 +484,35 @@ def create_app(settings: dict | None = None) -> FastAPI:
         except Exception:
             body = {}
         content = body.get("content", "")
-        if not content or not content.strip():
+        file_ids = body.get("files", [])
+        if not isinstance(file_ids, list):
+            file_ids = []
+        if not content and not file_ids:
             return JSONResponse({"error": "prompt required"}, status_code=400)
         chat = _get_chat_or_404(app.state.db, chat_id, username)
         if not _validate_user(username, user):
             return JSONResponse({"error": "forbidden"}, status_code=403)
+        if file_ids:
+            file_ids = [int(fid) for fid in file_ids]
+            for fid in file_ids:
+                f = app.state.db.get_file(fid, username)
+                if f is None:
+                    return JSONResponse({"error": "file not found or not yours"}, status_code=400)
+                fc = app.state.db.get_file_content(fid)
+                if fc is not None:
+                    try:
+                        text = fc.decode("utf-8")
+                    except UnicodeDecodeError:
+                        text = ""
+                    content = content + f"\n\nFile {f['name']}:\n```\n{text}\n```"
+        if len(content) > 20000:
+            return JSONResponse({"error": "message too long"}, status_code=413)
         try:
             msg_id = app.state.db.add_message(chat_id, "user", content)
         except Exception:
             return JSONResponse({"error": "failed"}, status_code=500)
+        if file_ids:
+            app.state.db.add_message_files(msg_id, file_ids)
         gateway_url = app.state.settings.GATEWAY_URL
         gateway_key = app.state.settings.GATEWAY_KEY
         messages = app.state.db.get_messages_for_completion(chat_id)
@@ -685,32 +713,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "cannot delete yourself"}, status_code=400)
         app.state.db.delete_user(target_username)
         return Response(status_code=204)
-
-    # ── POST /api/files ───────────────────────────────────────────────────
-
-    @app.post("/api/files")
-    async def api_upload_file(request: Request) -> Response:
-        r = _require_session_and_csrf(request, app.state.db)
-        if isinstance(r, Response):
-            return r
-        session = r
-        username = session[0]
-        user = session[1]
-        ct = request.headers.get("content-type", "")
-        valid_types = {"image/png", "image/jpeg", "image/gif", "text/plain"}
-        if ct not in valid_types:
-            return JSONResponse({"error": "invalid content type"}, status_code=400)
-        form = await request.form()
-        file_field = form.get("file")
-        if not file_field:
-            return JSONResponse({"error": "file required"}, status_code=400)
-        content = await file_field.read()
-        file_size = len(content)
-        if file_size > 10_000_000:
-            return JSONResponse({"error": "file too large"}, status_code=400)
-        filename = file_field.filename or "upload"
-        file_id = app.state.db.save_file(username, filename, content)
-        return JSONResponse({"id": file_id, "name": filename, "size": file_size})
 
     # ── GET /admin ────────────────────────────────────────────────────────
 

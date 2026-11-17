@@ -29,7 +29,7 @@ Rules for every task:
   accept: make chat-test K="TestStream"
 - [~] T06: Context size and compression (see "T06 details") — skipped: $ make chat-test K="TestContext"  (exit 2)
   accept: make chat-test K="TestContext"
-- [ ] T07: File upload, download and attachments (see "T07 details")
+- [x] T07: File upload, download and attachments (see "T07 details")
   accept: make chat-test K="TestFiles"
 - [ ] T08: Pages, security headers and the vendored markdown renderer (see "T08 details")
   accept: make chat-test

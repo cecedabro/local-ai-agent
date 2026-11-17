@@ -5,6 +5,8 @@ Times are ISO-8601 UTC strings.
 """
 from __future__ import annotations
 
+import json
+
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -303,9 +305,10 @@ class DB:
             if owner is None or owner["username"] != username:
                 return []
             rows = conn.execute(
-                """SELECT m.*, mf.file_id
+                """SELECT m.*, mf.file_id, f.name as file_name, f.size as file_size
                    FROM messages m
                    LEFT JOIN message_files mf ON m.id = mf.message_id
+                   LEFT JOIN files f ON mf.file_id = f.id
                    WHERE m.chat_id = ?
                    ORDER BY m.created""",
                 (chat_id,),
@@ -325,8 +328,24 @@ class DB:
                         "files": [],
                     }
                 if r["file_id"] is not None:
-                    msgs[mid]["files"].append({"file_id": r["file_id"]})
+                    msgs[mid]["files"].append({
+                        "id": r["file_id"],
+                        "name": r["file_name"],
+                        "size": r["file_size"],
+                    })
             return list(msgs.values())
+
+    def get_messages_for_completion(self, chat_id: int) -> list[dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            rows = conn.execute(
+                """SELECT m.role, m.content
+                   FROM messages m
+                   WHERE m.chat_id = ?
+                   ORDER BY m.created""",
+                (chat_id,),
+            ).fetchall()
+            return [{"role": r["role"], "content": r["content"]} for r in rows]
 
     def add_file(self, username: str, name: str, size: int, content: bytes) -> int:
         now = _now_iso()
