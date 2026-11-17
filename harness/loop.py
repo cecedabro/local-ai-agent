@@ -36,6 +36,8 @@ Environment (set by the devbox ConfigMap/Secret):
 Status and queue: with STATUS_URL set, the run reports its progress there and first
 takes the service's lease on the model: one GPU, so one run at a time; others wait in
 line. If the service is unreachable the run goes on without it (fail-open).
+Pause: before each task the run asks the service whether Pause was pressed on the page.
+If so it releases the lease and the PC, waits for Resume (or a STOP), then queues again.
 Stdlib only: this runs in a minimal image.
 """
 from __future__ import annotations
@@ -215,7 +217,8 @@ class Status:
             if res is None:
                 return
             if res.get("granted"):
-                threading.Thread(target=self._renew, daemon=True).start()
+                self._stop = threading.Event()            # fresh after a pause released the lease
+                threading.Thread(target=self._renew, args=(self._stop,), daemon=True).start()
                 return
             holder = res.get("holder") or {}
             msg = (f"queued (position {res.get('position', '?')}) behind "
@@ -228,9 +231,14 @@ class Status:
                 return
             time.sleep(self.poll)
 
-    def _renew(self) -> None:
-        while not self._stop.wait(60):
+    def _renew(self, stop: threading.Event) -> None:
+        while not stop.wait(60):
             self._post("/api/lease", {**self.ident, "action": "renew"})
+
+    def pause_wanted(self) -> bool:
+        """True while Pause is pressed for this run on the status page (fail-open: False)."""
+        res = self._post(f"/api/runs/{self.ident['run_id']}/control", {})
+        return bool(res and res.get("pause"))
 
     def release(self) -> None:
         self._stop.set()
@@ -333,9 +341,10 @@ class Pc:
         if not self.enabled:
             return
         self.ssh("busy on")
+        stop = self._stop = threading.Event()             # fresh after a pause released the PC
 
         def beat() -> None:
-            while not self._stop.wait(300):
+            while not stop.wait(300):
                 self.ssh("busy on")
 
         self._beat = threading.Thread(target=beat, daemon=True)
@@ -622,6 +631,29 @@ class Run:
                           plan=plan_snapshot(self.repo))
         return Result(task, "skipped", self.args.retries, reason, seconds)
 
+    # -- pause (status page)
+    def pause_point(self) -> None:
+        """Between tasks: if Pause is pressed on the status page, let go of the model and the PC
+        and wait for Resume (or a STOP). Paused time does not count toward --max-hours."""
+        if not self.status.pause_wanted():
+            return
+        t0 = time.monotonic()
+        print(f"[{now()}] paused from the status page; waiting for Resume")
+        notify("Agent run paused", f"{self.repo.name}: press Resume on the status page", "pause_button")
+        self.status.event("paused", plan=plan_snapshot(self.repo))
+        self.status.release()
+        self.pc.release()
+        while self.status.pause_wanted() and not (self.state / "STOP").exists():
+            time.sleep(self.status.poll)
+        self.started += time.monotonic() - t0
+        if (self.state / "STOP").exists():
+            return
+        print(f"[{now()}] resumed")
+        self.status.acquire(self.stop_reason)
+        self.pc.up()
+        self.pc.hold()
+        self.status.event("resumed")
+
     # -- whole run
     def loop(self) -> str:
         consecutive_skips = 0
@@ -632,6 +664,10 @@ class Run:
             tasks = parse_plan((self.repo / "PLAN.md").read_text())
             if not tasks:
                 return "plan complete"
+            self.pause_point()
+            reason = self.stop_reason()
+            if reason:
+                return reason
             result = self.run_task(tasks[0])
             self.results.append(result)
             consecutive_skips = consecutive_skips + 1 if result.status == "skipped" else 0
