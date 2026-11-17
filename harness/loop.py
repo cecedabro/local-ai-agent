@@ -162,6 +162,37 @@ def commit_stats(repo: Path) -> dict:
     return stats
 
 
+def plan_title(repo: Path) -> str:
+    """The run's name: the text after "# PLAN:" on PLAN.md's first heading ("" if none)."""
+    plan = repo / "PLAN.md"
+    for line in plan.read_text().splitlines() if plan.exists() else []:
+        if line.startswith("#"):
+            m = re.match(r"#\s*PLAN\s*:?\s*(.*)$", line.strip())
+            return m.group(1).strip() if m else ""
+    return ""
+
+
+def slugify(title: str, limit: int = 40) -> str:
+    """"Accounts & login (v2)" -> "accounts-login-v2": lowercase words joined by '-', cut at a word."""
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    out = ""
+    for w in words:
+        if len(out) + len(w) + (1 if out else 0) > limit:
+            break
+        out = f"{out}-{w}" if out else w
+    return out
+
+
+def free_branch(repo: Path, base: str) -> str:
+    """base, or base-2, base-3, ... if that branch already exists here or on origin."""
+    taken = set(git(repo, "branch", "-a", "--format=%(refname:short)", check=False).splitlines())
+    name, n = base, 1
+    while name in taken or f"origin/{name}" in taken:
+        n += 1
+        name = f"{base}-{n}"
+    return name
+
+
 def plan_snapshot(repo: Path) -> list[dict]:
     """Every task in PLAN.md with its state, for the status page."""
     plan = repo / "PLAN.md"
@@ -518,8 +549,11 @@ class Run:
         if current.startswith("agent/"):
             self.branch = current                         # resume an interrupted run
         else:
-            stamp = f"ci-fix-{self.args.fix_ci}" if self.args.fix_ci else f"{dt.datetime.now():%Y-%m-%d-%H%M}"
-            self.branch = f"agent/{stamp}"
+            if self.args.fix_ci:
+                name = f"ci-fix-{self.args.fix_ci}"
+            else:                                         # "# PLAN: Accounts and login" -> accounts-and-login
+                name = slugify(plan_title(self.repo)) or f"{dt.datetime.now():%Y-%m-%d-%H%M}"
+            self.branch = free_branch(self.repo, f"agent/{name}")
             git(self.repo, "checkout", "-b", self.branch)
         self.status.bind(self.repo, self.branch)
 
@@ -777,7 +811,7 @@ class Run:
         pr = ""
         if self.args.push and self.args.pr and pushed:
             res = sh(["gh", "pr", "create", "--head", self.branch,
-                      "--title", f"Agent run {self.branch}", "--body-file", "REPORT.md"],
+                      "--title", f"Agent run: {plan_title(self.repo) or self.branch}", "--body-file", "REPORT.md"],
                      cwd=self.repo, timeout=60)
             pr = res.stdout.strip().splitlines()[-1] if res.returncode == 0 and res.stdout.strip() else ""
         done = sum(r.status == "done" for r in self.results)
