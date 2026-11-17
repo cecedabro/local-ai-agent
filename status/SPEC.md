@@ -313,6 +313,9 @@ Active when `llama_url` is set (else `/v1/*` → **404**).
 waited_s, took_s, status, prompt, generated, gen_tps, error`), `by_client` (all-time
 `requests, prompt, generated, errors, gen_tps` plus `requests_24h`, `generated_24h`).
 
+Theme: an Auto / Light / Dark switch in the header of `/` and `/chat` (kept in the browser's
+`localStorage`, applied before the first paint; Auto follows the device).
+
 Page: a **Model activity** section after Now (running, waiting in order, last requests, per
 client). A **chat** card above the live sections (only when unlocked and the gateway is on)
 and a full-height `GET /chat` page: it streams from `/v1/chat/completions` with the status

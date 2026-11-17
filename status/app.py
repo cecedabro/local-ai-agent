@@ -1060,8 +1060,34 @@ def static_files() -> dict[str, tuple[bytes, str]]:
 
 STATIC_FILES = static_files()
 STATIC_VERSION = hashlib.sha256(b"".join(b for b, _ in STATIC_FILES.values())).hexdigest()[:10]
+# Theme: "auto" (device), "light" or "dark", kept in localStorage; applied before the first paint.
+THEME_HEAD = ("<script>(function(){var k='agent-status-theme',m=matchMedia('(prefers-color-scheme: dark)');"
+              "function apply(){var p='auto';try{p=localStorage.getItem(k)||'auto'}catch(e){}"
+              "var d=document.documentElement;d.dataset.themePref=p;d.dataset.theme=p==='auto'?(m.matches?'dark':'light'):p}"
+              "apply();m.addEventListener('change',apply);"
+              "window.setTheme=function(p){try{localStorage.setItem(k,p)}catch(e){}apply()}})()</script>")
+THEME_SCRIPT = """
+document.querySelectorAll('.theme input').forEach(i=>{i.checked=i.value===(document.documentElement.dataset.themePref||'auto');
+  i.addEventListener('change',()=>window.setTheme(i.value))});
+"""
 HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">')
+        f'{THEME_HEAD}<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">')
+ICON = {
+    "auto": ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/>'
+             '<path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>'),
+    "light": ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+              '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2'
+              'M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'),
+    "dark": '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+}
+
+
+def theme_switch() -> str:
+    """Auto / Light / Dark in the header."""
+    opts = "".join(f'<input type="radio" name="theme" value="{v}" id="theme-{v}"{" checked" if v == "auto" else ""}>'
+                   f'<label for="theme-{v}" title="{t}" aria-label="{t}">{ICON[v]}</label>'
+                   for v, t in (("auto", "Theme: follow the device"), ("light", "Light theme"), ("dark", "Dark theme")))
+    return f'<div class="seg three icons theme" role="radiogroup" aria-label="Theme">{opts}<span class="thumb"></span></div>'
 # Gradient for the chart bars; outside #live so the 5 s refresh keeps it.
 DEFS = ('<svg class="defs" aria-hidden="true" focusable="false"><defs><linearGradient id="bar-fill" x1="0" y1="0" x2="0" y2="1">'
         '<stop offset="0" stop-color="var(--bar-top)"/><stop offset="1" stop-color="var(--bar-bottom)"/></linearGradient></defs></svg>')
@@ -1211,16 +1237,19 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         f'<title>Agent status</title></head><body class="locked">{DEFS}'
         '<header><h1>Agent status</h1>'
         f'<span id="model" class="badge {BADGE.get(state, "off")}">model {e(state)}</span>'
-        '<span id="updated" class="muted small"></span></header>'
+        f'<span id="updated" class="muted small"></span>{theme_switch()}</header>'
         '<section id="controls"><div class="card wide">'
-        '<form id="add" autocomplete="off">'
+        '<div class="card-head ctl"><h2>Queue a job</h2>'
+        '<button type="button" id="lock" class="link small">lock</button></div>'
+        '<form id="add" autocomplete="off"><div class="fields">'
         f'<input name="repo" list="repos" placeholder="owner/repo" required aria-label="Repository">'
         f'<datalist id="repos">{options}</datalist>'
         '<input name="ref" placeholder="branch (default)" aria-label="Branch">'
-        '<input name="note" placeholder="note" maxlength="200" aria-label="Note">'
-        '<label class="small">max h <input name="max_hours" type="number" min="0.1" max="24" step="0.5" value="24">'
-        '</label><label class="small"><input name="ci" type="checkbox" checked> wait for CI</label>'
-        '<button>Add to queue</button><button type="button" id="lock" class="link">lock</button></form>'
+        '<input name="note" placeholder="note" maxlength="200" aria-label="Note"></div>'
+        '<div class="opts"><label class="chip">max <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
+        'value="24" aria-label="Max hours"> h</label>'
+        '<label class="switch"><input name="ci" type="checkbox" checked><span class="track"></span>wait for CI</label>'
+        '<span class="spacer"></span><button class="primary">Add to queue</button></div></form>'
         '<form id="unlock"><span class="small muted">Read-only. Paste the status token to add and manage jobs:</span>'
         '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
         '<button>Unlock</button></form>'
@@ -1228,20 +1257,20 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         f'{chat_box(False) if chat else ""}</section>'
         f'<main id="live">{render_live(st)}</main>'
         '<footer class="small muted">JSON: <a href="/api/status">/api/status</a> · refreshes every 5 s</footer>'
-        f'<script>{SCRIPT}{CHAT_SCRIPT}</script></body></html>')
+        f'<script>{SCRIPT}{CHAT_SCRIPT}{THEME_SCRIPT}</script></body></html>')
 
 
 def render_chat_page() -> str:
     return (
         f'<!doctype html><html lang="en"><head>{HEAD}'
         '<title>Agent chat</title></head><body class="locked">'
-        '<header><h1>Chat</h1><a class="small" href="/">← status</a></header>'
+        f'<header><h1>Chat</h1><a class="small" href="/">← status</a>{theme_switch()}</header>'
         '<section id="controls"><div class="card wide" id="unlock-card">'
         '<form id="unlock"><span class="small muted">Paste the status token to chat:</span>'
         '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
         '<button>Unlock</button></form><div id="msg" class="small muted"></div></div>'
         f'{chat_box(True)}</section>'
-        f'<script>{SCRIPT}{CHAT_SCRIPT}</script></body></html>')
+        f'<script>{SCRIPT}{CHAT_SCRIPT}{THEME_SCRIPT}</script></body></html>')
 
 
 # ---------------------------------------------------------------------------- http
