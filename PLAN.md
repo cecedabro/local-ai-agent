@@ -25,7 +25,7 @@ Rules for every task:
   accept: make chat-test K="TestInvites"
 - [x] T04: Chats API (see "T04 details")
   accept: make chat-test K="TestChats"
-- [ ] T05: Sending a message: gateway streaming with phases (see "T05 details")
+- [~] T05: Sending a message: gateway streaming with phases (see "T05 details") — skipped: $ make chat-test K="TestStream"  (exit 2)
   accept: make chat-test K="TestStream"
 - [ ] T06: Context size and compression (see "T06 details")
   accept: make chat-test K="TestContext"
