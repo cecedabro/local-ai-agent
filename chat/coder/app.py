@@ -318,56 +318,77 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     @app.get("/api/chats")
     async def api_chats(request: Request) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
         chats = app.state.db.list_chats(username)
         return JSONResponse(chats)
 
     @app.post("/api/chats", status_code=201)
     async def api_create_chat(request: Request) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        form = await request.form()
-        profile = (form.get("profile") or "general").strip()
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, user = r
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        profile = (body.get("profile") or "general").strip()
+        if profile not in ("general", "evidence"):
+            return JSONResponse({"error": "invalid profile"}, status_code=400)
+        if not user.get("admin") and "admin" not in user.get("rights", []):
+            required_right = profile if profile == "evidence" else "chat"
+            if required_right not in user.get("rights", []):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
         chat = app.state.db.create_chat(username, profile)
         return JSONResponse(chat, status_code=201)
 
-    @app.get("/api/chat/{chat_id}")
-    async def api_get_chat(request: Request, chat_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        chat = app.state.db.get_chat(chat_id, username)
+    @app.get("/api/chats/{chat_id}")
+    async def api_get_chat(request: Request, chat_id: str) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = _get_chat_or_404(app.state.db, chat_id, username)
         if chat is None:
             return JSONResponse({"error": "not found"}, status_code=404)
+        messages = app.state.db.get_messages(chat_id, username)
+        chat["messages"] = messages
+        chat["context"] = {"used": 0, "max": 32768, "compress_at": 24576}
         return JSONResponse(chat)
 
-    @app.post("/api/chat/{chat_id}/title")
-    async def api_update_title(request: Request, chat_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        form = await request.form()
-        title = (form.get("title") or "New chat").strip()
-        result = app.state.db.update_chat_title(chat_id, username, title)
-        if result is None:
+    @app.patch("/api/chats/{chat_id}")
+    async def api_update_chat(chat_id: str, request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid json"}, status_code=400)
+        title = body.get("title", "")
+        if not title or not title.strip():
+            return JSONResponse({"error": "title is required and must not be empty"}, status_code=400)
+        chat = _get_chat_or_404(app.state.db, chat_id, username)
+        if chat is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse(result)
+        app.state.db.update_chat_title(chat_id, username, title.strip())
+        return JSONResponse({"ok": True, "id": chat_id, "title": title.strip()})
 
-    @app.delete("/api/chat/{chat_id}")
-    async def api_delete_chat(request: Request, chat_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
+    @app.delete("/api/chats/{chat_id}")
+    async def api_delete_chat(chat_id: str, request: Request) -> Response:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = _get_chat_or_404(app.state.db, chat_id, username)
+        if chat is None:
+            return Response(status_code=404)
         app.state.db.delete_chat(chat_id, username)
-        return JSONResponse({"ok": True})
+        return Response(status_code=204)
 
     # ------------------------------------------------------------------ #
     #  Messages API                                                       #
@@ -445,7 +466,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     @app.post("/api/chats/{chat_id}/messages")
     async def api_create_message(chat_id: str, request: Request) -> Response:
-        session = _require_session_and_csrf(request)
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        session = r
         username, user = session
         try:
             body = await request.json()
@@ -454,7 +478,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
         content = body.get("content", "")
         if not content or not content.strip():
             return JSONResponse({"error": "prompt required"}, status_code=400)
-        chat = _get_chat_or_404(chat_id, username)
+        chat = _get_chat_or_404(app.state.db, chat_id, username)
         if not _validate_user(username, user):
             return JSONResponse({"error": "forbidden"}, status_code=403)
         try:
@@ -522,9 +546,12 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     @app.post("/api/chats/{chat_id}/compress")
     async def api_compress(chat_id: str, request: Request) -> Response:
-        session = _require_session_and_csrf(request)
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        session = r
         username = session[0]
-        chat = _get_chat_or_404(chat_id, username)
+        chat = _get_chat_or_404(app.state.db, chat_id, username)
         if app.state.db.get_context(chat_id):
             return JSONResponse({"ok": True})
         messages = app.state.db.get_messages_for_completion(chat_id)
@@ -659,31 +686,14 @@ def create_app(settings: dict | None = None) -> FastAPI:
         app.state.db.delete_user(target_username)
         return Response(status_code=204)
 
-    # ── PATCH /api/chats/{chat_id} ────────────────────────────────────────
-
-    @app.patch("/api/chats/{chat_id}")
-    async def api_update_chat(chat_id: str, request: Request) -> Response:
-        session = _require_session_and_csrf(request)
-        username = session[0]
-        user = session[1]
-        if not _validate_user(username, user):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"error": "invalid json"}, status_code=400)
-        title = body.get("title", "")
-        if not title or not title.strip():
-            return JSONResponse({"error": "title is required and must not be empty"}, status_code=400)
-        chat = _get_chat_or_404(chat_id, username)
-        app.state.db.update_chat_title(chat_id, title.strip())
-        return JSONResponse({"ok": True, "id": chat_id, "title": title.strip()})
-
     # ── POST /api/files ───────────────────────────────────────────────────
 
     @app.post("/api/files")
     async def api_upload_file(request: Request) -> Response:
-        session = _require_session_and_csrf(request)
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        session = r
         username = session[0]
         user = session[1]
         ct = request.headers.get("content-type", "")
@@ -764,6 +774,28 @@ def _require_csrf(request: Request):
     """Return True or a 403 JSONResponse."""
     if request.headers.get("X-Coder") != "1":
         return JSONResponse({"error": "missing X-Coder header"}, status_code=403)
+    return True
+
+
+def _require_session_and_csrf(request: Request, db):
+    """Return ``(username, user)`` or a 401/403 response."""
+    session = _session_from_cookie(request, db)
+    if not session:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return session
+
+
+def _get_chat_or_404(db, chat_id: str, username: str):
+    """Return the chat dict or ``None``."""
+    if isinstance(chat_id, str):
+        chat_id = int(chat_id)
+    return db.get_chat(chat_id, username)
+
+
+def _validate_user(username: str, user: dict):
+    """Return ``True`` or a 403 JSONResponse."""
+    if user.get("username") != username:
+        return JSONResponse({"error": "forbidden"}, status_code=403)
     return True
 
 

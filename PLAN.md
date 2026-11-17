@@ -23,7 +23,7 @@ Rules for every task:
   accept: make chat-test K="TestAuth or TestRateLimit or healthz or seeded"
 - [x] T03: Invites and the users API (see "T03 details")
   accept: make chat-test K="TestInvites"
-- [ ] T04: Chats API (see "T04 details")
+- [x] T04: Chats API (see "T04 details")
   accept: make chat-test K="TestChats"
 - [ ] T05: Sending a message: gateway streaming with phases (see "T05 details")
   accept: make chat-test K="TestStream"

@@ -265,11 +265,11 @@ class DB:
         now = _now_iso()
         with self._lock:
             conn = self._connect()
-            conn.execute(
+            cur = conn.execute(
                 "UPDATE chats SET title = ?, updated = ? WHERE id = ? AND username = ?",
                 (title, now, chat_id, username),
             )
-            if conn.changes == 0:
+            if cur.rowcount == 0:
                 conn.rollback()
                 return None
             conn.commit()
