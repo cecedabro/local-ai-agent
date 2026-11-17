@@ -81,6 +81,27 @@ class JobsTest(Base):
         self.act(a["id"], "finish", {"state": "cancelled"})
         self.act(a["id"], "finish", {"state": "done"}, expect=409)
 
+    def test_stop_now(self) -> None:
+        a = self.add()
+        self.claim()
+        self.act(a["id"], "cancel")                       # graceful first, then "now" on top
+        self.assertEqual(self.act(a["id"], "heartbeat"), {"cancel": True})
+        self.act(a["id"], "cancel", {"now": True})
+        self.assertTrue(self.status()["jobs"]["running"][0]["stopping_now"])
+        self.assertEqual(self.act(a["id"], "heartbeat"), {"cancel": True, "now": True})
+        self.act(a["id"], "cancel")                       # a later plain Stop doesn't undo "now"
+        self.assertEqual(self.act(a["id"], "heartbeat"), {"cancel": True, "now": True})
+        page = self.req("GET", "/", token=None)[2].decode()
+        self.assertIn("stopping now", page)
+
+    def test_heartbeat_counts_as_worker_seen(self) -> None:
+        a = self.add()
+        self.claim()
+        self.clock.t += 700                               # a worker busy with a job doesn't ping
+        self.assertEqual(self.status()["jobs"]["workers"], [])
+        self.act(a["id"], "heartbeat")
+        self.assertEqual([w["name"] for w in self.status()["jobs"]["workers"]], ["devbox-0"])
+
     def test_lost_worker_frees_the_queue(self) -> None:
         a, b = self.add(), self.add()
         self.claim()

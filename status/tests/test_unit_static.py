@@ -18,6 +18,18 @@ class StaticTest(Base):
         for path in ("/static/", "/static/nope.css", "/static/../app.py", "/static/%2e%2e/app.py"):
             self.assertEqual(self.req("GET", path, token=None)[0], 404, path)
 
+    def test_favicon(self) -> None:
+        page = self.req("GET", "/", token=None)[2].decode()
+        self.assertRegex(page, r'<link rel="icon" type="image/svg\+xml" href="/static/icon\.svg\?v=[0-9a-f]{10}">')
+        code, headers, raw = self.req("GET", "/static/icon.svg", token=None)
+        self.assertEqual(code, 200)
+        self.assertEqual({k.lower(): v for k, v in headers.items()}["content-type"], "image/svg+xml")
+        self.assertIn(b"<svg", raw)
+
+    def test_runs_actions_column(self) -> None:
+        page = self.req("GET", "/", token=None)[2].decode()
+        self.assertNotIn("<th>Pause</th>", page)
+
     def test_chart_gradient_outside_live(self) -> None:
         page = self.req("GET", "/", token=None)[2].decode()
         self.assertLess(page.index('id="bar-fill"'), page.index('<main id="live">'))

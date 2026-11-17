@@ -325,6 +325,7 @@ class App:
                 "max_hours": j["max_hours"], "ci": bool(j["ci"]), "state": j["state"],
                 "created": iso(j["created"]), "started": iso(j["started"]), "finished": iso(j["finished"]),
                 "worker": j["worker"], "stopping": bool(j["cancel"]) and j["state"] == "running",
+                "stopping_now": j["cancel"] == 2 and j["state"] == "running",
                 "detail": j["detail"] or "", "exit_code": j["exit_code"]}
 
     def expire_jobs(self) -> None:
@@ -409,6 +410,10 @@ class App:
                                     "detail=case when state='lost' then '' else detail end where id=?",
                                     (now, job_id))
                     out = {"cancel": bool(j["cancel"])}
+                    if j["cancel"] == 2:
+                        out["now"] = True
+                    if j["worker"]:
+                        self.seen_worker(str(j["worker"]), False, None)   # busy workers don't ping
                 else:
                     out = {"cancel": True}                # cancelled or finished meanwhile
             elif act == "finish":
@@ -428,7 +433,8 @@ class App:
                                     "queue' where id=?", (now, job_id))
                     self.renumber([i for i in self.queued_ids() if i != job_id])
                 elif st == "running":
-                    self.db.execute("update jobs set cancel=1 where id=?", (job_id,))
+                    self.db.execute("update jobs set cancel=? where id=?",
+                                    (2 if body.get("now") else max(j["cancel"] or 0, 1), job_id))
                 else:
                     return 409, {"error": f"job is {st}"}
                 out = {"ok": True}
@@ -974,7 +980,7 @@ def plural(n: int, word: str) -> str:
 def bars(values: list[float], tips: list[str], labels: tuple[str, str], empty: str) -> str:
     """Single-series bar chart as inline SVG; one <title> tooltip per bar."""
     e = html.escape
-    w, h, top, base = 480, 120, 8, 100
+    w, h, top, base = 480, 124, 16, 104
     n = len(values)
     peak = max(values) if values else 0
     if not peak:
@@ -982,7 +988,9 @@ def bars(values: list[float], tips: list[str], labels: tuple[str, str], empty: s
     slot = w / n
     bw = max(slot - 2, 1)                                  # 2 px surface gap between bars
     out = [f'<svg class="chart" viewBox="0 0 {w} {h}" role="img" aria-label="{e(empty)}">',
-           f'<line class="axis" x1="0" y1="{base + .5}" x2="{w}" y2="{base + .5}"/>']
+           f'<line class="axis" x1="0" y1="{base + .5}" x2="{w}" y2="{base + .5}"/>',
+           f'<line class="guide" x1="0" y1="{top + .5}" x2="{w}" y2="{top + .5}"/>',
+           f'<text class="tick" x="0" y="{top - 4}">{e(big(peak))}</text>']
     for i, (v, tip) in enumerate(zip(values, tips)):
         x = i * slot + 1
         bh = (base - top) * v / peak
@@ -997,9 +1005,16 @@ def bars(values: list[float], tips: list[str], labels: tuple[str, str], empty: s
             out.append(f'<g><rect class="hit" x="{i * slot:.1f}" y="0" width="{slot:.1f}" height="{base}"/>'
                        f'<title>{e(tip)}</title></g>')
     out.append(f'<text class="tick" x="0" y="{h - 4}">{e(labels[0])}</text>'
-               f'<text class="tick" x="{w}" y="{h - 4}" text-anchor="end">{e(labels[1])}</text>'
-               f'<text class="tick" x="{w}" y="{top + 4}" text-anchor="end">max {e(big(peak))}</text></svg>')
+               f'<text class="tick" x="{w}" y="{h - 4}" text-anchor="end">{e(labels[1])}</text></svg>')
     return "".join(out)
+
+
+PLAY = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.4 2.2 8 5 3.4 7.8z" fill="currentColor"/></svg>'
+
+
+def diffstat(added: int, removed: int) -> str:
+    """Lines as git shows them: +added (green) over −removed (red)."""
+    return f'<span class="add">+{big(added)}</span><span class="del">−{big(removed)}</span>'
 
 
 BADGE = {"ready": "ok", "loading": "warn", "unreachable": "bad", "unknown": "off"}
@@ -1100,9 +1115,12 @@ def render_live(st: dict) -> str:
     parts.append('<section class="card wide" id="queue"><h2>Queue</h2><div class="cols"><div>')
     rows = []
     for j in jobs["running"]:
-        stop = ('<span class="pill warn">stopping</span>' if j["stopping"] else
-                f'<button class="ctl" data-job="{j["id"]}" data-act="cancel" title="Stop after the current task">Stop</button>')
-        rows.append(f'<li class="job running"><span class="pos">▶</span><div><b>{e(j["repo"])}</b>'
+        stop_btn = (f'<button class="ctl danger" data-job="{j["id"]}" data-act="cancel" data-now="1" '
+                    'title="Stop the run now, in the middle of its task">Stop</button>')
+        stop = ('<span class="pill warn">stopping now</span>' if j.get("stopping_now") else
+                ('<span class="pill warn">stopping</span>' + stop_btn) if j["stopping"] else stop_btn)
+        rows.append(f'<li class="job running"><span class="pos play" aria-label="running">{PLAY}</span>'
+                    f'<div><b>{e(j["repo"])}</b>'
                     f'{" <code>" + e(j["ref"]) + "</code>" if j["ref"] else ""}'
                     f'<div class="muted small">#{j["id"]} running {e(dur(j["started"], now))} on {e(j["worker"] or "")}'
                     f'{" · " + e(j["note"]) if j["note"] else ""}</div></div>{stop}</li>')
@@ -1204,27 +1222,30 @@ def render_live(st: dict) -> str:
     if t["repos"]:
         parts.append('<div class="table-wrap"><table class="small"><thead><tr><th>Repo</th><th>Commits</th><th>Lines</th><th>PRs</th>'
                      '<th>Last</th></tr></thead><tbody>')
-        parts += [f'<tr><td>{e(r["repo"])}</td><td>{r["commits"]}</td><td>+{big(r["lines_added"])} '
-                  f'−{big(r["lines_removed"])}</td><td>{r["prs"]}</td><td>{e(ago(r["last"], now))}</td></tr>'
+        parts += [f'<tr><td>{e(r["repo"])}</td><td>{r["commits"]}</td><td class="lines">{diffstat(r["lines_added"], r["lines_removed"])}'
+                  f'</td><td>{r["prs"]}</td><td>{e(ago(r["last"], now))}</td></tr>'
                   for r in t["repos"][:8]]
         parts.append("</tbody></table></div>")
     parts.append("</section>")
 
     # -- Recent
-    parts.append('<section class="card wide" id="recent"><h2>Recent</h2>')
+    parts.append('<section class="card wide foldable collapsed" id="recent"><div class="card-head"><h2>Recent</h2>'
+                 + ('<button type="button" class="fold-btn link small" aria-expanded="false">Show all</button>'
+                    if len(st["events"]) > 5 else '') + '</div>')
     if st["events"]:
-        parts.append('<div class="table-wrap"><table class="small events"><tbody>')
+        parts.append('<div class="fold"><div class="table-wrap"><table class="small events"><tbody>')
         for ev in st["events"][:20]:
             kind = str(ev.get("kind"))
             cls = {"task_done": "ok", "task_skipped": "warn", "push_failed": "bad", "run_finished": "ok"}.get(kind, "off")
             text = ev.get("title") or ev.get("detail") or ev.get("reason") or ev.get("ended") or ""
             extra = ""
             if kind == "task_done" and ev.get("commit"):
-                extra = f' <code>{e(str(ev["commit"]))}</code> +{e(str(ev.get("insertions", 0)))}/−{e(str(ev.get("deletions", 0)))}'
+                extra = (f' <code>{e(str(ev["commit"]))}</code> <span class="add">+{e(str(ev.get("insertions", 0)))}</span>'
+                         f' <span class="del">−{e(str(ev.get("deletions", 0)))}</span>')
             parts.append(f'<tr><td class="muted">{clock_tag(ev.get("received"))}</td><td>{e(str(ev.get("repo")))}</td>'
                          f'<td><span class="pill {cls}">{e(kind)}</span></td><td>{e(str(ev.get("task_id") or ""))}</td>'
                          f'<td class="text">{e(str(text))}{extra}</td></tr>')
-        parts.append("</tbody></table></div>")
+        parts.append("</tbody></table></div></div>")
     else:
         parts.append('<p class="muted">No events yet.</p>')
     parts.append("</section>")
@@ -1233,7 +1254,7 @@ def render_live(st: dict) -> str:
     parts.append('<section class="card wide" id="runs"><h2>Runs</h2>')
     if st["runs"]:
         parts.append('<div class="table-wrap"><table class="small runs"><thead><tr><th>State</th><th>Repo</th><th>Branch</th><th>Done</th>'
-                     '<th>Skipped</th><th>Started</th><th>PR</th><th>Pause</th></tr></thead><tbody>')
+                     '<th>Skipped</th><th>Started</th><th>PR</th><th>Actions</th></tr></thead><tbody>')
         for r in st["runs"]:
             cls = {"running": "ok", "finished": "off", "stale": "warn", "paused": "warn"}.get(r["state"], "off")
             pr = r["pr"] or ""
@@ -1262,7 +1283,8 @@ def render_live(st: dict) -> str:
 
 
 STATIC = Path(__file__).resolve().parent / "static"
-STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
+STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                ".svg": "image/svg+xml"}
 
 
 def static_files() -> dict[str, tuple[bytes, str]]:
@@ -1288,7 +1310,8 @@ document.querySelectorAll('.theme input').forEach(i=>{i.checked=i.value===(docum
   i.addEventListener('change',()=>window.setTheme(i.value))});
 """
 HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'{THEME_HEAD}<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">')
+        f'{THEME_HEAD}<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">'
+        f'<link rel="icon" type="image/svg+xml" href="/static/icon.svg?v={STATIC_VERSION}">')
 ICON = {
     "auto": ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/>'
              '<path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>'),
@@ -1331,6 +1354,7 @@ async function refresh(){
     const open=[...live.querySelectorAll('details[open]')].map(d=>d.closest('section').id);
     live.innerHTML=await r.text();
     open.forEach(id=>{const d=document.querySelector('#'+id+' details');if(d)d.open=true});
+    folds(false);
     localTimes();
     const s=await fetch('/api/status/head',{cache:'no-store'}).then(r=>r.json());
     const b=document.getElementById('model');b.className='badge '+s.badge;b.textContent='model '+s.model;
@@ -1341,8 +1365,9 @@ if(document.getElementById('live'))setInterval(refresh,5000);  // same data as /
 document.addEventListener('click',async ev=>{
   const b=ev.target.closest('button[data-run]');if(b){ev.preventDefault();b.disabled=true;await post('/api/runs/'+encodeURIComponent(b.dataset.run)+'/'+b.dataset.act);refresh();return}
   const j=ev.target.closest('button[data-job]');if(!j)return;
-  if(j.dataset.act==='cancel'&&!confirm(j.closest('.running')?'Stop this run after its current task?':'Remove this job from the queue?'))return;
-  j.disabled=true;await post('/api/jobs/'+j.dataset.job+'/'+j.dataset.act,j.dataset.to?{to:j.dataset.to}:{});refresh();
+  if(j.dataset.act==='cancel'&&!confirm(j.closest('.running')?'Stop this run now? The agent is stopped in the middle '
+    +'of its task; tasks it already finished stay on the branch.':'Remove this job from the queue?'))return;
+  j.disabled=true;await post('/api/jobs/'+j.dataset.job+'/'+j.dataset.act,j.dataset.to?{to:j.dataset.to}:(j.dataset.now?{now:true}:{}));refresh();
 });
 document.getElementById('unlock')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const t=ev.target.token.value.trim();
@@ -1352,11 +1377,34 @@ document.getElementById('unlock')?.addEventListener('submit',async ev=>{
 });
 document.getElementById('add')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const f=ev.target;
-  const ok=await post('/api/jobs',{repo:f.repo.value.trim(),ref:f.ref.value.trim(),note:f.note.value.trim(),
+  const nr=f.new_repo&&!f.new_repo.hidden?f.new_repo.value.trim():'';
+  const repo=nr?(nr.includes('/')?nr:f.dataset.owner+'/'+nr):f.repo.value.trim();
+  const ok=await post('/api/jobs',{repo:repo,ref:f.ref.value.trim(),note:f.note.value.trim(),
     max_hours:parseFloat(f.max_hours.value||'24'),ci:f.ci.checked});
-  if(ok){f.ref.value='';f.note.value='';msg('Job added.')}
+  if(ok){f.ref.value='';f.note.value='';if(f.new_repo)f.new_repo.value='';msg('Job added.')}
   refresh();
 });
+document.getElementById('repo-new')?.addEventListener('click',ev=>{
+  const f=document.getElementById('add'),on=f.new_repo.hidden;
+  f.new_repo.hidden=!on;f.repo.hidden=on;f.repo.required=!on;f.new_repo.required=on;
+  ev.target.textContent=on?'list':'+ repo';if(on)f.new_repo.focus();
+});
+const FOLD='agent-status-fold-';
+function foldOpen(id){try{return localStorage.getItem(FOLD+id)==='1'}catch(e){return false}}
+function fold(sec,open,anim){
+  const f=sec.querySelector('.fold'),b=sec.querySelector('.fold-btn');if(!f||!b)return;
+  const from=f.getBoundingClientRect().height;
+  sec.classList.toggle('collapsed',!open);b.setAttribute('aria-expanded',open);b.textContent=open?'Show less':'Show all';
+  if(!anim||matchMedia('(prefers-reduced-motion: reduce)').matches){f.style.maxHeight=open?'none':'';return}
+  f.style.maxHeight=from+'px';f.getBoundingClientRect();
+  f.style.maxHeight=(open?f.scrollHeight:parseFloat(getComputedStyle(f).getPropertyValue('--peek'))||200)+'px';
+  f.addEventListener('transitionend',()=>{if(!sec.classList.contains('collapsed'))f.style.maxHeight='none'},{once:true});
+}
+function folds(anim){document.querySelectorAll('.foldable').forEach(s=>fold(s,foldOpen(s.id),anim))}
+folds(false);
+document.addEventListener('click',ev=>{const b=ev.target.closest('.fold-btn');if(!b)return;
+  const s=b.closest('.foldable'),open=s.classList.contains('collapsed');
+  try{localStorage.setItem(FOLD+s.id,open?'1':'0')}catch(e){}fold(s,open,true)});
 document.getElementById('lock')?.addEventListener('click',()=>{try{localStorage.removeItem(TK)}catch(e){};lockState()});
 lockState();localTimes();
 """
@@ -1431,7 +1479,8 @@ SPARKLE = ('<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><pat
 
 
 def chat_box(full: bool) -> str:
-    link = '' if full else '<a class="small" href="/chat">full chat →</a>'
+    url = os.environ.get("CHAT_URL", "").strip() or "/chat"
+    link = '' if full else f'<a class="small" href="{html.escape(url)}">full chat →</a>'
     return (f'<div id="chat" class="card wide{" full" if full else ""}"><div class="chat-head"><h2>Chat</h2>{link}'
             '<button type="button" class="clear link small">clear</button></div>'
             '<div class="log" aria-live="polite"></div>'
@@ -1446,12 +1495,24 @@ def chat_box(full: bool) -> str:
             '<button type="button" class="stop" hidden>Stop</button><button class="primary">Send</button></div></form></div>')
 
 
-def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
+def render_page(st: dict, known_repos: list[str], chat: bool = True, owner: str = "") -> str:
     e = html.escape
     state = st["model"]["state"]
-    if known_repos:
-        options = "".join(f'<option value="{e(r)}">{e(r)}</option>' for r in known_repos)
-        repo_input = f'<select name="repo" required aria-label="Repository">{options}</select>'
+    repos = list(known_repos)
+    if owner:                                            # repos the agent worked on, from the history
+        have = {r.lower() for r in repos}
+        for r in (st.get("totals") or {}).get("repos", []):
+            name = str(r.get("repo") or "")
+            full = name if "/" in name else f"{owner}/{name}"
+            if REPO_RE.fullmatch(full) and full.split("/")[0].lower() == owner.lower() and full.lower() not in have:
+                repos.append(full)
+                have.add(full.lower())
+    if repos:
+        options = "".join(f'<option value="{e(r)}">{e(r)}</option>' for r in repos)
+        repo_input = (f'<div class="repo-pick"><select name="repo" required aria-label="Repository">{options}</select>'
+                      + (f'<input name="new_repo" placeholder="new repo name" aria-label="New repository" hidden>'
+                         f'<button type="button" class="mini" id="repo-new" title="A repo that is not in the list">'
+                         f'+ repo</button>' if owner else '') + '</div>')
     else:
         repo_input = '<input name="repo" placeholder="owner/repo" required aria-label="Repository">'
     return (
@@ -1463,7 +1524,7 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         '<section id="controls"><div class="card wide">'
         '<div class="card-head ctl"><h2>Queue a job</h2>'
         '<button type="button" id="lock" class="link small">lock</button></div>'
-        '<form id="add" autocomplete="off"><div class="fields">'
+        f'<form id="add" autocomplete="off" data-owner="{e(owner)}"><div class="fields">'
         f'{repo_input}'
         '<input name="ref" placeholder="branch (default)" aria-label="Branch">'
         '<input name="note" placeholder="note" maxlength="200" aria-label="Note"></div>'
@@ -1586,7 +1647,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 st = app.status()
                 if path == "/partial":
                     return self.send(200, render_live(st), "text/html; charset=utf-8")
-                return self.send(200, render_page(st, st["jobs"]["repos"], gw.enabled), "text/html; charset=utf-8")
+                return self.send(200, render_page(st, st["jobs"]["repos"], gw.enabled,
+                                                        sorted(app.job_owners)[0] if len(app.job_owners) == 1 else ""), "text/html; charset=utf-8")
             if path == "/chat":
                 return self.send(200, render_chat_page(), "text/html; charset=utf-8")
             if path.startswith("/static/") and path[8:] in STATIC_FILES:
