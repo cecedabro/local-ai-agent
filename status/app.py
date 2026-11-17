@@ -118,6 +118,8 @@ class App:
         self.waiters: list[dict] = []
         self.probe = {"t": None, "state": "unknown"}
         self.metrics_error: str | None = None
+        self.n_ctx: int | None = None
+        self.props_t: float | None = None
 
     # ------------------------------------------------------------------ helpers
     def meta(self, key: str, default: object = None) -> object:
@@ -463,9 +465,38 @@ class App:
             "hourly": hourly,
         }
 
+    # ------------------------------------------------------------------ n_ctx
+    def context_size(self) -> int | None:
+        if self.n_ctx is not None:
+            return self.n_ctx
+        if not self.root:
+            return None
+        now = self.clock()
+        if self.props_t is not None and now - self.props_t < self.probe_interval:
+            return None
+        req = urllib.request.Request(self.root + "/props")
+        if self.llama_key:
+            req.add_header("Authorization", f"Bearer {self.llama_key}")
+        try:
+            with urllib.request.urlopen(req, timeout=2) as r:
+                data = json.loads(r.read().decode())
+        except Exception:
+            self.props_t = now
+            return None
+        d = data.get("default_generation_settings")
+        if isinstance(d, dict):
+            ctx = d.get("n_ctx")
+        else:
+            ctx = data.get("n_ctx")
+        if isinstance(ctx, int) and not isinstance(ctx, bool):
+            self.n_ctx = ctx
+        self.props_t = now
+        return self.n_ctx
+
     # ------------------------------------------------------------------ status
     def status(self) -> dict:
         model = self.model()                              # network: outside the lock
+        self.context_size()                               # network: outside the lock
         with self.lock:
             self.expire_lease()
             self.expire_jobs()
@@ -775,6 +806,7 @@ class Gateway:
         last24 = {c: (n, g or 0) for c, n, g in day}
         return {
             "enabled": self.enabled,
+            "n_ctx": self.app.n_ctx,
             "clients": sorted({n for n, _ in self.clients.values()} | {"chat"}),
             "waiting": waiting,
             "running": running,
