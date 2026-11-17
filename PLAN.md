@@ -18,7 +18,7 @@ Rules for every task:
 
 - [x] T01: Accounts table, password hashing and the first admin (see "T01 details" in PLAN.md)
   accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_password_stored_with_scrypt
-- [ ] T02: Login, logout and sessions (see "T02 details" in PLAN.md)
+- [~] T02: Login, logout and sessions (see "T02 details" in PLAN.md) — skipped: agent made no changes
   accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_login_logout_and_cookie -k test_session_expires -k test_seed_only_when_empty -k NoAccountsTest
 - [ ] T03: Login rate limit (see "T03 details" in PLAN.md)
   accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_rate_limit
