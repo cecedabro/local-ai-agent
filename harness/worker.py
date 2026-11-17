@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import shlex
+import signal
 import socket
 import subprocess
 import sys
@@ -142,6 +143,7 @@ def run_job(client: Client, job: dict, args: argparse.Namespace) -> None:
     env = {**os.environ, "AGENT_JOB_ID": str(jid)}
     proc = subprocess.Popen(cmd, cwd=path, env=env)
     stopping = threading.Event()
+    killed = threading.Event()
 
     def beat() -> None:
         while proc.poll() is None:
@@ -151,6 +153,10 @@ def run_job(client: Client, job: dict, args: argparse.Namespace) -> None:
                 (path / ".agent").mkdir(exist_ok=True)
                 (path / ".agent" / "STOP").touch()
                 stopping.set()
+            if res and res.get("now") and not killed.is_set():
+                print(f"[{now()}] job #{jid}: stop now requested; interrupting agent-loop")
+                killed.set()
+                proc.send_signal(signal.SIGINT)   # agent-loop cleans up: kills the agent, frees the model and PC
             for _ in range(int(args.heartbeat * 10)):
                 if proc.poll() is not None:
                     return
@@ -175,7 +181,8 @@ def run_job(client: Client, job: dict, args: argparse.Namespace) -> None:
     t.join(timeout=2)
     (path / ".agent" / "STOP").unlink(missing_ok=True)
     state = "cancelled" if stopping.is_set() else ("done" if code == 0 else "failed")
-    detail = "stopped from the status page" if stopping.is_set() else ("" if code == 0 else f"agent-loop exited {code}")
+    detail = ("stopped now from the status page" if killed.is_set() else "stopped from the status page") \
+        if stopping.is_set() else ("" if code == 0 else f"agent-loop exited {code}")
     print(f"[{now()}] job #{jid} {state} {detail}".rstrip())
     client.post(f"/api/jobs/{jid}/finish", {"state": state, "exit_code": code, "detail": detail})
 

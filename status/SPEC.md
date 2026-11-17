@@ -242,12 +242,16 @@ A job: `id`, `repo` (`owner/name`), `ref` (branch, `""` = the repo's default), `
   `owner/name` (letters, digits, `_.-`); `ref` letters, digits, `._/-`. Else **400**.
 - `POST /api/jobs/claim` `{"worker"}` → `{"job": job | null}`. Null while any job is running
   (one GPU) or none is queued; else the first queued job becomes `running`.
-- `POST /api/jobs/<id>/heartbeat` → `{"cancel": bool}`. Refreshes `seen`; a `lost` job comes
-  back to `running`. `cancel` is true once Stop was pressed or the job is no longer running.
+- `POST /api/jobs/<id>/heartbeat` → `{"cancel": bool}`, plus `"now": true` after a hard stop.
+  Refreshes `seen`; a `lost` job comes back to `running`. `cancel` is true once Stop was pressed or
+  the job is no longer running. A heartbeat also counts as its worker being seen (a busy worker
+  doesn't ping), so the page doesn't show "no worker" during a job.
 - `POST /api/jobs/<id>/finish` `{"state": "done"|"failed"|"cancelled", "detail"?, "exit_code"?}`;
   only for `running`/`lost` jobs, else **409**.
-- `POST /api/jobs/<id>/cancel`: queued → `cancelled`; running → `stopping` (the worker
-  touches `.agent/STOP`, so the run ends after its current task); else **409**.
+- `POST /api/jobs/<id>/cancel` `{"now"?: bool}`: queued → `cancelled`; running → `stopping`
+  (the worker touches `.agent/STOP`, so the run ends after its current task); with `"now": true`
+  also `stopping_now` (the worker interrupts agent-loop, which kills the agent and frees the model
+  and the PC). The page's Stop button sends `now` after a confirm. Else **409**.
 - `POST /api/jobs/<id>/move` `{"to": "top"|"up"|"down"|"bottom"}`: queued only (**409**),
   unknown `to` → **400**.
 - `POST /api/jobs/<id>/requeue`: a finished job is queued again as a new job; **409** while
@@ -272,8 +276,13 @@ lists of the workers in `workers` and the `repo` of every stored job, without re
 owners when `JOB_OWNERS` is set.
 
 Page: the add-job form picks the repo from a `<select name="repo">` with one `<option>` per
-`jobs.repos` entry (value and text `owner/name`), in that order. When `jobs.repos` is empty it
-shows `<input name="repo">` instead, as before.
+`jobs.repos` entry (value and text `owner/name`), in that order. With exactly one `JOB_OWNERS`
+owner, repos from `totals.repos` follow (as `owner/name`), and a `+ repo` button swaps the list
+for a free name field (the owner is prefixed). When the list is empty it shows
+`<input name="repo">` instead, as before.
+
+Page details: favicon `/static/icon.svg` (the orb); the "full chat" link goes to `CHAT_URL`
+(default `/chat`), the public chat app's address.
 
 ## 9. Token speed
 
