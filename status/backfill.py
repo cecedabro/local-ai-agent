@@ -198,7 +198,7 @@ def opencode_tokens(db_path: Path) -> list[dict]:
     """Read OpenCode's SQLite DB and return per-day token summaries."""
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     cur = con.execute(
-        "SELECT data FROM message WHERE role='assistant'"
+        "SELECT data FROM message WHERE json_valid(data) AND json_extract(data, '$.role') = 'assistant'"
     )
     day_sum: dict[str, dict] = {}
     for (raw,) in cur:
