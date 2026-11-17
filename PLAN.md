@@ -17,7 +17,7 @@ Rules for every task:
   `chat/requirements.txt`, `Makefile`, `.github/`, `docs/`, `status/`, `harness/`.
 - Your own extra tests go in `chat/tests/test_unit_*.py`.
 
-- [ ] T01: App skeleton, settings, database and first admin (see "T01 details")
+- [x] T01: App skeleton, settings, database and first admin (see "T01 details")
   accept: make chat/.venv/.stamp && cd chat && PYTHONPATH=. .venv/bin/python -c "import tempfile; from fastapi.testclient import TestClient; from coder.app import create_app; c = TestClient(create_app({'DATA_DIR': tempfile.mkdtemp()})); assert c.get('/healthz').json() == {'ok': True}"
 - [ ] T02: Login, logout, sessions, CSRF header, theme and rate limit (see "T02 details")
   accept: make chat-test K="TestAuth or TestRateLimit or healthz or seeded"
