@@ -934,7 +934,7 @@ BADGE = {"ready": "ok", "loading": "warn", "unreachable": "bad", "unknown": "off
 def render_live(st: dict) -> str:
     e = html.escape
     now = st["now"]
-    run = next((r for r in st["runs"] if r["state"] in ("running", "paused")), None)
+    run = next((r for r in st["runs"] if r["state"] == "running"), None) or next((r for r in st["runs"] if r["state"] == "paused"), None)
     tk = st["tokens"]
     parts: list[str] = []
 
@@ -948,11 +948,11 @@ def render_live(st: dict) -> str:
         pct = int(100 * finished / total) if total else 0
         if run["state"] == "running":
             if run.get("pause"):
-                state_cls, state_label, run_actions = "warn", "pausing after this task", f'<button class="ctl" data-run="now" data-act="resume" title="Resume this run">Resume</button>'
+                state_cls, state_label, run_actions = "warn", "pausing after this task", f'<button class="ctl" data-run="{e(run["run_id"])}" data-act="resume" title="Resume this run">Resume</button>'
             else:
                 state_cls, state_label, run_actions = "ok", "running", f'<button class="ctl" data-run="{e(run["run_id"])}" data-act="pause" title="Pause this run">Pause</button>'
         else:
-            state_cls, state_label, run_actions = "warn", "paused", '<span class="pill warn">paused</span><button class="ctl" data-run="now" data-act="resume" title="Resume this run">Resume</button>'
+            state_cls, state_label, run_actions = "warn", "paused", f'<span class="pill warn">paused</span><button class="ctl" data-run="{e(run["run_id"])}" data-act="resume" title="Resume this run">Resume</button>'
         parts.append(f'<div class="now-head"><span class="repo">{e(run["repo"])}</span>'
                      f'<code>{e(run["branch"])}</code><span class="pill {state_cls}">{e(state_label)}</span>'
                      f'<span class="muted">running {e(dur(run["started"], now))}'
@@ -965,7 +965,7 @@ def render_live(st: dict) -> str:
             between = ('Between tasks (checking, pushing or waiting for CI).' if run["state"] == "running"
                        else 'Pausing after this task.')
             parts.append(f'<p class="muted small">{between}</p>')
-        parts.append(f'<div class="progress live" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
+        parts.append(f'<div class="progress live{" paused" if run.get("pause") else ""}" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
                      f'<p class="muted small">{finished} of {total} plan tasks · {run["done"]} done, '
                      f'{run["skipped"]} skipped this run · last event {e(ago(run["last_event"], now))}</p>')
         if tk.get("busy") is not None:
@@ -1262,9 +1262,10 @@ async function refresh(){
 }
 if(document.getElementById('live'))setInterval(refresh,5000);  // same data as /api/status, rendered on the server
 document.addEventListener('click',async ev=>{
-  const b=ev.target.closest('button[data-job]');if(!b)return;
-  if(b.dataset.act==='cancel'&&!confirm(b.closest('.running')?'Stop this run after its current task?':'Remove this job from the queue?'))return;
-  b.disabled=true;await post('/api/jobs/'+b.dataset.job+'/'+b.dataset.act,b.dataset.to?{to:b.dataset.to}:{});refresh();
+  const b=ev.target.closest('button[data-run]');if(b){ev.preventDefault();b.disabled=true;await post('/api/runs/'+encodeURIComponent(b.dataset.run)+'/'+b.dataset.act);refresh();return}
+  const j=ev.target.closest('button[data-job]');if(!j)return;
+  if(j.dataset.act==='cancel'&&!confirm(j.closest('.running')?'Stop this run after its current task?':'Remove this job from the queue?'))return;
+  j.disabled=true;await post('/api/jobs/'+j.dataset.job+'/'+j.dataset.act,j.dataset.to?{to:j.dataset.to}:{});refresh();
 });
 document.getElementById('unlock')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const t=ev.target.token.value.trim();
