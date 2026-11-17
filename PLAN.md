@@ -1,48 +1,190 @@
-# PLAN: history import, repo dropdown, context size, pause
+# PLAN: Accounts and login
 
-Read `status/SPEC.md` §8 ("Repo list" bullet + the page paragraph after it), §11 (`n_ctx`), §12 and
-§13 before you start. The judges are `status/tests/test_accept_history.py` and
-`status/tests/test_accept_pause.py`: protected, change the code, never the tests. Run the task's
-`accept:` command yourself before you finish and read the first failing assertion.
+People log in with a name and password instead of pasting the status token; machines keep
+their keys. Read `status/SPEC.md` §14 first. Judge: `status/tests/test_accept_accounts.py`
+(protected: change the code, never the test).
 
 Rules for every task:
 - This run is non-interactive: nobody reads your questions. Never end with a question or a plan;
   make the edits, run the accept command, fix what fails, then stop.
+- Each task has a short title below and its exact steps under "Txx details" further down this
+  file. Read only your task's details (`grep -n "T03 details" PLAN.md`, then read that block).
 - Never read a large file whole (`status/app.py` is ~1700 lines). Use `grep -n` and read only the
   lines you need (`sed -n '120,180p' status/app.py`).
-- Python 3.11, standard library only. `status/app.py` stays one file (it is ~1500 lines: use
-  `grep -n` to find the function named in the task instead of reading it all).
-  `status/backfill.py` is a separate new script.
+- Python 3.11, standard library only. No f-string with a backslash inside `{...}`.
 - Keep the old tests green: `make check` and `python3 -m unittest -q status/tests/test_contract.py`.
-- No f-string with a backslash inside `{...}` (breaks Python 3.11).
-- Do not touch `harness/`, `status/static/`, `Makefile`, `status/SPEC.md` or any test file
-  except your own `status/tests/test_unit_*.py`.
+- Do not touch `harness/`, `status/static/`, `Makefile`, `status/SPEC.md` or any test file except
+  your own `status/tests/test_unit_*.py`.
 
-- [x] T01: POST /api/import, events only (SPEC §12.1). In status/app.py: (1) SCHEMA: add `create table if not exists imported(key text primary key);`. (2) do_POST checks `n > MAX_BODY` before routing: compute `path` first and use a limit of `IMPORT_MAX = 8 * 1024 * 1024` when path is `/api/import`, else MAX_BODY. (3) Split the tally/daily part of `App.add_event` into a helper `App._count(body, t)` that takes the event time `t` (epoch seconds): it uses `day_of(t)` for the daily row, sets tally `last` to `max(coalesce(last, 0), t)`, and sets meta `since` when it is None or later than `t`; `add_event` calls it with `self.clock()`. (4) New `App.import_history(body) -> tuple[int, dict]`: validate everything first with a helper `import_error(body) -> str | None` (events must be a list ≤ 5000 of dicts; `key` non-empty str ≤ 200, `repo` non-empty str, `kind` in run_started/task_done/task_skipped/run_finished, `ts` parsed by `dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))` with a non-None tzinfo; error text like "events[3]: bad ts"); then under `self.lock`, for each event `insert or ignore into imported(key)`: if a row was inserted (`cursor.rowcount == 1`) call `_count(event, t)` and count it as added, else as skipped; commit once. Imported events are NOT inserted into the events table. Answer 200 `{"events_added", "events_skipped", "token_days": 0, "token_days_ignored": 0}`. Route `/api/import` in do_POST to it. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k test_events_count_once -k test_daily_uses_event_day -k test_since_keeps_earliest -k test_keys_survive_restart
-- [x] T02: The "tokens" list of POST /api/import (SPEC §12.1). (1) SCHEMA: `create table if not exists imported_tokens(day text, source text, gen int, prompt int, primary key(day, source));`. (2) In `App.sample_metrics`, when it stores a sample and `self.meta("first_sample_day")` is None, `self.set_meta("first_sample_day", day)`. (3) Extend `import_error`: tokens must be a list ≤ 5000 of dicts with `day` matching `^\d{4}-\d{2}-\d{2}$` that `dt.date.fromisoformat` accepts, `source` non-empty str ≤ 50, `generated` and `prompt` ints ≥ 0 (reject bool and float). (4) In `import_history`: rows with `day >= first_sample_day` (string compare) count as `token_days_ignored`; the others `insert or replace` into imported_tokens and count as `token_days`. (5) In `App.tokens()`: `generated_total` and `prompt_total` add `sum(gen)` / `sum(prompt)` of imported_tokens; leave every tok/s value, `generated_24h` and `hourly` live-only. (6) Where `/api/status` builds `daily`, add the imported `gen` of each day to that day's `generated`. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k ImportTest -k ImportWithLiveTokensTest
-- [x] T03: Repo list for the dropdown (SPEC §8). (1) Helper `clean_repos(value, owners) -> list[str]`: keep strings matching the same owner/name pattern `add_job` uses (find it with `grep -n "owner/name" status/app.py`), drop other owners when `owners` (= `self.job_owners`) is non-empty, de-duplicate, at most 500. (2) `App.ping` and `App.claim` both rebuild `self.workers[worker]` today and would lose the list: keep the old entry's `"repos"` unless the cleaned new list is non-empty. (3) In `App.status()` where `"workers"` is built, add `"repos"`: sorted with `key=str.lower`, de-duplicated union of the repos of the workers listed in `workers` and the `repo` of every job row in the jobs table, owner-filtered the same way. (4) `render_page`: take the repos from `st["jobs"]["repos"]` (in do_GET, stop computing `repos` from the job lists); keep the field as the first child of `<div class="fields">` in the add-job form; when the list is non-empty render `<select name="repo" required aria-label="Repository">` with `<option value="X">X</option>` per repo (escape X), else `<input name="repo" placeholder="owner/repo" required aria-label="Repository">` without the datalist. The page script reads `f.repo.value`, which works for both.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Repos
-- [x] T04: `gateway.n_ctx` (SPEC §11). In `App.__init__` add `self.n_ctx = None` and `self.props_t = None`. New method `App.context_size() -> int | None` modelled on `App.model()`: returns `self.n_ctx` when known; otherwise, when `self.root` is set and (`self.props_t` is None or `self.clock() - self.props_t >= self.probe_interval`), set `props_t` and GET `self.root + "/props"` with `Authorization: Bearer <llama_key>` (when set) and a 2 s timeout; take `default_generation_settings.n_ctx`, else a top-level `n_ctx`; any error leaves it None. Call it in `App.status()` next to `self.model()` (outside the lock) and put the value in the gateway dict as `"n_ctx"` (null when the gateway is off; check what the gateway dict looks like then).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Nctx
-- [x] T05: Create status/backfill.py (stdlib only, module docstring with the usage line from SPEC §12.2) with `git_events(repo_dir: Path, name: str, gh=None) -> list[dict]`. Run `git -C <repo_dir> log --all --format=%x1e%H%x1f%an%x1f%aI%x1f%s --shortstat` and split records on `\x1e`; each record's first line is sha/author/date/subject (split on `\x1f`), the rest may hold the shortstat line (`3 files changed, 10 insertions(+), 2 deletions(-)`; parse insertions/deletions with regexes, 0 when missing). Only author `local-agent`. Subject `^(T\d+): (.*)` → task_done (key `name:sha`, title cut to 200, commit `sha[:7]`, ts = author date converted to UTC with `.astimezone(dt.timezone.utc).isoformat(timespec="seconds")`). attempts = highest N over `repo_dir.glob(".agent/logs/<id>-a*.log")` and `repo_dir.glob(".agent/logs-*/<id>-a*.log")` (regex `-a(\d+)\.log$`), 1 if none. Subject exactly `agent run report` → run_started with key `name:run:sha`. PRs: `gh(["pr", "list", "--state", "all", "--limit", "500", "--json", "number,headRefName,createdAt,url"], repo_dir)`; default gh runs the `gh` CLI with subprocess (cwd=repo_dir, timeout 60) and returns `"[]"` on any failure; parse JSON (not a list → none); `headRefName` starting with `agent/` → run_finished with key `name:pr:<number>`, `pr` = url, ts = createdAt as `+00:00`. Return sorted by (ts, key).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillGitTest
-- [x] T06: Add `opencode_tokens(db_path: Path) -> list[dict]` to status/backfill.py (SPEC §12.2): `sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)`, `select data from message`, skip rows whose data is not valid JSON or has no dict `tokens` or whose `role` is not `assistant`; day = UTC date of `time.created / 1000`; generated = output + reasoning, prompt = input (missing → 0). Return `[{"day", "source": "opencode", "generated", "prompt"}]` sorted by day. Close the connection.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillOpencodeTest
-- [x] T08: Pause API (SPEC §13). (1) Add "paused" and "resumed" to `KINDS`. (2) SCHEMA: `create table if not exists run_control(run_id text primary key, pause int);`. (3) In do_POST, before the final 404, match `re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)` and decode the id with `urllib.parse.unquote` (add `import urllib.parse`). (4) New `App.run_control(run_id, act) -> tuple[int, dict]`: control → 200 `{"pause": bool}` from the table (unknown → false); pause/resume → 404 when no event has that run_id, 409 when the run has a `run_finished` event, else upsert the row (pause 1/0) and answer 200 `{"run_id", "pause"}`. (5) In `App.add_event`, a `run_finished` event deletes the run's run_control row.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest.test_errors -k test_url_encoded_run_id
-- [x] T09: Paused state on runs (SPEC §13). Where `App.status()` builds each run (grep `STALE_AFTER`): remember the kind of the latest `paused`/`resumed` event of the run; `state` = "finished" if it has run_finished, else "paused" if that latest kind is "paused", else the old running/stale rule. Add `"pause": bool` to each run from run_control (one query for all runs before the loop).
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest
-- [x] T10: Pause buttons on the page (SPEC §13). In `render_live`, the Now card's run is the first run with state "running", else the first with state "paused"; for a paused run say "paused" instead of "running <duration>" in the header. The progress bar `<div class="progress live" ...>` must use class `progress paused` instead of `progress live` for a paused run (the stylesheet already has both). Under the header add the controls exactly as SPEC §13 shows (class `ctl` on the buttons; `html.escape` the run_id in the attributes). In the page `SCRIPT` (grep `button[data-job]`), add a click handler for `button[data-run]` that posts `{}` to `'/api/runs/'+encodeURIComponent(b.dataset.run)+'/'+b.dataset.act` with the existing `post()` helper and then calls `refresh()`.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py
+- [ ] T01: Accounts table, password hashing and the first admin (see "T01 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_password_stored_with_scrypt
+- [ ] T02: Login, logout and sessions (see "T02 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_login_logout_and_cookie -k test_session_expires -k test_seed_only_when_empty -k NoAccountsTest
+- [ ] T03: Login rate limit (see "T03 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_rate_limit
+- [ ] T04: Login required for pages and the API (see "T04 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_gates && python3 -m unittest -q status/tests/test_contract.py
+- [ ] T05: Invites (see "T05 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k InviteTest
+- [ ] T06: Rights for the queue and the chat (see "T06 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k RightsTest
+- [ ] T07: Account admin API (see "T07 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k AdminTest -k test_change_password
+- [ ] T08: Pages for login, invites and people (see "T08 details" in PLAN.md)
+  accept: python3 -m unittest -q status/tests/test_accept_accounts.py
+- [ ] T09: README for accounts (see "T09 details" in PLAN.md)
+  accept: make status-test && grep -q ADMIN_PASSWORD status/README.md && grep -q "/people" status/README.md
 
-## Follow-up (after review)
+---
 
-T01 and T02 (`POST /api/import`) are done; `status/backfill.py` already has `git_events`,
-`opencode_tokens`, `send` and `main`. Two small things are left.
+## T01 details
 
-- [x] T07: Fix `send()` and the end of `main()` in status/backfill.py (find them with `grep -n "^def send\|^def main\|if all_events" status/backfill.py`; the file is ~300 lines, read only those parts). (1) `send()` posts to `url` itself: it must post to `url.rstrip("/") + "/api/import"`. (2) `send()` makes no request when `events` is empty: build the batches as `batches = [events[i:i + 1000] for i in range(0, len(events), 1000)] or [[]]` and send one request per batch, with `"tokens": tokens` only in the first request's body. (3) Use `urllib.request.urlopen(req, timeout=60)`; keep raising on HTTP errors. (4) In `main()`, call `send()` when there are events OR tokens (now it only checks events) and print per answer `"import: {events_added} added, {events_skipped} skipped, {token_days} token days"`. Do not touch any other function.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py
-- [x] T11: Append to status/README.md (do not rewrite what is there). (1) A section `## History import` with three short paragraphs: what `status/backfill.py` reads (the agent's commits in every repo under `~/repos` via git, PRs via `gh`, token counts from OpenCode's database `~/.local/share/opencode/opencode.db`); how to run it on the devbox, as a fenced bash block with `python3 status/backfill.py --dry-run` and then `python3 status/backfill.py` (STATUS_URL and STATUS_TOKEN are already set there); and that running it twice is safe (events are keyed, token days are replaced). (2) A section `## Pause` with two sentences: Pause on the Now card makes the loop stop after its current task and free the model and the PC; Resume continues it (needs the devbox image with the new agent-loop). (3) In the existing endpoints code block (grep `/api/jobs/3/cancel`), add one curl line for `POST /api/import` with body `{"events":[],"tokens":[]}` and one for `POST /api/runs/<run_id>/pause` with body `{}`, in the same style as the lines around them.
-  accept: make status-test && grep -q "## History import" status/README.md && grep -q backfill.py status/README.md && grep -q /api/import status/README.md && grep -q /api/runs/ status/README.md
+In `status/app.py`:
+1. Add `import hashlib` (if missing) and `import secrets`. Constants near `MAX_BODY`:
+   `RIGHTS = ("admin", "chat", "evidence", "queue")`, `NAME_RE = re.compile(r"[a-z0-9][a-z0-9_.-]{1,31}")`,
+   `SESSION_DAYS = 30`, `INVITE_DAYS = 7`, `MIN_PASSWORD = 10`.
+2. `SCHEMA` (grep `SCHEMA = `): add the three tables of SPEC §14.2 exactly
+   (`users`, `sessions`, `invites`).
+3. Module functions (before `class App`):
+   - `hash_password(pw: str) -> str`: 16 random bytes salt (`secrets.token_bytes(16)`),
+     `hashlib.scrypt(pw.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)`, return
+     `f"scrypt$16384$8$1${salt.hex()}${digest.hex()}"`.
+   - `check_password(pw: str, stored: str) -> bool`: split on `$`, recompute with the stored
+     n, r, p and salt, compare with `hmac.compare_digest`; any parse error → False.
+   - `norm_rights(rights) -> list[str] | None`: None unless a list of strings all in `RIGHTS`;
+     if `"admin"` is in it return `list(RIGHTS)`; else the sorted unique list.
+   - `sha(text: str) -> str`: `hashlib.sha256(text.encode()).hexdigest()`.
+4. `make_server(...)` and `App.__init__` get a new keyword `admin: tuple[str, str] | None = None`
+   (pass it through). In `App.__init__`, after the schema is created: when `admin` is given and
+   `select count(*) from users` is 0, insert the admin with `hash_password`, rights
+   `"admin,chat,evidence,queue"` (store rights comma-separated), `created = clock()`; commit.
+5. `main()` (grep `def main`): pass
+   `admin=(os.environ.get("ADMIN_USER", "cedric"), os.environ["ADMIN_PASSWORD"]) if os.environ.get("ADMIN_PASSWORD") else None`.
+
+## T02 details
+
+1. `App.accounts_exist() -> bool`: `select 1 from users limit 1`.
+2. `App.session_user(cookie_header: str) -> dict | None`: parse with
+   `http.cookies.SimpleCookie` (import `http.cookies`; ignore `CookieError`), take
+   `agent_session`, look up `sessions` by `sha(value)`; None if missing, if
+   `clock() - seen > SESSION_DAYS * 86400`, or if the user is missing or disabled. Otherwise
+   update `sessions.seen` and `users.last_seen` to `clock()` and return
+   `{"name": ..., "rights": sorted list}`.
+3. `App.login(name, password, addr) -> tuple[int, dict, str | None]` (the third value is the
+   new session id): user exists, not disabled and `check_password` → create a session
+   (`secrets.token_urlsafe(32)`, store `sha(id)`, name, created, seen) and return
+   `200, {"name", "rights"}, id`; else `401, {"error": "wrong name or password"}, None`.
+   Leave `addr` unused for now (T03 uses it).
+4. `App.logout(cookie_header)`: delete the session row (if any).
+5. In the handler (`make_server`, class `Handler`): add a helper
+   `send_cookie(code, body, session_id)` like `send` that adds the header
+   `Set-Cookie: agent_session=<id>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`,
+   or `agent_session=; Path=/; Max-Age=0` when `session_id` is `""` (logout).
+6. Routes, before the token check in `do_POST` (grep `def do_POST`): `POST /login` (JSON body
+   `name`, `password`; use `self.client_address[0]` as `addr`) and `POST /logout` (always 200).
+   In `do_GET`: `GET /api/me` → 200 `session_user(...)` or 401; `GET /login` → a minimal page
+   for now: `render_login_page()` returning HTML with `<form id="login">` and inputs `name` and
+   `password` (T08 makes it nice).
+
+## T03 details
+
+1. In `App.__init__`: `self.failures: dict[str, list[float]] = {}` (client address → times of
+   failed logins).
+2. `App.limited(addr) -> bool`: drop times older than 15 minutes (`clock() - t >= 900`);
+   True when 5 or more remain.
+3. `App.failed(addr)`: append `clock()`.
+4. In `App.login`: if `limited(addr)` → `429, {"error": "too many attempts, try again later"}, None`
+   before checking the password; on a wrong password call `failed(addr)`.
+
+## T04 details
+
+The gate applies only when `app.accounts_exist()`; without accounts nothing changes.
+In the handler add `def who(self) -> dict | None` = `app.session_user(self.headers.get("Cookie", ""))`
+and `def machine(self) -> bool` = `app.authorized(self.headers.get("Authorization", ""))`.
+1. `do_GET`: always allow `/healthz`, `/static/...`, `/login`, `/invite`. For `/`, `/chat`
+   (and later `/people`): if accounts exist and not `machine()` and `who()` is None → send
+   303 with header `Location: /login` (write a small `redirect(location)` helper). For
+   `/api/status`, `/api/status/head`, `/partial`, `/api/me`: same check but answer 401 JSON.
+2. `do_POST`: keep the existing token check for every machine endpoint (SPEC §14.4 last row).
+   Do NOT change the existing behaviour for requests with the status token.
+3. `GET /invite` → a minimal page for now: `render_invite_page()` with `<form id="accept">`
+   and two password inputs `password` and `password2` (T08 makes it nice).
+4. Check `python3 -m unittest -q status/tests/test_contract.py` still passes (it runs without
+   accounts).
+
+## T05 details
+
+1. `App.invite(by: dict, body) -> tuple[int, dict]`: 403 unless `"admin"` in `by["rights"]`;
+   400 unless `NAME_RE.fullmatch(name)` and `norm_rights(rights)` is not None and non-empty;
+   409 if a user with that name exists or an invite with that name is unused and not expired.
+   Create `token = secrets.token_urlsafe(32)`, store `sha(token)`, name, rights (comma-joined),
+   created, `expires = clock() + INVITE_DAYS * 86400`. Return
+   `201, {"url": "/invite#" + token, "expires": iso(expires)}`.
+2. `App.accept(body, addr) -> tuple[int, dict, str | None]`: if `limited(addr)` → 429; find the
+   invite by `sha(token)`: missing → 404 (and `failed(addr)`); used or expired → 410 (and
+   `failed(addr)`); password shorter than `MIN_PASSWORD` → 400; else insert the user, mark the
+   invite used, create a session like `login` does and return `200, {"name", "rights"}, id`.
+3. Routes in `do_POST`, before the token check: `POST /api/invites` (needs `who()`; logged out
+   and no token → 401) and `POST /api/invites/accept` (no login). (`GET /invite` exists since T04.)
+
+## T06 details
+
+1. Queue rights: the job routes and `/api/runs/<id>/(pause|resume)` in `do_POST` currently
+   require the status token. Allow them also when `who()` has `"queue"` in its rights; a
+   logged-in user without it → 403; nobody → 401. `/api/runs/<id>/control` stays token-only.
+2. Gateway (`Gateway.client_for`, and the handler's `gateway()` method): when the
+   `Authorization` key matches nothing, look at the session: with `"chat"` →
+   client `("chat:" + name, "interactive")`; logged in without it → 403 in OpenAI's error shape
+   `{"error": {"message": "no chat right"}}`; nobody → 401 as now.
+3. Machine-only endpoints never accept a session (SPEC §14.4 last row).
+
+## T07 details
+
+All need `"admin"` (else 403; logged out → 401). Times as ISO with `iso()`.
+1. `GET /api/users` → list of `{"name", "rights", "created", "last_seen", "disabled"}` sorted
+   by name (`disabled` as bool, `rights` as sorted list).
+2. `POST /api/users/<name>` with optional `rights` (→ `norm_rights`, None → 400) and
+   `disabled` (bool): unknown user → 404; for the admin's own account, dropping `"admin"` or
+   `disabled: true` → 409. Disabling deletes that user's sessions. Answer 200 with the user.
+3. `POST /api/users/<name>/delete`: own account → 409; unknown → 404; else delete the user and
+   their sessions, 200 `{"ok": true}`.
+4. `POST /api/me/password` (any logged-in user) `{"old", "new"}`: wrong old → 403; new shorter
+   than `MIN_PASSWORD` → 400; else store `hash_password(new)`, 200 `{"ok": true}`.
+Use `re.fullmatch(r"/api/users/([a-z0-9_.-]+)(/delete)?", path)` in `do_POST`.
+
+## T08 details
+
+Pages (server-rendered like `render_page`; use the existing `HEAD`, `DEFS`, `card` classes; no
+new CSS, the stylesheet is human-owned):
+1. `render_login_page()`: header with the title and the theme switch (`theme_switch()`), one
+   `card` with `<form id="login">` (inputs `name` with `autocomplete="username"`, `password`
+   type password with `autocomplete="current-password"`, a `primary` button "Log in") and
+   `<div id="msg" class="small muted">`. Script: on submit `fetch('/login', {method: 'POST',
+   headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, password})})`; on
+   200 `location.href = '/'`; on 429 show "Too many attempts, try again in 15 minutes."; else
+   "Wrong name or password.".
+2. `render_invite_page()`: same frame, `<form id="accept">` with `password` and `password2`
+   (both `autocomplete="new-password"`); the script checks they match and are ≥ 10 characters,
+   posts `{token: location.hash.slice(1), password}` to `/api/invites/accept`, then goes to `/`.
+3. `render_page` and `render_chat_page` get a `user: dict | None` parameter (pass `who()` from
+   `do_GET`). When `user` is set: no `<form id="unlock">`; the header shows
+   `<span class="muted small">{name}</span>`, a link `<a href="/people">People</a>` only for
+   admins, and `<button type="button" id="logout" class="link small">Log out</button>` (script:
+   POST `/logout`, then go to `/login`); the add-job card only with `"queue"`; the chat card only
+   with `"chat"`; render `<body>` without the `locked` class.
+4. Chat script (grep `CHAT_SCRIPT`): send the `Authorization` header only when `tok()` is
+   non-empty.
+5. `GET /people` (admin; logged out → 303 /login; else 403): `render_people_page(users)` with a
+   table of accounts (name, rights, last seen, disabled) with buttons
+   `data-user="<name>" data-act="disable|enable|delete"` and `<form id="invite">` (input `name`,
+   one checkbox per right in `RIGHTS` with `name="rights" value="<right>"`) whose script posts to
+   `/api/invites` and shows `location.origin + url` in a `<code>` the admin can copy.
+   Escape every name with `html.escape`.
+
+## T09 details
+
+In `status/README.md` (append; don't rewrite): a section `## Accounts` saying people log in at
+`/login`; the first admin comes from `ADMIN_USER` (default `cedric`) and `ADMIN_PASSWORD`,
+created only when there are no accounts; admins invite people from `/people` (rights chat,
+evidence, queue, admin); machines keep `STATUS_TOKEN` and the gateway keys. Add `ADMIN_USER`
+and `ADMIN_PASSWORD` rows to the environment variables table.

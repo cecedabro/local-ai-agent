@@ -12,3 +12,4 @@ docs/
 README.md
 status/tests/test_accept_history.py
 status/tests/test_accept_pause.py
+status/tests/test_accept_accounts.py

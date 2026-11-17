@@ -14,7 +14,7 @@ and every request shows up on the page.
 The tests are the judge: `status/tests/test_contract.py` (§1–§7),
 `status/tests/test_unit_queue.py` (§8–§10), `status/tests/test_unit_gateway.py` (§8, §11) and
 `status/tests/test_accept_history.py` (§8 repo list, §11 `n_ctx`, §12) and
-`status/tests/test_accept_pause.py` (§13).
+`status/tests/test_accept_pause.py` (§13) and `status/tests/test_accept_accounts.py` (§14).
 This file explains them.
 
 ## 0. Constraints
@@ -460,3 +460,90 @@ Page (§6): the **Now** card shows the newest run whose state is `running` or `p
   and a `Resume` button (`data-act="resume"`, which cancels the request);
 - state `paused`: `<span class="pill warn">paused</span>` and the `Resume` button.
 The page script posts `data-act` to `/api/runs/<encodeURIComponent(run_id)>/<act>` and refreshes.
+
+## 14. Accounts and login
+
+People log in with a name and password; machines keep their keys. Judge:
+`status/tests/test_accept_accounts.py`.
+
+### 14.1 Who is who
+
+- **Machines** keep `Authorization: Bearer <STATUS_TOKEN>` (agent-loop, agent-queue, backfill)
+  and the gateway keys of `GATEWAY_CLIENTS` (§11). The status token can still do everything.
+- **People** have an account: `name` (lowercase, `^[a-z0-9][a-z0-9_.-]{1,31}$`), a password
+  (≥ 10 characters) and **rights**, a subset of `chat`, `evidence`, `queue`, `admin`.
+  `admin` implies all four; answers always list rights sorted
+  (`["admin", "chat", "evidence", "queue"]` for an admin).
+- **First admin**: `make_server(..., admin=("cedric", "<password>"))` (from `ADMIN_USER`,
+  default `cedric`, and `ADMIN_PASSWORD` in `main()`). It is created **only when there are no
+  accounts yet**; later starts never change existing accounts.
+- **No accounts yet** (fresh database, no `admin=`): everything works as before §14 (the page
+  and `GET /api/*` are open; POSTs need the status token). As soon as one account exists, the
+  rules below apply.
+
+### 14.2 Storage
+
+SQLite tables `users(name text primary key, pw text, rights text, created real, last_seen real,
+disabled int default 0)`, `sessions(id text primary key, name text, created real, seen real)`,
+`invites(id text primary key, name text, rights text, created real, expires real, used int default 0)`.
+- `pw` is `scrypt$<n>$<r>$<p>$<salt hex>$<hash hex>` from `hashlib.scrypt` (n=2**14, r=8,
+  p=1, 16-byte random salt, dklen 32); compare with `hmac.compare_digest`.
+- Session ids and invite tokens are `secrets.token_urlsafe(32)`; the tables store only their
+  `sha256` hex, never the value itself.
+
+### 14.3 Sessions
+
+- `POST /login` `{"name", "password"}` → **200** `{"name", "rights"}` and
+  `Set-Cookie: agent_session=<id>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`.
+  Wrong name or password, or a disabled account → **401** (same message for both).
+- **Rate limit**: 5 failed logins from one client address within 15 minutes (by `clock()`) →
+  every further `POST /login` from it answers **429** until 15 minutes after the first of those
+  failures, even with the right password. A success does not reset the counter.
+- A session lasts 30 days after its last use (each authenticated request updates `seen`);
+  older → treated as no session. `POST /logout` deletes it and answers **200** with
+  `Set-Cookie: agent_session=; Path=/; Max-Age=0`.
+- `GET /api/me` → `{"name", "rights"}` or **401**.
+- `POST /api/me/password` `{"old", "new"}` → **200**; wrong `old` → **403**; `new` < 10
+  characters → **400**.
+
+### 14.4 What needs what (once accounts exist)
+
+| Request | Needs |
+| --- | --- |
+| `GET /healthz`, `GET /static/*`, `GET /login`, `GET /invite`, `POST /login`, `POST /api/invites/accept` | nothing |
+| `GET /`, `/chat`, `/partial`, `/api/status`, `/api/status/head` | a session (any rights) or the status token. Without: pages → **303** `Location: /login`; JSON → **401** |
+| `POST /api/jobs`, `/api/jobs/<id>/(cancel\|move\|requeue)`, `/api/runs/<id>/(pause\|resume)` | `queue` (or the status token); logged in without it → **403** |
+| `/v1/*` (gateway) | a gateway key or the status token as before, **or** a session with `chat`: client `chat:<name>`, lane `interactive`. Logged in without `chat` → **403** |
+| account endpoints below | `admin`; else **403** |
+| everything else (`/api/events`, `/api/lease`, claims, heartbeats, finish, pings, `/api/import`, run `control`, `/api/auth`) | the status token only (cookies are ignored) |
+
+### 14.5 Accounts (admin)
+
+- `GET /api/users` → `[{"name", "rights", "created", "last_seen", "disabled"}]` sorted by name
+  (times ISO; never the password hash).
+- `POST /api/users/<name>` `{"rights"?: [...], "disabled"?: bool}` → **200** with the user;
+  unknown rights → **400**; unknown user → **404**. Disabling ends that user's sessions.
+- `POST /api/users/<name>/delete` → **200**; deletes the user and their sessions.
+- An admin cannot remove their own `admin` right, disable or delete themselves → **409**.
+- `POST /api/invites` `{"name", "rights"}` → **201** `{"url": "/invite#<token>", "expires"}`;
+  valid 7 days; name taken (account or open invite) → **409**; bad name or rights → **400**.
+- `POST /api/invites/accept` `{"token", "password"}` (no login needed) → creates the account
+  with the invite's name and rights, logs it in (cookie as in §14.3), **200** `{"name", "rights"}`.
+  Unknown token → **404**; used or expired → **410**; short password → **400**. Failed accepts
+  count toward the login rate limit.
+
+### 14.6 Pages
+
+- `GET /login`: the login form (`<form id="login">` with `name` and `password` fields); the
+  page script posts JSON to `/login` and goes to `/` on success.
+- `GET /invite`: a form with `password` and `password2`; the script reads the token from
+  `location.hash`, posts to `/api/invites/accept` and goes to `/` (the token never reaches the
+  server's logs).
+- Logged in, the header shows the name and a `Log out` button (`id="logout"`); the token
+  unlock forms (`<form id="unlock">`) are not rendered; the add-job form only with `queue`;
+  the chat only with `chat`; a link to `/people` only with `admin`.
+- `GET /people` (admin; else **403**, logged out → 303 to /login): a table of accounts with
+  their rights, a disable/enable and a delete button per account, and an invite form
+  (`<form id="invite">` with `name` and one checkbox per right) that shows the invite link once.
+- The chat script sends `Authorization` only when a token is stored; with a session the cookie
+  is enough.
