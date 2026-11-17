@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Callable
 
 KINDS = {"run_started", "task_started", "task_done", "task_skipped", "push_failed", "ci_waiting", "ci",
-         "run_finished"}
+          "run_finished", "paused", "resumed"}
 MAX_BODY = 256 * 1024
 RETENTION = 30 * 86400
 STALE_AFTER = 3600
@@ -57,6 +57,7 @@ create table if not exists client_tally(client text primary key, requests int de
 create table if not exists jobs(id integer primary key, repo text, ref text, note text, max_hours real,
   ci int, state text, pos real, created real, started real, finished real, worker text, seen real,
   cancel int default 0, detail text, exit_code int);
+create table if not exists run_control(run_id text primary key, pause int);
 """
 
 
@@ -160,9 +161,31 @@ class App:
                 self.db.execute("update tally set prs=prs+1 where repo=?", (repo,))
             elif kind == "push_failed":
                 self.db.execute("update tally set push_failed=push_failed+1 where repo=?", (repo,))
+            if kind == "run_finished":
+                self.db.execute("delete from run_control where run_id=?", (body["run_id"],))
             if self.meta("since") is None:
                 self.set_meta("since", now)
             self.db.commit()
+
+    # --------------------------------------------------------------- run_control
+    def run_control(self, run_id: str, act: str) -> tuple[int, dict]:
+        with self.lock:
+            row = self.db.execute("select pause from run_control where run_id=?", (run_id,)).fetchone()
+            if act == "control":
+                return 200, {"pause": bool(row[0]) if row else False}
+            # pause or resume
+            if not self.db.execute("select 1 from events where run_id=? and kind='run_started'", (run_id,)).fetchone():
+                return 404, {"error": "run not found"}
+            finished = self.db.execute("select count(*) from events where run_id=? and kind='run_finished'",
+                                       (run_id,)).fetchone()[0]
+            if finished:
+                return 409, {"error": "run already finished"}
+            if act == "pause":
+                self.db.execute("insert or replace into run_control(run_id, pause) values (?, 1)", (run_id,))
+            else:
+                self.db.execute("insert or replace into run_control(run_id, pause) values (?, 0)", (run_id,))
+            self.db.commit()
+            return 200, {"run_id": run_id, "pause": act == "pause"}
 
     # ------------------------------------------------------------------ lease
     @staticmethod
@@ -532,7 +555,8 @@ class App:
             e = json.loads(b)
             run = runs.setdefault(e["run_id"], {"run_id": e["run_id"], "repo": e["repo"], "branch": "",
                                                 "first": received, "current": None, "done": 0, "skipped": 0,
-                                                "plan": [], "fin": None, "job_id": None, "max_hours": None})
+                                                "plan": [], "fin": None, "job_id": None, "max_hours": None,
+                                                "paused_evt": None})
             run["last"] = received
             if e.get("branch"):
                 run["branch"] = e["branch"]
@@ -552,11 +576,16 @@ class App:
                     run["current"] = None
             elif kind == "run_finished":
                 run["fin"] = e
+            elif kind in ("paused", "resumed"):
+                run["paused_evt"] = kind
         out_runs = []
         for run in sorted(runs.values(), key=lambda r: r["last"], reverse=True):
             fin = run["fin"]
-            state = "finished" if fin else (
-                "running" if now - run["last"] <= STALE_AFTER or run["run_id"] == holder_run else "stale")
+            is_paused_evt = run["paused_evt"] == "paused" and not fin
+            cr = self.db.execute("select pause from run_control where run_id=?", (run["run_id"],)).fetchone()
+            pause_req = bool(cr[0]) if cr else False
+            state = "finished" if fin else ("paused" if is_paused_evt else (
+                "running" if now - run["last"] <= STALE_AFTER or run["run_id"] == holder_run else "stale"))
             out_runs.append({
                 "run_id": run["run_id"], "repo": run["repo"], "branch": run["branch"], "state": state,
                 "started": iso(run["first"]), "last_event": iso(run["last"]),
@@ -565,7 +594,7 @@ class App:
                 "pushed": fin.get("pushed") if fin else None, "pr": fin.get("pr") if fin else None,
                 "job_id": run["job_id"], "max_hours": run["max_hours"],
                 "task_since": None if fin or not run["current"] else run.get("task_since"),
-                "retries": run.get("retries")})
+                "retries": run.get("retries"), "pause": pause_req})
 
         n = len(done)
         stats = {"tasks_done": n, "tasks_skipped": skipped,
@@ -903,7 +932,7 @@ BADGE = {"ready": "ok", "loading": "warn", "unreachable": "bad", "unknown": "off
 def render_live(st: dict) -> str:
     e = html.escape
     now = st["now"]
-    run = next((r for r in st["runs"] if r["state"] == "running"), None)
+    run = next((r for r in st["runs"] if r["state"] in ("running", "paused")), None)
     tk = st["tokens"]
     parts: list[str] = []
 
@@ -915,15 +944,25 @@ def render_live(st: dict) -> str:
         total = len(plan) or (run["done"] + run["skipped"])
         finished = sum(1 for t in plan if t.get("state") in ("done", "skipped")) if plan else run["done"] + run["skipped"]
         pct = int(100 * finished / total) if total else 0
+        if run["state"] == "running":
+            if run.get("pause"):
+                state_cls, state_label, run_actions = "warn", "pausing after this task", f'<button class="ctl" data-run="now" data-act="resume" title="Resume this run">Resume</button>'
+            else:
+                state_cls, state_label, run_actions = "ok", "running", f'<button class="ctl" data-run="{e(run["run_id"])}" data-act="pause" title="Pause this run">Pause</button>'
+        else:
+            state_cls, state_label, run_actions = "warn", "paused", '<span class="pill warn">paused</span><button class="ctl" data-run="now" data-act="resume" title="Resume this run">Resume</button>'
         parts.append(f'<div class="now-head"><span class="repo">{e(run["repo"])}</span>'
-                     f'<code>{e(run["branch"])}</code><span class="muted">running {e(dur(run["started"], now))}'
-                     f'{" · job #" + e(run["job_id"]) if run["job_id"] else ""}</span></div>')
+                     f'<code>{e(run["branch"])}</code><span class="pill {state_cls}">{e(state_label)}</span>'
+                     f'<span class="muted">running {e(dur(run["started"], now))}'
+                     f'{" · job #" + e(run["job_id"]) if run["job_id"] else ""}</span>{run_actions}</div>')
         if c:
             att = f'attempt {e(str(c.get("attempt")))}' + (f'/{e(str(run["retries"]))}' if run.get("retries") else "")
             parts.append(f'<p class="task"><b>{e(str(c.get("task_id")))}</b> {e(str(c.get("title")))}</p>'
                          f'<p class="muted small">{att} · for {e(dur(run["task_since"], now))}</p>')
         else:
-            parts.append('<p class="muted">Between tasks (checking, pushing or waiting for CI).</p>')
+            between = ('Between tasks (checking, pushing or waiting for CI).' if run["state"] == "running"
+                       else 'Pausing after this task.')
+            parts.append(f'<p class="muted small">{between}</p>')
         parts.append(f'<div class="progress live" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
                      f'<p class="muted small">{finished} of {total} plan tasks · {run["done"]} done, '
                      f'{run["skipped"]} skipped this run · last event {e(ago(run["last_event"], now))}</p>')
@@ -933,7 +972,8 @@ def render_live(st: dict) -> str:
                          f'{" · " + e(str(tk["gen_tps_recent"])) + " tok/s" if tk["gen_tps_recent"] else ""}</p>')
     else:
         parts.append('<p class="idle">Idle</p><p class="muted small">No run is active. Add a job below, or start '
-                     '<code>agent-loop</code> in a repo on the devbox.</p>')
+                     '<code>agent-loop</code> in a repo on the devbox.'
+                     '</p>')
     parts.append("</section>")
 
     # -- Model activity (gateway)
@@ -1114,16 +1154,27 @@ def render_live(st: dict) -> str:
     parts.append('<section class="card wide" id="runs"><h2>Runs</h2>')
     if st["runs"]:
         parts.append('<div class="table-wrap"><table class="small runs"><thead><tr><th>State</th><th>Repo</th><th>Branch</th><th>Done</th>'
-                     '<th>Skipped</th><th>Started</th><th>PR</th></tr></thead><tbody>')
+                     '<th>Skipped</th><th>Started</th><th>PR</th><th>Pause</th></tr></thead><tbody>')
         for r in st["runs"]:
-            cls = {"running": "ok", "finished": "off", "stale": "warn"}[r["state"]]
+            cls = {"running": "ok", "finished": "off", "stale": "warn", "paused": "warn"}.get(r["state"], "off")
             pr = r["pr"] or ""
             link = (f'<a href="{e(pr)}">#{e(pr.rsplit("/", 1)[-1])}</a>' if pr.startswith("https://github.com/")
                     else e(pr))
+            pause_cell = ""
+            if r["state"] in ("running", "paused"):
+                if r["state"] == "running":
+                    if r.get("pause"):
+                        pause_cell = '<span class="pill warn">pausing after this task</span>' \
+                                     f'<button class="ctl" data-run="{e(r["run_id"])}" data-act="resume">Resume</button>'
+                    else:
+                        pause_cell = f'<button class="ctl" data-run="{e(r["run_id"])}" data-act="pause">Pause</button>'
+                else:
+                    pause_cell = '<span class="pill warn">paused</span>' \
+                                 f'<button class="ctl" data-run="{e(r["run_id"])}" data-act="resume">Resume</button>'
             parts.append(f'<tr><td><span class="pill {cls}">{e(r["state"])}</span>'
                          f'{" " + e(str(r["ended"])) if r["ended"] and r["ended"] != "done" else ""}</td>'
                          f'<td>{e(r["repo"])}</td><td><code>{e(r["branch"])}</code></td><td>{r["done"]}</td>'
-                         f'<td>{r["skipped"]}</td><td>{e(ago(r["started"], now))}</td><td>{link}</td></tr>')
+                         f'<td>{r["skipped"]}</td><td>{e(ago(r["started"], now))}</td><td>{link}</td><td>{pause_cell}</td></tr>')
         parts.append("</tbody></table></div>")
     else:
         parts.append('<p class="muted">No runs yet.</p>')
@@ -1504,6 +1555,9 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
             m = re.fullmatch(r"/api/jobs/(\d+)/([a-z]+)", path)
             if m and m.group(2) in JOB_ACTIONS:
                 return self.send(*app.job_action(int(m.group(1)), m.group(2), body))
+            m = re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)
+            if m:
+                return self.send(*app.run_control(urllib.parse.unquote(m.group(1)), m.group(2)))
             return self.send(404, {"error": "not found"})
 
         def log_message(self, fmt: str, *args: object) -> None:
