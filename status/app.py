@@ -72,6 +72,27 @@ def num(v: object, default: float = 0) -> float:
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else default
 
 
+def clean_repos(value: list[object] | None, owners: set[str]) -> list[str]:
+    if not value:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in value:
+        s = str(v).strip()
+        if not s:
+            continue
+        if s in seen:
+            continue
+        if not REPO_RE.fullmatch(s):
+            continue
+        owner = s.split("/")[0].lower()
+        if owner and owners and owner not in owners:
+            continue
+        seen.add(s)
+        out.append(s)
+    return sorted(out, key=str.lower)
+
+
 class App:
     def __init__(self, *, db_path: str, token: str, llama_url: str | None, llama_key: str | None,
                  lease_ttl: float, probe_interval: float, job_ttl: float, clock: Callable[[], float],
@@ -234,13 +255,39 @@ class App:
     def ping(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            self.workers[worker] = {"seen": self.clock(), "paused": bool(body.get("paused"))}
+            existing = self.workers.get(worker)
+            seen = self.clock()
+            paused = bool(body.get("paused"))
+            raw_repos = body.get("repos")
+            if raw_repos is not None:
+                repos = clean_repos(raw_repos, self.job_owners)
+                if repos:
+                    pass
+                elif existing and existing.get("repos"):
+                    repos = existing["repos"]
+                else:
+                    repos = []
+            else:
+                repos = existing.get("repos", []) if existing else []
+            self.workers[worker] = {"seen": seen, "paused": paused, "repos": repos}
         return {"ok": True}
 
     def claim(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            self.workers[worker] = {"seen": self.clock(), "paused": False}
+            existing = self.workers.get(worker)
+            raw_repos = body.get("repos")
+            if raw_repos is not None:
+                repos = clean_repos(raw_repos, self.job_owners)
+                if repos:
+                    pass
+                elif existing and existing.get("repos"):
+                    repos = existing["repos"]
+                else:
+                    repos = []
+            else:
+                repos = existing.get("repos", []) if existing else []
+            self.workers[worker] = {"seen": self.clock(), "paused": False, "repos": repos}
             self.expire_jobs()
             if self.db.execute("select 1 from jobs where state='running'").fetchone():
                 self.db.commit()
@@ -522,13 +569,21 @@ class App:
             p = self.job_pub(j)
             p["run_id"] = run_by_job.get(str(j["id"]))
             pub_jobs.append((j, p))
+        worker_repos: set[str] = set()
+        for w in self.workers.values():
+            if now - w["seen"] < 600:
+                for r in w.get("repos", []):
+                    worker_repos.add(r)
+        job_repos: set[str] = {j["repo"] for j, p in pub_jobs if j["repo"]}
+        all_repos = sorted(set(list(worker_repos) + list(job_repos)), key=str.lower)
         job_out = {
             "running": [p for j, p in pub_jobs if j["state"] == "running"],
             "queued": [p for j, p in sorted(pub_jobs, key=lambda x: (x[0]["pos"] or 0, x[0]["id"]))
                        if j["state"] == "queued"],
             "recent": [p for j, p in pub_jobs if j["state"] not in ("queued", "running")][:10],
-            "workers": [{"name": n, "seen": iso(w["seen"]), "paused": w["paused"]}
+            "workers": [{"name": n, "seen": iso(w["seen"]), "paused": w["paused"], "repos": w.get("repos", [])}
                         for n, w in sorted(self.workers.items()) if now - w["seen"] < 600],
+            "repos": all_repos,
         }
         events = [{**json.loads(b), "received": iso(r)} for r, b in ev_rows]
         gateway = self.gateway.snapshot(now) if self.gateway else None
@@ -1231,7 +1286,12 @@ def chat_box(full: bool) -> str:
 def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
     e = html.escape
     state = st["model"]["state"]
-    options = "".join(f'<option value="{e(r)}">' for r in known_repos)
+    if known_repos:
+        options = "".join(f'<option value="{e(r)}">{e(r)}</option>' for r in known_repos)
+        repo_input = f'<select name="repo" required aria-label="Repository">{options}</select>'
+    else:
+        repo_input = f'<input name="repo" list="repos" placeholder="owner/repo" required aria-label="Repository">'
+    datalist = f'<datalist id="repos">{"".join("<option value=" + e(r) + ">" + e(r) + "</option>" for r in known_repos)}</datalist>' if known_repos else ""
     return (
         f'<!doctype html><html lang="en"><head>{HEAD}'
         f'<title>Agent status</title></head><body class="locked">{DEFS}'
@@ -1242,8 +1302,7 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         '<div class="card-head ctl"><h2>Queue a job</h2>'
         '<button type="button" id="lock" class="link small">lock</button></div>'
         '<form id="add" autocomplete="off"><div class="fields">'
-        f'<input name="repo" list="repos" placeholder="owner/repo" required aria-label="Repository">'
-        f'<datalist id="repos">{options}</datalist>'
+        f'{repo_input}{datalist}'
         '<input name="ref" placeholder="branch (default)" aria-label="Branch">'
         '<input name="note" placeholder="note" maxlength="200" aria-label="Note"></div>'
         '<div class="opts"><label class="chip">max <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
@@ -1365,8 +1424,7 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 st = app.status()
                 if path == "/partial":
                     return self.send(200, render_live(st), "text/html; charset=utf-8")
-                repos = sorted({j["repo"] for k in ("queued", "running", "recent") for j in st["jobs"][k]})
-                return self.send(200, render_page(st, repos, gw.enabled), "text/html; charset=utf-8")
+                return self.send(200, render_page(st, st["jobs"]["repos"], gw.enabled), "text/html; charset=utf-8")
             if path == "/chat":
                 return self.send(200, render_chat_page(), "text/html; charset=utf-8")
             if path.startswith("/static/") and path[8:] in STATIC_FILES:
