@@ -12,3 +12,9 @@ docs/
 README.md
 status/tests/test_accept_history.py
 status/tests/test_accept_pause.py
+chat/SPEC.md
+chat/tests/test_accept_core.py
+chat/tests/fake_gateway.py
+chat/static/css/
+chat/Dockerfile
+chat/requirements.txt

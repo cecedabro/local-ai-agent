@@ -1,48 +1,154 @@
-# PLAN: history import, repo dropdown, context size, pause
+# PLAN: Chat app foundation
 
-Read `status/SPEC.md` §8 ("Repo list" bullet + the page paragraph after it), §11 (`n_ctx`), §12 and
-§13 before you start. The judges are `status/tests/test_accept_history.py` and
-`status/tests/test_accept_pause.py`: protected, change the code, never the tests. Run the task's
-`accept:` command yourself before you finish and read the first failing assertion.
+Build the new public chat app in `chat/` (working name "Coder"). Read `chat/SPEC.md` first; the
+section for your task is named in its details below. The judge is `chat/tests/test_accept_core.py`
+(protected: change the code, never the tests). Run the task's `accept:` command yourself before you
+finish and read the first failing assertion.
 
 Rules for every task:
 - This run is non-interactive: nobody reads your questions. Never end with a question or a plan;
   make the edits, run the accept command, fix what fails, then stop.
-- Never read a large file whole (`status/app.py` is ~1700 lines). Use `grep -n` and read only the
-  lines you need (`sed -n '120,180p' status/app.py`).
-- Python 3.11, standard library only. `status/app.py` stays one file (it is ~1500 lines: use
-  `grep -n` to find the function named in the task instead of reading it all).
-  `status/backfill.py` is a separate new script.
-- Keep the old tests green: `make check` and `python3 -m unittest -q status/tests/test_contract.py`.
-- No f-string with a backslash inside `{...}` (breaks Python 3.11).
-- Do not touch `harness/`, `status/static/`, `Makefile`, `status/SPEC.md` or any test file
-  except your own `status/tests/test_unit_*.py`.
+- Never read a large file whole. Use `grep -n` and read only the lines you need (`sed -n 'a,bp'`).
+- Python 3.11. Only the packages in `chat/requirements.txt` (`make chat-test` installs them into
+  `chat/.venv`; use `chat/.venv/bin/python` to try things).
+- Keep groups from earlier tasks green: before you finish, also run their `make chat-test K=...`.
+- Do not touch: `chat/SPEC.md`, `chat/tests/test_accept_core.py`, `chat/tests/fake_gateway.py`,
+  `chat/static/css/` (the look is the human's; use the hooks from SPEC §9), `chat/Dockerfile`,
+  `chat/requirements.txt`, `Makefile`, `.github/`, `docs/`, `status/`, `harness/`.
+- Your own extra tests go in `chat/tests/test_unit_*.py`.
 
-- [x] T01: POST /api/import, events only (SPEC §12.1). In status/app.py: (1) SCHEMA: add `create table if not exists imported(key text primary key);`. (2) do_POST checks `n > MAX_BODY` before routing: compute `path` first and use a limit of `IMPORT_MAX = 8 * 1024 * 1024` when path is `/api/import`, else MAX_BODY. (3) Split the tally/daily part of `App.add_event` into a helper `App._count(body, t)` that takes the event time `t` (epoch seconds): it uses `day_of(t)` for the daily row, sets tally `last` to `max(coalesce(last, 0), t)`, and sets meta `since` when it is None or later than `t`; `add_event` calls it with `self.clock()`. (4) New `App.import_history(body) -> tuple[int, dict]`: validate everything first with a helper `import_error(body) -> str | None` (events must be a list ≤ 5000 of dicts; `key` non-empty str ≤ 200, `repo` non-empty str, `kind` in run_started/task_done/task_skipped/run_finished, `ts` parsed by `dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))` with a non-None tzinfo; error text like "events[3]: bad ts"); then under `self.lock`, for each event `insert or ignore into imported(key)`: if a row was inserted (`cursor.rowcount == 1`) call `_count(event, t)` and count it as added, else as skipped; commit once. Imported events are NOT inserted into the events table. Answer 200 `{"events_added", "events_skipped", "token_days": 0, "token_days_ignored": 0}`. Route `/api/import` in do_POST to it. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k test_events_count_once -k test_daily_uses_event_day -k test_since_keeps_earliest -k test_keys_survive_restart
-- [x] T02: The "tokens" list of POST /api/import (SPEC §12.1). (1) SCHEMA: `create table if not exists imported_tokens(day text, source text, gen int, prompt int, primary key(day, source));`. (2) In `App.sample_metrics`, when it stores a sample and `self.meta("first_sample_day")` is None, `self.set_meta("first_sample_day", day)`. (3) Extend `import_error`: tokens must be a list ≤ 5000 of dicts with `day` matching `^\d{4}-\d{2}-\d{2}$` that `dt.date.fromisoformat` accepts, `source` non-empty str ≤ 50, `generated` and `prompt` ints ≥ 0 (reject bool and float). (4) In `import_history`: rows with `day >= first_sample_day` (string compare) count as `token_days_ignored`; the others `insert or replace` into imported_tokens and count as `token_days`. (5) In `App.tokens()`: `generated_total` and `prompt_total` add `sum(gen)` / `sum(prompt)` of imported_tokens; leave every tok/s value, `generated_24h` and `hourly` live-only. (6) Where `/api/status` builds `daily`, add the imported `gen` of each day to that day's `generated`. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k ImportTest -k ImportWithLiveTokensTest
-- [x] T03: Repo list for the dropdown (SPEC §8). (1) Helper `clean_repos(value, owners) -> list[str]`: keep strings matching the same owner/name pattern `add_job` uses (find it with `grep -n "owner/name" status/app.py`), drop other owners when `owners` (= `self.job_owners`) is non-empty, de-duplicate, at most 500. (2) `App.ping` and `App.claim` both rebuild `self.workers[worker]` today and would lose the list: keep the old entry's `"repos"` unless the cleaned new list is non-empty. (3) In `App.status()` where `"workers"` is built, add `"repos"`: sorted with `key=str.lower`, de-duplicated union of the repos of the workers listed in `workers` and the `repo` of every job row in the jobs table, owner-filtered the same way. (4) `render_page`: take the repos from `st["jobs"]["repos"]` (in do_GET, stop computing `repos` from the job lists); keep the field as the first child of `<div class="fields">` in the add-job form; when the list is non-empty render `<select name="repo" required aria-label="Repository">` with `<option value="X">X</option>` per repo (escape X), else `<input name="repo" placeholder="owner/repo" required aria-label="Repository">` without the datalist. The page script reads `f.repo.value`, which works for both.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Repos
-- [x] T04: `gateway.n_ctx` (SPEC §11). In `App.__init__` add `self.n_ctx = None` and `self.props_t = None`. New method `App.context_size() -> int | None` modelled on `App.model()`: returns `self.n_ctx` when known; otherwise, when `self.root` is set and (`self.props_t` is None or `self.clock() - self.props_t >= self.probe_interval`), set `props_t` and GET `self.root + "/props"` with `Authorization: Bearer <llama_key>` (when set) and a 2 s timeout; take `default_generation_settings.n_ctx`, else a top-level `n_ctx`; any error leaves it None. Call it in `App.status()` next to `self.model()` (outside the lock) and put the value in the gateway dict as `"n_ctx"` (null when the gateway is off; check what the gateway dict looks like then).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Nctx
-- [x] T05: Create status/backfill.py (stdlib only, module docstring with the usage line from SPEC §12.2) with `git_events(repo_dir: Path, name: str, gh=None) -> list[dict]`. Run `git -C <repo_dir> log --all --format=%x1e%H%x1f%an%x1f%aI%x1f%s --shortstat` and split records on `\x1e`; each record's first line is sha/author/date/subject (split on `\x1f`), the rest may hold the shortstat line (`3 files changed, 10 insertions(+), 2 deletions(-)`; parse insertions/deletions with regexes, 0 when missing). Only author `local-agent`. Subject `^(T\d+): (.*)` → task_done (key `name:sha`, title cut to 200, commit `sha[:7]`, ts = author date converted to UTC with `.astimezone(dt.timezone.utc).isoformat(timespec="seconds")`). attempts = highest N over `repo_dir.glob(".agent/logs/<id>-a*.log")` and `repo_dir.glob(".agent/logs-*/<id>-a*.log")` (regex `-a(\d+)\.log$`), 1 if none. Subject exactly `agent run report` → run_started with key `name:run:sha`. PRs: `gh(["pr", "list", "--state", "all", "--limit", "500", "--json", "number,headRefName,createdAt,url"], repo_dir)`; default gh runs the `gh` CLI with subprocess (cwd=repo_dir, timeout 60) and returns `"[]"` on any failure; parse JSON (not a list → none); `headRefName` starting with `agent/` → run_finished with key `name:pr:<number>`, `pr` = url, ts = createdAt as `+00:00`. Return sorted by (ts, key).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillGitTest
-- [x] T06: Add `opencode_tokens(db_path: Path) -> list[dict]` to status/backfill.py (SPEC §12.2): `sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)`, `select data from message`, skip rows whose data is not valid JSON or has no dict `tokens` or whose `role` is not `assistant`; day = UTC date of `time.created / 1000`; generated = output + reasoning, prompt = input (missing → 0). Return `[{"day", "source": "opencode", "generated", "prompt"}]` sorted by day. Close the connection.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillOpencodeTest
-- [x] T08: Pause API (SPEC §13). (1) Add "paused" and "resumed" to `KINDS`. (2) SCHEMA: `create table if not exists run_control(run_id text primary key, pause int);`. (3) In do_POST, before the final 404, match `re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)` and decode the id with `urllib.parse.unquote` (add `import urllib.parse`). (4) New `App.run_control(run_id, act) -> tuple[int, dict]`: control → 200 `{"pause": bool}` from the table (unknown → false); pause/resume → 404 when no event has that run_id, 409 when the run has a `run_finished` event, else upsert the row (pause 1/0) and answer 200 `{"run_id", "pause"}`. (5) In `App.add_event`, a `run_finished` event deletes the run's run_control row.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest.test_errors -k test_url_encoded_run_id
-- [x] T09: Paused state on runs (SPEC §13). Where `App.status()` builds each run (grep `STALE_AFTER`): remember the kind of the latest `paused`/`resumed` event of the run; `state` = "finished" if it has run_finished, else "paused" if that latest kind is "paused", else the old running/stale rule. Add `"pause": bool` to each run from run_control (one query for all runs before the loop).
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest
-- [x] T10: Pause buttons on the page (SPEC §13). In `render_live`, the Now card's run is the first run with state "running", else the first with state "paused"; for a paused run say "paused" instead of "running <duration>" in the header. The progress bar `<div class="progress live" ...>` must use class `progress paused` instead of `progress live` for a paused run (the stylesheet already has both). Under the header add the controls exactly as SPEC §13 shows (class `ctl` on the buttons; `html.escape` the run_id in the attributes). In the page `SCRIPT` (grep `button[data-job]`), add a click handler for `button[data-run]` that posts `{}` to `'/api/runs/'+encodeURIComponent(b.dataset.run)+'/'+b.dataset.act` with the existing `post()` helper and then calls `refresh()`.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py
+- [ ] T01: App skeleton, settings, database and first admin (see "T01 details")
+  accept: make chat/.venv/.stamp && cd chat && PYTHONPATH=. .venv/bin/python -c "import tempfile; from fastapi.testclient import TestClient; from coder.app import create_app; c = TestClient(create_app({'DATA_DIR': tempfile.mkdtemp()})); assert c.get('/healthz').json() == {'ok': True}"
+- [ ] T02: Login, logout, sessions, CSRF header, theme and rate limit (see "T02 details")
+  accept: make chat-test K="TestAuth or TestRateLimit or healthz or seeded"
+- [ ] T03: Invites and the users API (see "T03 details")
+  accept: make chat-test K="TestInvites"
+- [ ] T04: Chats API (see "T04 details")
+  accept: make chat-test K="TestChats"
+- [ ] T05: Sending a message: gateway streaming with phases (see "T05 details")
+  accept: make chat-test K="TestStream"
+- [ ] T06: Context size and compression (see "T06 details")
+  accept: make chat-test K="TestContext"
+- [ ] T07: File upload, download and attachments (see "T07 details")
+  accept: make chat-test K="TestFiles"
+- [ ] T08: Pages, security headers and the vendored markdown renderer (see "T08 details")
+  accept: make chat-test
+- [ ] T09: Chat page script: chats, streaming, phases, context bar (see "T09 details")
+  accept: node --check chat/static/js/app.js && node --check chat/static/js/stream.js && make chat-test
+- [ ] T10: Login, invite, admin and theme scripts (see "T10 details")
+  accept: for f in chat/static/js/*.js; do node --check "$f" || exit 1; done && make chat-test
+- [ ] T11: chat/README.md (see "T11 details")
+  accept: grep -q "## Running locally" chat/README.md && grep -q "## How it fits together" chat/README.md && make chat-test
 
-## Follow-up (after review)
+## T01 details
+SPEC §0, §1, §2 (first admin only), §8 (`/healthz`). Create the package `chat/coder/`:
+`__init__.py`, `app.py` with `create_app(settings=None)`, `config.py` (a `Settings` dataclass built
+from the `settings` dict first, then `os.environ`, with the defaults of the §1 table; booleans:
+`"0"`, `0`, `""`, `"false"` are false), `db.py` (sqlite3, WAL, `foreign_keys=ON`, a
+`threading.Lock`, `init_schema()` creating tables `users(username pk, pw_hash, rights, theme,
+created, last_login)`, `sessions(id_hash pk, username, created, expires)`, `invites(id pk,
+token_hash, rights, note, created, expires, used_by)`, `chats(id pk, username, title, profile,
+created, updated, last_prompt_tokens, last_completion_tokens)`, `messages(id pk, chat_id, role,
+content, created, tokens, tps)`, `files(id pk, username, name, size, content blob, created)`,
+`message_files(message_id, file_id)`, `login_failures(key, at)`). Times are ISO-8601 UTC strings.
+`auth.py` with argon2 `hash_password` / `verify_password`. On startup, seed the first admin (rights
+`admin`) when the users table is empty and both settings are set. Mount `/static` from
+`Path(coder.__file__).parent.parent / "static"`. `GET /healthz` → `{"ok": true}`. Keep the
+settings and the db on `app.state`.
 
-T01 and T02 (`POST /api/import`) are done; `status/backfill.py` already has `git_events`,
-`opencode_tokens`, `send` and `main`. Two small things are left.
+## T02 details
+SPEC §2. In `auth.py`: sessions (`secrets.token_urlsafe(32)`, store
+`hashlib.sha256(id.encode()).hexdigest()`, 30 days), a FastAPI dependency `current_user` that reads
+cookie `coder_session` and raises 401. A middleware that returns 403 `{"error": "missing X-Coder
+header"}` for POST/PATCH/DELETE under `/api/` without `X-Coder: 1` (before routing). Routes:
+`POST /api/login`, `POST /api/logout`, `GET /api/me`, `PATCH /api/me`. Cookie flags exactly as §2
+(`secure` from `SECURE_COOKIES`). Rate limit with the `login_failures` table: keys `user:<name>`
+and `ip:<client host>`; 5 rows for either key in the last 15 minutes → 429 before checking the
+password. Record a failure on every 401. Rights are stored comma-separated and returned sorted.
 
-- [x] T07: Fix `send()` and the end of `main()` in status/backfill.py (find them with `grep -n "^def send\|^def main\|if all_events" status/backfill.py`; the file is ~300 lines, read only those parts). (1) `send()` posts to `url` itself: it must post to `url.rstrip("/") + "/api/import"`. (2) `send()` makes no request when `events` is empty: build the batches as `batches = [events[i:i + 1000] for i in range(0, len(events), 1000)] or [[]]` and send one request per batch, with `"tokens": tokens` only in the first request's body. (3) Use `urllib.request.urlopen(req, timeout=60)`; keep raising on HTTP errors. (4) In `main()`, call `send()` when there are events OR tokens (now it only checks events) and print per answer `"import: {events_added} added, {events_skipped} skipped, {token_days} token days"`. Do not touch any other function.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py
-- [x] T11: Append to status/README.md (do not rewrite what is there). (1) A section `## History import` with three short paragraphs: what `status/backfill.py` reads (the agent's commits in every repo under `~/repos` via git, PRs via `gh`, token counts from OpenCode's database `~/.local/share/opencode/opencode.db`); how to run it on the devbox, as a fenced bash block with `python3 status/backfill.py --dry-run` and then `python3 status/backfill.py` (STATUS_URL and STATUS_TOKEN are already set there); and that running it twice is safe (events are keyed, token days are replaced). (2) A section `## Pause` with two sentences: Pause on the Now card makes the loop stop after its current task and free the model and the PC; Resume continues it (needs the devbox image with the new agent-loop). (3) In the existing endpoints code block (grep `/api/jobs/3/cancel`), add one curl line for `POST /api/import` with body `{"events":[],"tokens":[]}` and one for `POST /api/runs/<run_id>/pause` with body `{}`, in the same style as the lines around them.
-  accept: make status-test && grep -q "## History import" status/README.md && grep -q backfill.py status/README.md && grep -q /api/import status/README.md && grep -q /api/runs/ status/README.md
+## T03 details
+SPEC §3. Routes `POST/GET /api/invites`, `DELETE /api/invites/{id}`, `POST /api/invites/accept`,
+`GET /api/users`, `DELETE /api/users/{username}` (deleting yourself → 400). A dependency
+`require_admin` (403). Accepting an invite logs the new user in (same cookie as login). Also add
+`GET /admin`: no session → 303 to `/login`, not admin → 403, admin → 200 with a simple HTML page
+(T08 makes it a real template; a placeholder `<h1>Admin</h1>` is fine now).
+
+## T04 details
+SPEC §4. Routes `GET/POST /api/chats`, `GET/PATCH/DELETE /api/chats/{id}`. Profile rights:
+`general` needs `chat`, `evidence` needs `evidence` (`admin` has both). Someone else's chat → 404.
+`GET /api/chats/{id}` returns `messages` (each with `files`, an empty list when none) and
+`context` (for now `{"used": 0, "max": 32768, "compress_at": 24576}`; T06 makes it real). Keep
+the chat logic in `chats.py`.
+
+## T05 details
+SPEC §5. Module `gateway.py`: an async generator `stream_chat(settings, messages, think)` using
+`httpx.AsyncClient` (timeout 600 s) that POSTs to `<GATEWAY_URL>/chat/completions` with the body of
+§5, parses the `data: ` lines, and yields `("reasoning", text)`, `("content", text)`,
+`("usage", dict)`; on 503/429 it raises `Busy`, on other non-200 `GatewayError(status)`. The route
+`POST /api/chats/{id}/messages`: validate first (400/413/404 are normal JSON responses, before any
+streaming), store the user message, then return a `StreamingResponse` (`text/event-stream`) whose
+generator builds the messages (system prompt per profile: general = "You are Coder, a helpful
+assistant running locally on Cédric's PC. Answer in the user's language. Use Markdown."; evidence =
+"You are EvidenceHunt. Answer only from medical evidence and say when evidence is weak or
+missing."), retries `Busy` every 2 s (one `waiting` phase) until `WAIT_LIMIT`, then emits
+phases/deltas/done/error exactly as the §5 table. Store the assistant message and the usage numbers
+on the chat; set the title (§4) after the first answer.
+
+## T06 details
+SPEC §6. `context.py`: `ctx_max(settings)` from `GET <STATUS_URL>/api/status` → `gateway.n_ctx`
+(cache 5 min, fallback `CTX_DEFAULT`), `context_messages(chat_id)` (latest summary as a system
+message + what follows), `used(chat)`. Fill the real `context` into `GET /api/chats/{id}` and the
+`done` event. `POST /api/chats/{id}/compress` uses a non-streaming gateway call (prompt: "Summarise
+this conversation so far in a few short paragraphs, keeping names, numbers, decisions and open
+questions."). The summary message's `created` must sort just before the oldest kept message.
+Auto-compress in the send route when `used >= compress_at` (emit the `compressing` phase first).
+
+## T07 details
+SPEC §7. `POST /api/files` (multipart field `file`), `GET /api/files/{id}`. Validate UTF-8 and no
+NUL (415), size (413), name = the last part after `/` or `\`, max 120 chars. In the send route the
+`files` ids must belong to the user (400); store them in `message_files`, add the file blocks to
+the text sent to the model, and return them in each message's `files`.
+
+## T08 details
+SPEC §8 and §9. Jinja2 templates in `chat/coder/templates/`: `base.html` (head: charset,
+viewport, `<script src="/static/js/theme.js"></script>` first, then the four stylesheets
+`/static/css/tokens.css`, `base.css`, `chat.css`, `orb.css`, and a favicon), `login.html`,
+`invite.html`, `chat.html`, `admin.html`. Copy the structure and class names of
+`docs/design/chat/2026-11-17-chat-mockup.html` (sidebar, top bar, thread, dock, footer line) with
+real data hooks; use the orb markup of §9 everywhere. No inline `<script>` blocks and no `style=`
+attributes (CSP). A middleware adds the §8 headers to every HTML response. `GET /` without a
+session → 303 `/login`. Download markdown-it 14.1.0 to `chat/static/vendor/markdown-it.min.js`
+(`curl -fsSL https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js -o ...`) and
+commit it. The line under the composer uses `MODEL_LABEL`, `HARDWARE_LABEL` and `REPO_URL`.
+Create empty `chat/static/js/theme.js` and `app.js` if they don't exist yet (T09/T10 fill them).
+
+## T09 details
+SPEC §5, §6, §9. `chat/static/js/app.js` (ES module, loaded by `chat.html`) and
+`chat/static/js/stream.js` (exports `parseSSE(reader, onEvent)` for a `fetch` body stream, and a
+`Typewriter` class that buffers deltas and releases about one word per 25 ms, calling back with the
+text so far). In `app.js`: load `/api/me` and `/api/chats`, render the sidebar groups (Today,
+Yesterday, Last 7 days, Older), open a chat, a welcome screen for an empty chat with 3 example
+questions per profile, send with `fetch` (`X-Coder: 1`), show the phase on the orb (`data-phase`)
+and in `.phase-label`, render the answer with markdown-it (`html: false, linkify: true`, links open
+in a new tab) as the typewriter releases text, set `--fill` while writing, show `.meta2` when
+done, Copy and Retry, the context bar (`--used`, `--at`, `#ctx-text`, Compress button), file chips
+(upload on pick, remove before sending), Enter to send / Shift+Enter for a new line, the
+Quick/Think switch remembered in `localStorage`, new chat, rename (double-click the title), delete.
+Any 401 goes to `/login`.
+
+## T10 details
+`chat/static/js/theme.js` (a classic script that runs first: reads `localStorage` `coder-theme`,
+sets `data-theme` / `data-theme-pref` on `<html>` before paint, follows the device for `auto`,
+exposes `window.setTheme(pref)` which also `PATCH`es `/api/me`), `login.js` (form → `/api/login`,
+shows the 401/429 message, then goes to `/`), `invite.js` (token from `location.hash`, form →
+`/api/invites/accept`), `admin.js` (create an invite with right checkboxes, show the full link to
+copy, list and delete invites, list and delete users). Wire the theme switch `.seg.four.theme` in
+`chat.html`.
+
+## T11 details
+Write `chat/README.md`: `## What it is` (two sentences), `## Running locally` (a bash block:
+`make chat-test`, then `cd chat && DATA_DIR=./data SECURE_COOKIES=0 ADMIN_USER=me
+ADMIN_PASSWORD=change-me-please GATEWAY_URL=http://localhost:8080/v1 .venv/bin/uvicorn --factory
+coder.app:create_app --port 8090`), `## How it fits together` (one line per module in
+`chat/coder/` and `chat/static/js/`, and the request path browser → chat → status gateway →
+llama-server), `## Settings` (the §1 table, short).

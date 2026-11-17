@@ -3,7 +3,7 @@ SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote harness/tests/
 PY_FILES := $(shell git ls-files '*.py')
 YAML_FILES := $(shell git ls-files '*.yaml' '*.yml')
 
-.PHONY: lint test check status-test
+.PHONY: lint test check status-test chat-test
 lint:
 	shellcheck $(SH_FILES)
 	python3 -m py_compile $(PY_FILES)
@@ -22,3 +22,14 @@ check:
 
 status-test:
 	python3 -m unittest -q status/tests/test_contract.py status/tests/test_accept_history.py status/tests/test_accept_pause.py
+
+# The chat app (chat/SPEC.md): its own venv with chat/requirements.txt, rebuilt when that changes.
+# One group of the judge: make chat-test K=Auth
+CHAT_VENV := chat/.venv
+$(CHAT_VENV)/.stamp: chat/requirements.txt
+	python3 -m venv $(CHAT_VENV)
+	$(CHAT_VENV)/bin/pip install -q -r chat/requirements.txt
+	touch $@
+
+chat-test: $(CHAT_VENV)/.stamp
+	cd chat && PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests $(if $(K),-k "$(K)")
