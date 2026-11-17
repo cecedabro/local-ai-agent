@@ -19,7 +19,7 @@ Rules for every task:
 
 - [x] T01: App skeleton, settings, database and first admin (see "T01 details")
   accept: make chat/.venv/.stamp && cd chat && PYTHONPATH=. .venv/bin/python -c "import tempfile; from fastapi.testclient import TestClient; from coder.app import create_app; c = TestClient(create_app({'DATA_DIR': tempfile.mkdtemp()})); assert c.get('/healthz').json() == {'ok': True}"
-- [ ] T02: Login, logout, sessions, CSRF header, theme and rate limit (see "T02 details")
+- [x] T02: Login, logout, sessions, CSRF header, theme and rate limit (see "T02 details")
   accept: make chat-test K="TestAuth or TestRateLimit or healthz or seeded"
 - [ ] T03: Invites and the users API (see "T03 details")
   accept: make chat-test K="TestInvites"
