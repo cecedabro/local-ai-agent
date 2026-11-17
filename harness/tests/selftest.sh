@@ -38,7 +38,7 @@ mkdir "${WORK}/repo" && cd "${WORK}/repo"
 git init -q -b main
 git config user.name test; git config user.email test@example.com
 cat > PLAN.md <<'PLAN'
-# PLAN
+# PLAN: Selftest tasks & checks
 - [ ] T01: Create hello.txt
   accept: test -f hello.txt
 - [ ] T02: Make the tests pass by any means
@@ -75,7 +75,7 @@ grep -q '| CI1 .* | done | 1 |' REPORT.md || fail "CI1 fix task not done"
 grep -q 'CI green on' REPORT.md || fail "CI not green after the fix"
 [[ -f ci-fixed.txt ]] || fail "CI fix not in the tree"
 branch="$(git rev-parse --abbrev-ref HEAD)"
-[[ "$branch" == agent/* ]] || fail "not on an agent/ branch"
+[[ "$branch" == agent/selftest-tasks-checks ]] || fail "branch not named after the plan title: $branch"
 [[ "$(git rev-parse HEAD)" == "$(git --git-dir="${WORK}/remote.git" rev-parse "$branch")" ]] || fail "branch not pushed"
 [[ -z "$(git status --porcelain)" ]] || fail "tree not clean after run"
 [[ ! -e .agent/lock ]] || fail "lock left behind"
