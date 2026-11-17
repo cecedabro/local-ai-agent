@@ -12,6 +12,7 @@ import html
 import json
 import os
 import re
+import secrets
 import select
 import socket
 import sqlite3
@@ -36,6 +37,11 @@ STALE_AFTER = 3600
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 JOB_ACTIONS = {"heartbeat", "finish", "cancel", "move", "requeue"}
+RIGHTS = ("admin", "chat", "evidence", "queue")
+NAME_RE = re.compile(r"[a-z0-9][a-z0-9_.-]{1,31}$")
+SESSION_DAYS = 30
+INVITE_DAYS = 7
+MIN_PASSWORD = 10
 METRICS = {  # llama-server /metrics (needs --metrics) -> our names
     "llamacpp:tokens_predicted_total": "gen",
     "llamacpp:tokens_predicted_seconds_total": "gen_s",
@@ -62,9 +68,33 @@ create table if not exists jobs(id integer primary key, repo text, ref text, not
   ci int, state text, pos real, created real, started real, finished real, worker text, seen real,
   cancel int default 0, detail text, exit_code int);
 create table if not exists run_control(run_id text primary key, pause int);
+create table if not exists users(name text primary key, pw text, rights text, created real, last_seen real, disabled int default 0);
+create table if not exists sessions(id text primary key, name text, created real, seen real);
+create table if not exists invites(id text primary key, name text, rights text, created real, expires real, used int default 0);
 create table if not exists imported(key text primary key);
 create table if not exists imported_tokens(day text, source text, gen int, prompt int, primary key(day, source));
 """
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return f"scrypt$16384$8$1${salt.hex()}${dk.hex()}"
+
+
+def check_password(hashed: str, plain: str) -> bool:
+    parts = hashed.split("$")
+    expected = f"scrypt${parts[3]}${parts[4]}${parts[5]}${hashlib.scrypt(plain.encode(), salt=bytes.fromhex(parts[4]), n=int(parts[1]), r=int(parts[2]), p=int(parts[3]), dklen=32).hex()}"
+    return hmac.compare_digest(hashed, expected)
+
+
+def norm_rights(input_rights: str | list[str]) -> str:
+    if isinstance(input_rights, str):
+        return ",".join(sorted(set(input_rights.split(","))))
+    return ",".join(sorted(set(input_rights)))
+
+
+def sha(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def iso(t: float | None) -> str | None:
@@ -1500,9 +1530,14 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 lease_ttl: float = 180, probe_interval: float = 30, clock=time.time,
                 llama_key: str | None = None, job_ttl: float = 900,
                 job_owners: list[str] | None = None, gateway_clients: dict[str, tuple[str, str]] | None = None,
-                gateway_concurrency: int = 1) -> ThreadingHTTPServer:
+                gateway_concurrency: int = 1, admin: tuple[str, str] | None = None) -> ThreadingHTTPServer:
     app = App(db_path=db_path, token=token, llama_url=llama_url, llama_key=llama_key, lease_ttl=lease_ttl,
               probe_interval=probe_interval, job_ttl=job_ttl, clock=clock, job_owners=job_owners)
+    if admin is not None and len(app.db.execute("select 1 from users limit 1").fetchall()) == 0:
+        name, pw = admin
+        app.db.execute("insert into users(name, pw, rights, created, last_seen) values (?,?,?,?,?)",
+                       (name, hash_password(pw), ",".join(RIGHTS), clock(), clock()))
+        app.db.commit()
     gw = Gateway(app, gateway_clients or {}, gateway_concurrency)
     app.gateway = gw
 
@@ -1650,6 +1685,15 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
     return srv
 
 
+def _parse_admin(raw: str | None) -> tuple[str, str] | None:
+    if not raw:
+        return None
+    parts = raw.split(":", 1)
+    if len(parts) == 2 and parts[0] and parts[1]:
+        return (parts[0], parts[1])
+    raise ValueError(f"ADMIN must be 'username:password', got: {raw!r}")
+
+
 def main() -> None:
     srv = make_server("0.0.0.0", int(os.environ.get("STATUS_PORT", "8080")),
                       db_path=os.environ.get("STATUS_DB", "/data/status.db"),
@@ -1661,7 +1705,8 @@ def main() -> None:
                       job_ttl=float(os.environ.get("JOB_TTL", "900")),
                       job_owners=[o.strip() for o in os.environ.get("JOB_OWNERS", "").split(",") if o.strip()],
                       gateway_clients=parse_clients(os.environ.get("GATEWAY_CLIENTS", "")),
-                      gateway_concurrency=int(os.environ.get("GATEWAY_CONCURRENCY", "1")))
+                      gateway_concurrency=int(os.environ.get("GATEWAY_CONCURRENCY", "1")),
+                      admin=_parse_admin(os.environ.get("ADMIN")))
     interval = float(os.environ.get("METRICS_INTERVAL", "60"))
     app: App = srv.app  # type: ignore[attr-defined]
 

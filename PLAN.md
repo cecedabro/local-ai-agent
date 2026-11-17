@@ -16,7 +16,7 @@ Rules for every task:
 - Do not touch `harness/`, `status/static/`, `Makefile`, `status/SPEC.md` or any test file except
   your own `status/tests/test_unit_*.py`.
 
-- [ ] T01: Accounts table, password hashing and the first admin (see "T01 details" in PLAN.md)
+- [x] T01: Accounts table, password hashing and the first admin (see "T01 details" in PLAN.md)
   accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_password_stored_with_scrypt
 - [ ] T02: Login, logout and sessions (see "T02 details" in PLAN.md)
   accept: python3 -m unittest -q status/tests/test_accept_accounts.py -k test_login_logout_and_cookie -k test_session_expires -k test_seed_only_when_empty -k NoAccountsTest
