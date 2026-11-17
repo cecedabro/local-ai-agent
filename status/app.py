@@ -533,6 +533,9 @@ class App:
             run_rows = self.db.execute(
                 f"select received, body from events where run_id in ({','.join('?' * len(ids))}) "
                 "order by received, id", ids).fetchall() if ids else []
+            pause_map = {r[0]: bool(r[1]) for r in self.db.execute(
+                f"select run_id, pause from run_control where run_id in ({','.join('?' * len(ids))})", ids).fetchall()
+                } if ids else {}
             ev_rows = self.db.execute("select received, body from events order by received desc, id desc "
                                       "limit 50").fetchall()
             done = [json.loads(b) for (b,) in self.db.execute("select body from events where kind='task_done'")]
@@ -582,8 +585,7 @@ class App:
         for run in sorted(runs.values(), key=lambda r: r["last"], reverse=True):
             fin = run["fin"]
             is_paused_evt = run["paused_evt"] == "paused" and not fin
-            cr = self.db.execute("select pause from run_control where run_id=?", (run["run_id"],)).fetchone()
-            pause_req = bool(cr[0]) if cr else False
+            pause_req = pause_map.get(run["run_id"], False)
             state = "finished" if fin else ("paused" if is_paused_evt else (
                 "running" if now - run["last"] <= STALE_AFTER or run["run_id"] == holder_run else "stale"))
             out_runs.append({
@@ -594,7 +596,7 @@ class App:
                 "pushed": fin.get("pushed") if fin else None, "pr": fin.get("pr") if fin else None,
                 "job_id": run["job_id"], "max_hours": run["max_hours"],
                 "task_since": None if fin or not run["current"] else run.get("task_since"),
-                "retries": run.get("retries"), "pause": pause_req})
+                "retries": run.get("retries"), "pause": not fin and pause_req})
 
         n = len(done)
         stats = {"tasks_done": n, "tasks_skipped": skipped,
