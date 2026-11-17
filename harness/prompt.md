@@ -9,6 +9,9 @@ After you stop, the harness runs these commands. The task counts as done only if
 - `{{check}}`
 
 ## Rules
+- Nobody will read questions or plans. Never end by asking whether to proceed: make the edits now,
+  run the commands below, fix what fails, then stop.
+- Don't read large files whole; use `grep -n` and read only the line ranges you need.
 - Read `AGENTS.md` first for stack, commands and conventions. Read the parts of `SPEC.md` this task needs.
 - Do not modify these paths; changes there reject the attempt: {{protected}}.
   If a test seems wrong, make the code satisfy it anyway and note the concern in PROGRESS.md.

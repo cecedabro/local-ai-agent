@@ -25,8 +25,12 @@ from pathlib import Path
 from typing import Callable
 
 KINDS = {"run_started", "task_started", "task_done", "task_skipped", "push_failed", "ci_waiting", "ci",
-          "run_finished", "paused", "resumed"}
+         "run_finished", "paused", "resumed"}
+IMPORT_KINDS = {"run_started", "task_done", "task_skipped", "run_finished"}
 MAX_BODY = 256 * 1024
+IMPORT_MAX = 8 * 1024 * 1024                              # POST /api/import (SPEC §12.1)
+IMPORT_ITEMS = 5000
+DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 RETENTION = 30 * 86400
 STALE_AFTER = 3600
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
@@ -58,6 +62,8 @@ create table if not exists jobs(id integer primary key, repo text, ref text, not
   ci int, state text, pos real, created real, started real, finished real, worker text, seen real,
   cancel int default 0, detail text, exit_code int);
 create table if not exists run_control(run_id text primary key, pause int);
+create table if not exists imported(key text primary key);
+create table if not exists imported_tokens(day text, source text, gen int, prompt int, primary key(day, source));
 """
 
 
@@ -91,6 +97,8 @@ def clean_repos(value: list[object] | None, owners: set[str]) -> list[str]:
             continue
         seen.add(s)
         out.append(s)
+        if len(out) >= 500:
+            break
     return sorted(out, key=str.lower)
 
 
@@ -140,32 +148,112 @@ class App:
         with self.lock:
             self.db.execute("insert into events(received, run_id, kind, body) values (?,?,?,?)",
                             (now, body["run_id"], kind, json.dumps(body)))
-            self.db.execute("insert or ignore into tally(repo) values (?)", (repo,))
-            self.db.execute("update tally set last=? where repo=?", (now, repo))
-            day = day_of(now)
-            self.db.execute("insert or ignore into daily(day) values (?)", (day,))
-            if kind == "task_done":
-                add, rem = int(num(body.get("insertions"))), int(num(body.get("deletions")))
-                self.db.execute("update tally set commits=commits+1, added=added+?, removed=removed+?, "
-                                "seconds=seconds+?, first_try=first_try+? where repo=?",
-                                (add, rem, num(body.get("seconds")), int(body.get("attempts") == 1), repo))
-                self.db.execute("update daily set commits=commits+1, added=added+?, removed=removed+? "
-                                "where day=?", (add, rem, day))
-            elif kind == "task_skipped":
-                self.db.execute("update tally set skipped=skipped+1, seconds=seconds+? where repo=?",
-                                (num(body.get("seconds")), repo))
-                self.db.execute("update daily set skipped=skipped+1 where day=?", (day,))
-            elif kind == "run_started":
-                self.db.execute("update tally set runs=runs+1 where repo=?", (repo,))
-            elif kind == "run_finished" and body.get("pr"):
-                self.db.execute("update tally set prs=prs+1 where repo=?", (repo,))
-            elif kind == "push_failed":
-                self.db.execute("update tally set push_failed=push_failed+1 where repo=?", (repo,))
+            self._count(body, now)
             if kind == "run_finished":
                 self.db.execute("delete from run_control where run_id=?", (body["run_id"],))
-            if self.meta("since") is None:
-                self.set_meta("since", now)
             self.db.commit()
+
+    def _count(self, body: dict, t: float) -> None:
+        """All-time numbers (§10) for one event at time t: live (now) or imported (its ts).
+        Caller holds the lock and commits."""
+        repo, kind = body["repo"], body["kind"]
+        self.db.execute("insert or ignore into tally(repo) values (?)", (repo,))
+        self.db.execute("update tally set last=max(coalesce(last, 0), ?) where repo=?", (t, repo))
+        day = day_of(t)
+        self.db.execute("insert or ignore into daily(day) values (?)", (day,))
+        if kind == "task_done":
+            add, rem = int(num(body.get("insertions"))), int(num(body.get("deletions")))
+            self.db.execute("update tally set commits=commits+1, added=added+?, removed=removed+?, "
+                            "seconds=seconds+?, first_try=first_try+? where repo=?",
+                            (add, rem, num(body.get("seconds")), int(body.get("attempts") == 1), repo))
+            self.db.execute("update daily set commits=commits+1, added=added+?, removed=removed+? "
+                            "where day=?", (add, rem, day))
+        elif kind == "task_skipped":
+            self.db.execute("update tally set skipped=skipped+1, seconds=seconds+? where repo=?",
+                            (num(body.get("seconds")), repo))
+            self.db.execute("update daily set skipped=skipped+1 where day=?", (day,))
+        elif kind == "run_started":
+            self.db.execute("update tally set runs=runs+1 where repo=?", (repo,))
+        elif kind == "run_finished" and body.get("pr"):
+            self.db.execute("update tally set prs=prs+1 where repo=?", (repo,))
+        elif kind == "push_failed":
+            self.db.execute("update tally set push_failed=push_failed+1 where repo=?", (repo,))
+        since = self.meta("since")
+        if since is None or t < since:
+            self.set_meta("since", t)
+
+    # ------------------------------------------------------------------ history import (§12)
+    @staticmethod
+    def parse_ts(ts: object) -> float | None:
+        if not isinstance(ts, str):
+            return None
+        try:
+            d = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return d.timestamp() if d.tzinfo is not None else None
+
+    @classmethod
+    def import_error(cls, body: dict) -> str | None:
+        events, tokens = body.get("events", []), body.get("tokens", [])
+        for name, items in (("events", events), ("tokens", tokens)):
+            if not isinstance(items, list):
+                return f"{name} must be a list"
+            if len(items) > IMPORT_ITEMS:
+                return f"{name}: at most {IMPORT_ITEMS} items"
+        for i, ev in enumerate(events):
+            if not isinstance(ev, dict):
+                return f"events[{i}]: not an object"
+            key, repo = ev.get("key"), ev.get("repo")
+            if not isinstance(key, str) or not key or len(key) > 200:
+                return f"events[{i}]: bad key"
+            if not isinstance(repo, str) or not repo:
+                return f"events[{i}]: bad repo"
+            if ev.get("kind") not in IMPORT_KINDS:
+                return f"events[{i}]: bad kind"
+            if cls.parse_ts(ev.get("ts")) is None:
+                return f"events[{i}]: bad ts (ISO 8601 with a time zone)"
+        for i, row in enumerate(tokens):
+            if not isinstance(row, dict):
+                return f"tokens[{i}]: not an object"
+            day, source = row.get("day"), row.get("source")
+            try:
+                ok_day = isinstance(day, str) and DAY_RE.fullmatch(day) and dt.date.fromisoformat(day)
+            except ValueError:
+                ok_day = False
+            if not ok_day:
+                return f"tokens[{i}]: bad day"
+            if not isinstance(source, str) or not source or len(source) > 50:
+                return f"tokens[{i}]: bad source"
+            for f in ("generated", "prompt"):
+                v = row.get(f)
+                if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+                    return f"tokens[{i}]: bad {f}"
+        return None
+
+    def import_history(self, body: dict) -> tuple[int, dict]:
+        err = self.import_error(body)
+        if err:
+            return 400, {"error": err}
+        out = {"events_added": 0, "events_skipped": 0, "token_days": 0, "token_days_ignored": 0}
+        with self.lock:
+            for ev in body.get("events", []):
+                cur = self.db.execute("insert or ignore into imported(key) values (?)", (ev["key"],))
+                if cur.rowcount == 1:
+                    self._count(ev, self.parse_ts(ev["ts"]))
+                    out["events_added"] += 1
+                else:
+                    out["events_skipped"] += 1
+            first = self.meta("first_sample_day")
+            for row in body.get("tokens", []):
+                if first is not None and row["day"] >= first:
+                    out["token_days_ignored"] += 1
+                    continue
+                self.db.execute("insert or replace into imported_tokens(day, source, gen, prompt) values (?,?,?,?)",
+                                (row["day"], row["source"], row["generated"], row["prompt"]))
+                out["token_days"] += 1
+            self.db.commit()
+        return 200, out
 
     # --------------------------------------------------------------- run_control
     def run_control(self, run_id: str, act: str) -> tuple[int, dict]:
@@ -174,7 +262,7 @@ class App:
             if act == "control":
                 return 200, {"pause": bool(row[0]) if row else False}
             # pause or resume
-            if not self.db.execute("select 1 from events where run_id=? and kind='run_started'", (run_id,)).fetchone():
+            if not self.db.execute("select 1 from events where run_id=? limit 1", (run_id,)).fetchone():
                 return 404, {"error": "run not found"}
             finished = self.db.execute("select count(*) from events where run_id=? and kind='run_finished'",
                                        (run_id,)).fetchone()[0]
@@ -277,42 +365,22 @@ class App:
             self.db.commit()
             return 201, self.job_pub(self.job_row(cur.lastrowid))
 
+    def seen_worker(self, worker: str, paused: bool, raw_repos: object) -> None:
+        """Record a ping or claim; keep the worker's last non-empty repo list (§8). Caller holds the lock."""
+        repos = clean_repos(raw_repos if isinstance(raw_repos, list) else None, self.job_owners)
+        old = self.workers.get(worker) or {}
+        self.workers[worker] = {"seen": self.clock(), "paused": paused, "repos": repos or old.get("repos", [])}
+
     def ping(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            existing = self.workers.get(worker)
-            seen = self.clock()
-            paused = bool(body.get("paused"))
-            raw_repos = body.get("repos")
-            if raw_repos is not None:
-                repos = clean_repos(raw_repos, self.job_owners)
-                if repos:
-                    pass
-                elif existing and existing.get("repos"):
-                    repos = existing["repos"]
-                else:
-                    repos = []
-            else:
-                repos = existing.get("repos", []) if existing else []
-            self.workers[worker] = {"seen": seen, "paused": paused, "repos": repos}
+            self.seen_worker(worker, bool(body.get("paused")), body.get("repos"))
         return {"ok": True}
 
     def claim(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            existing = self.workers.get(worker)
-            raw_repos = body.get("repos")
-            if raw_repos is not None:
-                repos = clean_repos(raw_repos, self.job_owners)
-                if repos:
-                    pass
-                elif existing and existing.get("repos"):
-                    repos = existing["repos"]
-                else:
-                    repos = []
-            else:
-                repos = existing.get("repos", []) if existing else []
-            self.workers[worker] = {"seen": self.clock(), "paused": False, "repos": repos}
+            self.seen_worker(worker, False, body.get("repos"))
             self.expire_jobs()
             if self.db.execute("select 1 from jobs where state='running'").fetchone():
                 self.db.commit()
@@ -450,6 +518,8 @@ class App:
             self.set_meta("raw", vals)
             self.set_meta("busy", busy)
             day = day_of(now)
+            if self.meta("first_sample_day") is None:
+                self.set_meta("first_sample_day", day)
             self.db.execute("insert or ignore into daily(day) values (?)", (day,))
             self.db.execute("update daily set gen=gen+?, prompt=prompt+? where day=?",
                             (int(d["gen"]), int(d["prompt"]), day))
@@ -458,6 +528,8 @@ class App:
 
     def tokens(self, now: float) -> dict:
         tot = self.meta("tokens")
+        imp_gen, imp_prompt = self.db.execute(
+            "select coalesce(sum(gen), 0), coalesce(sum(prompt), 0) from imported_tokens").fetchone()
         rows = self.db.execute("select t, gen, gen_s, prompt, prompt_s, busy from samples where t > ? order by t",
                                (now - 86400,)).fetchall()
         last_t = rows[-1][0] if rows else None
@@ -478,8 +550,8 @@ class App:
             "error": self.metrics_error,
             "last_sample": iso(last_t),
             "busy": bool(rows[-1][5]) if rows and now - rows[-1][0] < 300 else None,
-            "generated_total": int(tot["gen"]) if tot else 0,
-            "prompt_total": int(tot["prompt"]) if tot else 0,
+            "generated_total": (int(tot["gen"]) if tot else 0) + imp_gen,
+            "prompt_total": (int(tot["prompt"]) if tot else 0) + imp_prompt,
             "gen_tps": rate(tot["gen"], tot["gen_s"]) if tot else None,
             "prompt_tps": rate(tot["prompt"], tot["prompt_s"]) if tot else None,
             "gen_tps_recent": rate(sum(r[1] for r in recent), sum(r[2] for r in recent)),
@@ -547,6 +619,8 @@ class App:
             days = {r[0]: r[1:] for r in self.db.execute(
                 "select day, commits, skipped, added, removed, gen from daily where day >= ?",
                 (day_of(now - 13 * 86400),))}
+            imp_days = dict(self.db.execute("select day, sum(gen) from imported_tokens where day >= ? group by day",
+                                            (day_of(now - 13 * 86400),)).fetchall())
             jobs = [dict(zip(self.JOB_COLS, r)) for r in self.db.execute(
                 f"select {','.join(self.JOB_COLS)} from jobs where state in ('queued','running') "
                 "or finished >= ? order by id desc", (now - 7 * 86400,))]
@@ -620,7 +694,7 @@ class App:
             day = day_of(now - i * 86400)
             c, s, a, rm, g = days.get(day, (0, 0, 0, 0, 0))
             daily.append({"day": day, "commits": c, "skipped": s, "lines_added": a, "lines_removed": rm,
-                          "generated": g})
+                          "generated": g + (imp_days.get(day) or 0)})
 
         run_by_job = {}
         for r in out_runs:
@@ -946,26 +1020,29 @@ def render_live(st: dict) -> str:
         total = len(plan) or (run["done"] + run["skipped"])
         finished = sum(1 for t in plan if t.get("state") in ("done", "skipped")) if plan else run["done"] + run["skipped"]
         pct = int(100 * finished / total) if total else 0
-        if run["state"] == "running":
-            if run.get("pause"):
-                state_cls, state_label, run_actions = "warn", "pausing after this task", f'<button class="ctl" data-run="{e(run["run_id"])}" data-act="resume" title="Resume this run">Resume</button>'
-            else:
-                state_cls, state_label, run_actions = "ok", "running", f'<button class="ctl" data-run="{e(run["run_id"])}" data-act="pause" title="Pause this run">Pause</button>'
+        paused = run["state"] == "paused"
+        rid = e(run["run_id"])
+        resume = f'<button class="ctl" data-run="{rid}" data-act="resume">Resume</button>'
+        if paused:
+            run_actions = f'<span class="pill warn">paused</span>{resume}'
+        elif run.get("pause"):
+            run_actions = f'<span class="pill warn">pausing after this task</span>{resume}'
         else:
-            state_cls, state_label, run_actions = "warn", "paused", f'<span class="pill warn">paused</span><button class="ctl" data-run="{e(run["run_id"])}" data-act="resume" title="Resume this run">Resume</button>'
+            run_actions = f'<button class="ctl" data-run="{rid}" data-act="pause">Pause after this task</button>'
         parts.append(f'<div class="now-head"><span class="repo">{e(run["repo"])}</span>'
-                     f'<code>{e(run["branch"])}</code><span class="pill {state_cls}">{e(state_label)}</span>'
-                     f'<span class="muted">running {e(dur(run["started"], now))}'
-                     f'{" · job #" + e(run["job_id"]) if run["job_id"] else ""}</span>{run_actions}</div>')
+                     f'<code>{e(run["branch"])}</code><span class="muted">{"paused" if paused else "running"} · '
+                     f'started {e(ago(run["started"], now))}'
+                     f'{" · job #" + e(run["job_id"]) if run["job_id"] else ""}</span>'
+                     f'<span class="run-actions">{run_actions}</span></div>')
         if c:
             att = f'attempt {e(str(c.get("attempt")))}' + (f'/{e(str(run["retries"]))}' if run.get("retries") else "")
             parts.append(f'<p class="task"><b>{e(str(c.get("task_id")))}</b> {e(str(c.get("title")))}</p>'
                          f'<p class="muted small">{att} · for {e(dur(run["task_since"], now))}</p>')
         else:
-            between = ('Between tasks (checking, pushing or waiting for CI).' if run["state"] == "running"
-                       else 'Pausing after this task.')
+            between = ('Paused between tasks: the model and the PC are free. Press Resume to continue.' if paused
+                       else 'Between tasks (checking, pushing or waiting for CI).')
             parts.append(f'<p class="muted small">{between}</p>')
-        parts.append(f'<div class="progress live{" paused" if run.get("pause") else ""}" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
+        parts.append(f'<div class="progress {"paused" if paused else "live"}" title="{finished} of {total} tasks"><i style="width:{pct}%"></i></div>'
                      f'<p class="muted small">{finished} of {total} plan tasks · {run["done"]} done, '
                      f'{run["skipped"]} skipped this run · last event {e(ago(run["last_event"], now))}</p>')
         if tk.get("busy") is not None:
@@ -1376,8 +1453,7 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         options = "".join(f'<option value="{e(r)}">{e(r)}</option>' for r in known_repos)
         repo_input = f'<select name="repo" required aria-label="Repository">{options}</select>'
     else:
-        repo_input = f'<input name="repo" list="repos" placeholder="owner/repo" required aria-label="Repository">'
-    datalist = f'<datalist id="repos">{"".join("<option value=" + e(r) + ">" + e(r) + "</option>" for r in known_repos)}</datalist>' if known_repos else ""
+        repo_input = '<input name="repo" placeholder="owner/repo" required aria-label="Repository">'
     return (
         f'<!doctype html><html lang="en"><head>{HEAD}'
         f'<title>Agent status</title></head><body class="locked">{DEFS}'
@@ -1388,7 +1464,7 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True) -> str:
         '<div class="card-head ctl"><h2>Queue a job</h2>'
         '<button type="button" id="lock" class="link small">lock</button></div>'
         '<form id="add" autocomplete="off"><div class="fields">'
-        f'{repo_input}{datalist}'
+        f'{repo_input}'
         '<input name="ref" placeholder="branch (default)" aria-label="Branch">'
         '<input name="note" placeholder="note" maxlength="200" aria-label="Note"></div>'
         '<div class="opts"><label class="chip">max <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
@@ -1527,7 +1603,7 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 n = int(self.headers.get("Content-Length", 0))
             except ValueError:
                 return self.send(400, {"error": "bad length"})
-            if n > MAX_BODY:
+            if n > (IMPORT_MAX if self.path.split("?", 1)[0] == "/api/import" else MAX_BODY):
                 return self.send(413, {"error": "too large"})
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")
@@ -1558,6 +1634,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
             m = re.fullmatch(r"/api/jobs/(\d+)/([a-z]+)", path)
             if m and m.group(2) in JOB_ACTIONS:
                 return self.send(*app.job_action(int(m.group(1)), m.group(2), body))
+            if path == "/api/import":
+                return self.send(*app.import_history(body))
             m = re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)
             if m:
                 return self.send(*app.run_control(urllib.parse.unquote(m.group(1)), m.group(2)))

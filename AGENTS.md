@@ -36,6 +36,12 @@ changing architecture. Decisions below are settled unless the user says otherwis
 - Your own tests: `status/tests/test_unit_*.py` (`make check` runs them).
 - Paths in `.agent-protected` are human-owned; changes there reject the attempt.
 
+## Agent runs (agent-loop)
+- Runs are non-interactive: nobody answers questions. Never end with a question or a plan; make the
+  edits, run the task's accept command, fix what fails, then stop.
+- Never read a large file whole (`status/app.py` is ~1700 lines): `grep -n`, then read the lines you
+  need with `sed -n 'a,bp' <file>`.
+
 ## Commands
 - `make lint` — must pass before committing.
 - `make test` — harness self-test.
