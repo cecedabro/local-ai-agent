@@ -23,14 +23,36 @@ jobs:
       - run: |
           if [ ! -f status/app.py ]; then echo "status/app.py not written yet; skipping"; exit 0; fi
           make check status-test
+  # Every status change on main that passes the tests is a release: image tags X.Y.Z (patch
+  # bumped from the newest `status-vX.Y.Z` git tag, first 0.1.0) and sha-<short>. Flux image
+  # automation in the homelab repo follows X.Y.Z (ImagePolicy agent-status). The devbox image
+  # has no version tags on purpose: it is bumped by hand when no loop runs.
   build:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: status-release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - id: app
         run: echo "exists=$([ -f status/app.py ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: version
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          git fetch -q --tags origin
+          last=$(git tag --list 'status-v*' | sed 's/^status-v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -z "$last" ]; then next=0.1.0; else
+            IFS=. read -r major minor patch <<< "$last"; next="$major.$minor.$((patch + 1))"; fi
+          { echo "number=$next"; echo "short=$(git rev-parse --short=7 HEAD)"; } >> "$GITHUB_OUTPUT"
+          echo "Releasing agent-status $next"
       - if: steps.app.outputs.exists == 'true'
         uses: docker/setup-buildx-action@v4
       - if: steps.app.outputs.exists == 'true'
@@ -46,7 +68,22 @@ jobs:
           file: status/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:latest
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:${{ steps.version.outputs.number }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:sha-${{ steps.version.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-status:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Tag the release
+        if: steps.app.outputs.exists == 'true'
+        env:
+          TAG: status-v${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "agent-status $TAG"
+          git push origin "$TAG"

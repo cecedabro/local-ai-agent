@@ -82,3 +82,13 @@ Running it twice is safe: events are keyed so duplicates are skipped, and token 
 ## Pause
 
 Pause on the Now card makes the loop stop after its current task and frees the model and the PC. Resume continues it (needs the devbox image with the new agent-loop).
+
+## Releases and deploy
+
+Every change under `status/` merged to `main` that passes the tests is a release:
+`.github/workflows/status-image.yml` pushes `ghcr.io/cecedabro/local-ai-agent-status:X.Y.Z`
+(patch bumped from the newest `status-vX.Y.Z` git tag; the first is `0.1.0`) plus
+`sha-<short>`, and tags the commit `status-vX.Y.Z`. Flux image automation in the homelab repo
+(ImagePolicy `agent-status`, semver) picks up the new `X.Y.Z` and rolls the pod by itself.
+The devbox image is deliberately not versioned this way: a new devbox image restarts the pod
+and kills a running loop, so it is bumped by hand.
