@@ -58,6 +58,27 @@ curl -H "Authorization: Bearer $T" -d '{}' $U/api/jobs/3/cancel
 curl -H "Authorization: Bearer $T" -d '{"action":"acquire","run_id":"r1","repo":"woodshed"}' $U/api/lease
 curl -H "Authorization: Bearer $T" -d '{"model":"coder","messages":[{"role":"user","content":"hi"}]}' $U/v1/chat/completions
 curl -H "Authorization: Bearer $T" -d '{"run_id":"r1","repo":"woodshed","kind":"ci","ts":"2026-11-16T10:00:00Z","detail":"hi"}' $U/api/events
+curl -H "Authorization: Bearer $T" -d '{"events":[],"tokens":[]}' $U/api/import
+curl -H "Authorization: Bearer $T" -d '{}' $U/api/runs/r1/pause
 ```
 
 Tests: `make check` (queue, totals, tokens, gateway) and `make status-test` (the original contract).
+
+## History import
+
+`status/backfill.py` reads the agent's commit history from every git repository under `~/repos` using `git log --all --shortstat`, PRs via the `gh` CLI, and token counts from OpenCode's SQLite database at `~/.local/share/opencode/opencode.db` (querying the `message` table for assistant rows with `json_valid` filtering).
+
+Run it on the devbox:
+
+```bash
+python3 status/backfill.py --dry-run
+python3 status/backfill.py
+```
+
+STATUS_URL and STATUS_TOKEN are already set in the devbox environment.
+
+Running it twice is safe: events are keyed so duplicates are skipped, and token days are simply replaced.
+
+## Pause
+
+Pause on the Now card makes the loop stop after its current task and frees the model and the PC. Resume continues it (needs the devbox image with the new agent-loop).
