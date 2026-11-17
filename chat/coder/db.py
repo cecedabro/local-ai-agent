@@ -96,25 +96,29 @@ class DB:
         self._path = Path(data_dir)
         self._path.mkdir(parents=True, exist_ok=True)
         self._db_path = self._path / "coder.db"
-        self._conn: sqlite3.Connection | None = None
+        self._local = threading.local()
 
     def _connect(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(
                 self._db_path.as_uri(),
                 uri=True,
                 timeout=30,
+                check_same_thread=False,
             )
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA foreign_keys=ON")
-            self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.row_factory = sqlite3.Row
-        return self._conn
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.row_factory = sqlite3.Row
+            self._local.conn = conn
+        return conn
 
     def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     def init_schema(self) -> None:
         with self._lock:

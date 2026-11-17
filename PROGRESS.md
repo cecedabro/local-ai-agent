@@ -1,5 +1,7 @@
 # PROGRESS
 
+- [T03] `chat/coder/app.py` + `chat/coder/db.py`: Fixed §3 invite acceptance tests (`TestInvites`) — patched `timezone` import in `api_accept_invite`, added `threading.local()` for per-thread SQLite connections in `db.py`, rewrote `api_create_invite`/`api_list_invites`/`api_delete_invite` with correct session/CSRF validation and status codes, added `_is_admin()` helper, fixed `admin_page` to use `_session_from_cookie`, fixed `api_list_users` to bypass explicit CSRF wrapper, fixed `api_delete_user` path param name mismatch (`{username}` → `{target_username}`). All 4 `TestInvites` tests pass.
+
 - [T06] `status/backfill.py`: added `opencode_tokens(db_path: Path) -> list[dict]` — reads OpenCode's SQLite DB via `file:ro` URI, uses `json_valid` + `json_extract` to safely filter assistant rows with tokens, groups by UTC date, sums input/output+reasoning, returns sorted list.
 - `make check` + `BackfillOpencodeTest` both pass; no new dependencies, stdlib only.
 - [T09] `status/app.py`: refactored `App.status()` to batch `run_control` query before the run iteration loop, replacing N per-run SQL queries with a single `IN` query and dict lookup; added `"pause": not fin and pause_req` to run dicts; hardened finish to always clear `pause` to `False`. `make check` + `PauseApiTest` both pass.

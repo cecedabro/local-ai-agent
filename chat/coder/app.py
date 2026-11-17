@@ -242,8 +242,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if "admin" not in user.get("rights", []):
             return JSONResponse({"error": "forbidden"}, status_code=403)
         invites = app.state.db.list_invites()
-        users = app.state.db.list_users()
-        return JSONResponse({"invites": invites, "users": users})
+        return JSONResponse(invites)
 
     @app.post("/logout")
     async def logout(request: Request) -> Response:
@@ -540,98 +539,125 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     # ── POST /api/invites ─────────────────────────────────────────────────
 
-    @app.post("/api/invites")
+    @app.post("/api/invites", status_code=201)
     async def api_create_invite(request: Request) -> Response:
-        session = _require_session_and_csrf(request)
-        username = session[0]
-        user = session[1]
-        if not _is_admin(user):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
+        result = _require_admin(request, app.state.db)
+        if isinstance(result, Response):
+            return result
+        csrf = _require_csrf(request)
+        if isinstance(csrf, Response):
+            return csrf
+        _, user = result
         try:
             body = await request.json()
         except Exception:
             body = {}
-        rights = body.get("rights", "")
-        note = body.get("note", "")
-        if not rights or not rights.strip():
-            return JSONResponse({"error": "rights must not be empty"}, status_code=400)
-        rights_list = [r.strip() for r in rights.split(",") if r.strip()]
-        if "root" in rights_list:
-            return JSONResponse({"error": "root is not allowed"}, status_code=400)
-        token = secrets.token_urlsafe(32)
-        invite_id = app.state.db.create_invite(token, rights_list, note, username)
-        invite_url = f"{request.url.scheme}://{request.url.hostname}/invite/{token}"
-        return JSONResponse({"id": invite_id, "token": token, "url": invite_url, "rights": rights_list, "note": note}, status_code=201)
+        rights = body.get("rights", [])
+        if not isinstance(rights, list) or len(rights) == 0:
+            return JSONResponse({"error": "rights must be a non-empty list"}, status_code=400)
+        valid_rights = {"chat", "evidence", "admin"}
+        for r in rights:
+            if r not in valid_rights:
+                return JSONResponse({"error": f"invalid right: {r}"}, status_code=400)
+        note = body.get("note")
+        invite = app.state.db.create_invite(rights, note)
+        token = invite["token"]
+        return JSONResponse({
+            "id": invite["id"],
+            "token": token,
+            "url": f"/invite#{token}",
+            "expires": invite["expires"],
+            "rights": invite["rights"],
+            "note": note
+        }, status_code=201)
 
     # ── DELETE /api/invites/{invite_id} ───────────────────────────────────
 
     @app.delete("/api/invites/{invite_id}")
-    async def api_delete_invite(invite_id: str, request: Request) -> Response:
-        session = _require_session_and_csrf(request)
-        username = session[0]
-        user = session[1]
-        if not _is_admin(user):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        if not app.state.db.delete_invite(invite_id):
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse({"ok": True})
+    async def api_delete_invite(invite_id: int, request: Request) -> Response:
+        result = _require_admin(request, app.state.db)
+        if isinstance(result, Response):
+            return result
+        csrf = _require_csrf(request)
+        if isinstance(csrf, Response):
+            return csrf
+        app.state.db.delete_invite(invite_id)
+        return Response(status_code=204)
 
     # ── POST /api/invites/accept ──────────────────────────────────────────
 
-    @app.post("/api/invites/accept")
+    @app.post("/api/invites/accept", status_code=201)
     async def api_accept_invite(request: Request) -> Response:
-        session = _require_session_and_csrf(request)
-        username = session[0]
-        user = session[1]
         try:
             body = await request.json()
         except Exception:
             body = {}
-        token = body.get("token", "")
-        new_username = body.get("new_username", "")
-        new_password = body.get("new_password", "")
+        token = (body.get("token") or "").strip()
+        new_username = (body.get("username") or "").strip()
+        new_password = (body.get("password") or "").strip()
         if not token or not new_username or not new_password:
-            return JSONResponse({"error": "token, new_username, and new_password required"}, status_code=400)
-        invite = app.state.db.get_invite_by_token(token)
-        if not invite:
-            return JSONResponse({"error": "invalid invite token"}, status_code=404)
-        if invite["used_by"]:
+            return JSONResponse({"error": "token, username, and password required"}, status_code=400)
+        import re
+        username_regex = re.compile(r'^[a-z0-9][a-z0-9_.\-]{1,31}$')
+        if not username_regex.match(new_username):
+            return JSONResponse({"error": "invalid username format"}, status_code=400)
+        if len(new_password) < 10 or len(new_password) > 200:
+            return JSONResponse({"error": "password must be 10-200 characters"}, status_code=400)
+        import hashlib
+        invite = app.state.db.get_invite_by_token_hash(hashlib.sha256(token.encode()).hexdigest())
+        if invite is None:
+            return JSONResponse({"error": "invalid token"}, status_code=400)
+        from datetime import datetime, timezone
+        if datetime.fromisoformat(invite["expires"]) < datetime.now(timezone.utc):
+            return JSONResponse({"error": "invite expired"}, status_code=400)
+        if invite.get("used_by") is not None:
             return JSONResponse({"error": "invite already used"}, status_code=400)
-        if _user_exists(new_username):
+        if app.state.db.get_user(new_username) is not None:
             return JSONResponse({"error": "username taken"}, status_code=409)
-        hashed_pw = _hash_password(new_password)
-        rights = list(invite["rights"])
-        app.state.db.create_user(new_username, hashed_pw, rights)
-        app.state.db.use_invite(invite["id"], new_username)
-        return JSONResponse({"ok": True, "username": new_username})
+        from .auth import hash_password
+        pw_hash = hash_password(new_password)
+        app.state.db.create_user(new_username, pw_hash, invite["rights"])
+        app.state.db.use_invite(invite["token_hash"], new_username)
+        app.state.db.set_last_login(new_username)
+        session_id = secrets.token_urlsafe(32)
+        app.state.db.create_session(new_username, session_id)
+        resp = JSONResponse({"username": new_username, "rights": invite["rights"]}, status_code=201)
+        resp.set_cookie(
+            "coder_session", session_id,
+            httponly=True, samesite="lax", path="/",
+            max_age=30 * 24 * 3600,
+            secure=app.state.settings.SECURE_COOKIES,
+        )
+        return resp
 
     # ── GET /api/users ────────────────────────────────────────────────────
 
     @app.get("/api/users")
-    async def api_list_users(request: Request) -> Response:
-        session = _require_session(request)
+    async def api_list_users(request: Request) -> JSONResponse:
+        session = _session_from_cookie(request, app.state.db)
         if not session:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         username, user = session
         if not _is_admin(user):
             return JSONResponse({"error": "forbidden"}, status_code=403)
-        users = app.state.db.list_all_users()
-        return JSONResponse({"users": users})
+        users = app.state.db.list_users()
+        return JSONResponse(users)
 
     # ── DELETE /api/users/{username} ──────────────────────────────────────
 
-    @app.delete("/api/users/{username}")
+    @app.delete("/api/users/{target_username}")
     async def api_delete_user(target_username: str, request: Request) -> Response:
-        session = _require_session_and_csrf(request)
-        username = session[0]
-        user = session[1]
-        if not _is_admin(user):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
+        result = _require_admin(request, app.state.db)
+        if isinstance(result, Response):
+            return result
+        csrf = _require_csrf(request)
+        if isinstance(csrf, Response):
+            return csrf
+        username, _ = result
         if target_username == username:
             return JSONResponse({"error": "cannot delete yourself"}, status_code=400)
-        if not app.state.db.delete_user(target_username):
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse({"ok": True})
+        app.state.db.delete_user(target_username)
+        return Response(status_code=204)
 
     # ── PATCH /api/chats/{chat_id} ────────────────────────────────────────
 
@@ -680,7 +706,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     @app.get("/admin", response_class=HTMLResponse)
     async def admin_page(request: Request) -> HTMLResponse:
-        session = _require_session(request)
+        session = _session_from_cookie(request, app.state.db)
         if not session:
             return RedirectResponse("/login")
         username, user = session
@@ -709,6 +735,36 @@ def _session_from_cookie(request: Request, db: DB):
     if user is None:
         return None
     return (session["username"], user)
+
+
+def _require_session(request: Request, db: DB):
+    """Return ``(username, user_dict)`` or a 401 JSONResponse."""
+    session = _session_from_cookie(request, db)
+    if not session:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return session
+
+
+def _require_admin(request: Request, db: DB):
+    """Return ``(username, user_dict)`` or 401/403."""
+    result = _require_session(request, db)
+    if isinstance(result, Response):
+        return result
+    username, user = result
+    if "admin" not in user.get("rights", []):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return (username, user)
+
+
+def _is_admin(user: dict) -> bool:
+    return "admin" in user.get("rights", [])
+
+
+def _require_csrf(request: Request):
+    """Return True or a 403 JSONResponse."""
+    if request.headers.get("X-Coder") != "1":
+        return JSONResponse({"error": "missing X-Coder header"}, status_code=403)
+    return True
 
 
 def _render_index(username: str, user: dict, chats: list, static_prefix: str, settings) -> str:
