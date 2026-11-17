@@ -229,9 +229,9 @@ def opencode_tokens(db_path: Path) -> list[dict]:
 def send(url: str, token: str, events: list[dict], tokens: list[dict]) -> list[dict]:
     """Send events and tokens to the status service in batches of 1000."""
     answers = []
-    batch_size = 1000
-    for i in range(0, len(events), batch_size):
-        batch = events[i:i + batch_size]
+    url = url.rstrip("/") + "/api/import"
+    batches = [events[i:i + 1000] for i in range(0, len(events), 1000)] or [[]]
+    for i, batch in enumerate(batches):
         body = {"events": batch}
         if i == 0 and tokens:
             body["tokens"] = tokens
@@ -245,7 +245,7 @@ def send(url: str, token: str, events: list[dict], tokens: list[dict]) -> list[d
             },
         )
         try:
-            resp = urllib.request.urlopen(req)
+            resp = urllib.request.urlopen(req, timeout=60)
             answers.append(json.loads(resp.read()))
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"HTTP {e.code}: {e.read().decode()}")
@@ -293,10 +293,10 @@ def main() -> None:
         print(f"DRY RUN: {len(all_events)} events, {len(all_tokens)} token days")
         return
 
-    if all_events:
+    if all_events or all_tokens:
         answers = send(status_url, status_token, all_events, all_tokens)
         for a in answers:
-            print(f"  import: {a.get('events_added', '?')} added, {a.get('events_skipped', '?')} skipped")
+            print(f"  import: {a.get('events_added', '?')} added, {a.get('events_skipped', '?')} skipped, {a.get('token_days', '?')} token days")
     else:
         print("No events to send")
 
