@@ -414,7 +414,55 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
             -> (f"{title}\n{url}\n\n{text}", [{"title": page title, "url": page url, "kind": "page"}])
       anything else -> (f"Error: the tool {name} is not available here.", [])
     """
-    raise NotImplementedError
+    try:
+        args = json.loads(arguments or "{}")
+        if not isinstance(args, dict):
+            return ("Error: the arguments were not valid JSON.", [])
+    except (json.JSONDecodeError, TypeError):
+        return ("Error: the arguments were not valid JSON.", [])
+    sites = [s["domain"] for s in cfg.get("sources", []) if s.get("enabled") and s["kind"] == "website"]
+    pub = None
+    for s in cfg.get("sources", []):
+        if s.get("enabled") and s["kind"] == "pubmed":
+            pub = s
+            break
+    q = str(args.get("query") or "").strip()[:300]
+    try:
+        if name == "web_search":
+            if not cfg.get("web") or not q:
+                return (f"Error: the tool {name} is not available here.", [])
+            res = await web_search(client, searxng_url, q)
+            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "web"} for r in res])
+        if name == "search_site":
+            if not sites or not q or args.get("site") not in sites:
+                return (f"Error: the tool {name} is not available here.", [])
+            res = await web_search(client, searxng_url, q, site=args["site"])
+            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "site"} for r in res])
+        if name == "search_pubmed":
+            if not pub or not q:
+                return (f"Error: the tool {name} is not available here.", [])
+            res = await pubmed_search(client, q, pub.get("filters"))
+            if not res:
+                return ("No studies found with these filters. Try other English terms.", [])
+            out = [{"title": a["title"], "journal": a["journal"], "year": a["year"],
+                    "types": a["types"], "abstract": a["abstract"], "url": a["url"]} for a in res]
+            meta = []
+            for a in res:
+                parts = [p for p in (a["journal"], a["year"]) if p]
+                meta.append(" · ".join(parts))
+            return (json.dumps(out, ensure_ascii=False),
+                    [{"title": a["title"], "url": a["url"], "kind": "pubmed", "meta": m}
+                     for a, m in zip(res, meta)])
+        if name == "open_page":
+            if not cfg.get("web") and not sites:
+                return (f"Error: the tool {name} is not available here.", [])
+            allowed = None if cfg.get("web") else (lambda h: any(_within(h, d) for d in sites))
+            page = await fetch_page(client, args.get("url", ""), resolve, allowed)
+            return (f"{page['title']}\n{page['url']}\n\n{page['text']}",
+                    [{"title": page["title"], "url": page["url"], "kind": "page"}])
+    except ToolError as e:
+        return (f"Error: {e}", [])
+    return (f"Error: the tool {name} is not available here.", [])
 
 
 def _results(res: list[dict]) -> str:

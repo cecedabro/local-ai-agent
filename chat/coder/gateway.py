@@ -36,7 +36,7 @@ class GatewayError(Exception):
         self.status = status
 
 
-def request_body(messages: list[dict], think: bool, stream: bool = True) -> dict:
+def request_body(messages: list[dict], think: bool, stream: bool = True, tools: list[dict] | None = None) -> dict:
     """The JSON body for POST <GATEWAY_URL>/chat/completions.
 
     TODO (task S02). Return exactly:
@@ -52,6 +52,8 @@ def request_body(messages: list[dict], think: bool, stream: bool = True) -> dict
     }
     if stream:
         body["stream_options"] = {"include_usage": True}
+    if tools:
+        body["tools"] = tools
     return body
 
 
@@ -94,12 +96,27 @@ def parse_line(line: str) -> list[tuple[str, Any]]:
         c = delta.get("content")
         if c:
             events.append(("content", c))
+        tc = delta.get("tool_calls")
+        if tc:
+            events.append(("tool_call", tc))
 
     usage = obj.get("usage")
     if usage is not None:
         events.append(("usage", usage))
 
     return events
+
+
+def merge_tool_calls(calls: dict[int, dict], fragments: list[dict]) -> None:
+    for f in fragments:
+        c = calls.setdefault(int(f.get("index", 0)), {"id": "", "name": "", "arguments": ""})
+        if f.get("id"):
+            c["id"] = f["id"]
+        func = f.get("function") or {}
+        if func.get("name"):
+            c["name"] = func["name"]
+        if func.get("arguments"):
+            c["arguments"] += func["arguments"]
 
 
 async def stream_chat(settings: Any, messages: list[dict], think: bool) -> AsyncIterator[tuple[str, Any]]:
