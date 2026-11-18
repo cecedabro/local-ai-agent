@@ -327,7 +327,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if name is None:
             return JSONResponse({"error": "A folder name needs 1 to 60 characters."}, status_code=400)
         app.state.db.rename_folder(folder_id, username, name)
-        return JSONResponse(app.state.db.get_folder(folder_id, username))
+        f = app.state.db.get_folder(folder_id, username)
+        return JSONResponse({k: f[k] for k in ("id", "name", "created")})
 
     @app.delete("/api/folders/{folder_id:int}")
     async def api_delete_folder(folder_id: int, request: Request) -> Response:

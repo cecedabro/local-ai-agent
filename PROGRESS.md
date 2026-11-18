@@ -35,3 +35,10 @@ Modified `chat/coder/answer.py`:
 (When Starlette calls `aclose()` on the generator due to client disconnect, the finally block catches it and saves the partial answer.)
 
 Tests: `make chat-test K="test_step_answer or test_step_round2"` — 14 passed. `make check` — 36 passed, OK.
+
+## Task R07 — folder routes, done (2026-11-18)
+
+Modified `chat/coder/app.py`:
+1. Fixed the PATCH `/api/folders/{folder_id}` response to return only `{"id", "name", "created"}` instead of the full folder dict (which included `username`). The test `TestFolders.test_crud` expects exactly those three keys.
+
+Tests: `make chat-test K="TestFolders"` — 3 passed. `make check` — 36 passed, OK.
