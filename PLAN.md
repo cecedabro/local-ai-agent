@@ -31,7 +31,7 @@ Rules for every task:
   accept: make chat-test K="TestContext"
 - [x] T07: File upload, download and attachments (see "T07 details")
   accept: make chat-test K="TestFiles"
-- [ ] T08: Pages, security headers and the vendored markdown renderer (see "T08 details")
+- [~] T08: Pages, security headers and the vendored markdown renderer (see "T08 details") — skipped: $ make chat-test  (exit 2)
   accept: make chat-test
 - [ ] T09: Chat page script: chats, streaming, phases, context bar (see "T09 details")
   accept: node --check chat/static/js/app.js && node --check chat/static/js/stream.js && make chat-test
