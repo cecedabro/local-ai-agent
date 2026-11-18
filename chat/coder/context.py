@@ -35,12 +35,27 @@ def ctx_max(settings: Any, now: Callable[[], float] = time.monotonic) -> int:
         if it is a positive int, cache (now(), value) and return it
       - any exception or bad value -> settings.CTX_DEFAULT (don't cache)
     """
-    raise NotImplementedError
+    if not settings.STATUS_URL:
+        return settings.CTX_DEFAULT
+    cached = _cache.get(settings.STATUS_URL)
+    if cached and now() - cached[0] < 300:
+        return cached[1]
+    try:
+        import httpx
+        resp = httpx.get(settings.STATUS_URL.rstrip("/") + "/api/status", timeout=5)
+        n_ctx = resp.json()["gateway"]["n_ctx"]
+        if isinstance(n_ctx, int) and n_ctx > 0:
+            _cache[settings.STATUS_URL] = (now(), n_ctx)
+            return n_ctx
+    except Exception:
+        pass
+    return settings.CTX_DEFAULT
 
 
 def window(settings: Any) -> dict:
     """TODO (task S05). {"max": m, "compress_at": (m * 3) // 4} with m = ctx_max(settings)."""
-    raise NotImplementedError
+    m = ctx_max(settings)
+    return {"max": m, "compress_at": (m * 3) // 4}
 
 
 def context_messages(db: Any, chat: dict) -> list[dict]:
