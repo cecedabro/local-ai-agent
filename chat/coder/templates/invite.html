@@ -12,7 +12,13 @@
     <button class="primary">Create my account</button>
     <p id="invite-error" class="small bad" role="alert"></p>
   </form>
+  <div id="passkey-offer" hidden>
+    <p>Your account is ready. Sign in faster next time with Face ID, Touch ID or your phone?</p>
+    <button type="button" class="primary" id="passkey-add-now">Use a passkey next time</button>
+    <a class="small" href="/">Not now</a>
+  </div>
 </div>
 <script src="/static/js/invite.js"></script>
+<script src="/static/js/webauthn.js"></script>
 </body>
 {% endblock %}

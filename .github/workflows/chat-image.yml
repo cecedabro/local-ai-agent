@@ -23,6 +23,7 @@ jobs:
       - run: |
           if [ ! -f chat/coder/app.py ]; then echo "chat/coder not written yet; skipping"; exit 0; fi
           make chat-test
+          CHROME_BIN="$(command -v google-chrome || command -v chromium)" make chat-browser-test
   # Every chat change on main that passes the tests is a release: image tags X.Y.Z (patch
   # bumped from the newest `chat-vX.Y.Z` git tag, first 0.1.0) and sha-<short>. Flux image
   # automation in the homelab repo follows X.Y.Z (ImagePolicy coder-chat, to be added). The devbox image

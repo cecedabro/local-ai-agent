@@ -3,7 +3,7 @@ SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote harness/tests/
 PY_FILES := $(shell git ls-files '*.py')
 YAML_FILES := $(shell git ls-files '*.yaml' '*.yml')
 
-.PHONY: lint test check status-test chat-test
+.PHONY: lint test check status-test chat-test chat-browser-test
 lint:
 	shellcheck $(SH_FILES)
 	python3 -m py_compile $(PY_FILES)
@@ -33,3 +33,7 @@ $(CHAT_VENV)/.stamp: chat/requirements.txt
 
 chat-test: $(CHAT_VENV)/.stamp
 	cd chat && PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests $(if $(K),-k "$(K)")
+
+# Dewdrop in a real headless Chromium: sign in, send a message, add and use a passkey (chat/tests/browser/).
+chat-browser-test: $(CHAT_VENV)/.stamp
+	node chat/tests/browser/run.mjs

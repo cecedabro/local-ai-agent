@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Your account · Dewdrop{% endblock %}
+{% block body %}
+<body class="admin">
+<header><h1>Your account</h1><a href="/">← back to the chat</a></header>
+<main class="admin-main">
+  <section class="card">
+    <h2>Passkeys</h2>
+    <p class="muted small">Sign in with Face ID, Touch ID or your phone instead of typing your password.
+      Your password keeps working as a backup.</p>
+    <ul id="passkey-list" class="plain"></ul>
+    <button type="button" class="primary" id="passkey-add">Add a passkey</button>
+    <p id="passkey-msg" class="small" role="status"></p>
+  </section>
+</main>
+<script src="/static/js/webauthn.js"></script>
+</body>
+{% endblock %}

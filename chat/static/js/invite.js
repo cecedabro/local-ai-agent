@@ -5,7 +5,15 @@ document.getElementById("invite-form").addEventListener("submit", async (ev) => 
   err.textContent = "";
   const res = await fetch("/api/invites/accept", { method: "POST", headers: { "Content-Type": "application/json", "X-Coder": "1" },
     body: JSON.stringify({ token: location.hash.slice(1), username: f.username.value.trim(), password: f.password.value }) });
-  if (res.ok) { location.href = "/"; return; }
+  if (res.ok) {
+    if (window.dewdropPasskeys && window.dewdropPasskeys.supported) {
+      f.hidden = true;
+      document.getElementById("passkey-offer").hidden = false;
+      return;
+    }
+    location.href = "/";
+    return;
+  }
   const body = await res.json().catch(() => ({}));
   err.textContent = res.status === 409 ? "That username is taken." : (body.error || "This invite link is not valid any more.");
 });

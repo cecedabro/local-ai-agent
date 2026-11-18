@@ -42,6 +42,8 @@ Human-owned (the agent may not edit): this file, `chat/tests/test_accept_*.py`,
 | `HARDWARE_LABEL` | `running locally on an RTX 3080 Ti` | Shown under the chat |
 | `REPO_URL` | `https://github.com/cecedabro/local-ai-agent` | "how it works" link |
 | `WAIT_LIMIT` | `120` | Seconds to keep retrying a busy gateway before giving up |
+| `RP_ID` | `localhost` | Passkeys: the site's domain (production: `dewdrop.cedricschippers.dev`) |
+| `ORIGIN` | `http://localhost:8090` | Passkeys: the exact origin the browser shows (production: `https://dewdrop.cedricschippers.dev`) |
 
 Settings values in tests are strings or numbers; treat `"0"`/`0` as false.
 
@@ -209,3 +211,41 @@ only use these hooks; the reference markup is `docs/design/chat/2026-11-17-chat-
 - Streaming text: stream.js `Typewriter` buffers the deltas and releases letters every frame at a
   steady, gently changing pace; `renderFade` re-renders the markdown and lets the newest letters
   fade in (class `nw`). The welcome screen uses `.orb.marble` (the drifting cloud marble).
+
+## 10. Passkeys
+
+Log in with Touch ID, Face ID or a phone instead of typing the password (WebAuthn, via the
+`webauthn` package). The password stays as a fallback. Module: `chat/coder/passkeys.py`.
+
+- A passkey belongs to one user: table `passkeys(id pk, username, credential_id blob unique,
+  public_key blob, sign_count int, name, created, last_used)`. The WebAuthn user handle is the
+  username in UTF-8 (`passkeys.user_handle`).
+- Challenges are single use and live 5 minutes: table `webauthn_challenges(key_hash pk, kind,
+  username, challenge blob, expires)`. The browser holds the key in cookie `coder_wa` (random,
+  `HttpOnly`, `SameSite=Lax`, `Path=/api/passkeys`, `Max-Age=300`, `Secure` like the session cookie);
+  the database stores only `sha256(key)`. Every verify call deletes the challenge first, whether the
+  check passes or not.
+- Relying party: id `RP_ID`, name `Dewdrop`, expected origin `ORIGIN`. Registration asks for a
+  discoverable credential (`residentKey: required`) with user verification required, ES256 or RS256.
+
+Endpoints (JSON; the CSRF header rule of §2 applies to every POST/DELETE):
+
+- `POST /api/passkeys/register/options` (session) `{}` → **200** the creation options as the
+  browser expects them (`webauthn.options_to_json`), with `excludeCredentials` = the user's
+  passkeys; sets `coder_wa`.
+- `POST /api/passkeys/register/verify` (session) `{"credential": <the browser's JSON>, "name"?}` →
+  **201** `{"id", "name", "created"}` (name defaults to "Passkey", max 60 characters); a missing or
+  used challenge, a wrong origin or a bad attestation → **400** `{"error"}`.
+- `GET /api/passkeys` (session) → **200** `[{"id", "name", "created", "last_used"}]`, oldest first.
+- `DELETE /api/passkeys/<id>` (session, own passkey) → **204**; someone else's or unknown → **404**.
+- `POST /api/passkeys/login/options` (no session) `{}` → **200** request options with an empty
+  `allowCredentials` (the browser offers its own passkeys) and user verification required; sets
+  `coder_wa`.
+- `POST /api/passkeys/login/verify` (no session) `{"credential": ...}` → **200** `{"username",
+  "rights"}` and the session cookie of §2; the signature counter is stored and `last_used` set.
+  Unknown credential, bad signature, missing or used challenge → **401** (same message for all).
+  Rate limit: the address key of §2 (`ip:<client host>`); 5 failures in 15 minutes → **429**.
+
+Pages: the sign-in page has "Sign in with a passkey"; the invite page offers "Use Face ID / Touch
+ID next time" right after the account is made; `GET /account` (session) lists your passkeys with
+"Add a passkey" and "Remove". The browser side is `chat/static/js/webauthn.js` (human-owned).

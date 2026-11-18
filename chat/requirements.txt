@@ -6,3 +6,9 @@ argon2-cffi==23.1.0
 python-multipart==0.0.20
 uvicorn==0.34.0
 pytest==8.3.4
+# passkeys (SPEC §10): webauthn and what it pulls in, pinned
+webauthn==2.2.0
+cbor2==6.3.0
+cryptography==50.0.2
+asn1crypto==1.5.1
+pyOpenSSL==26.4.0

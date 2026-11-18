@@ -494,6 +494,23 @@ class DB:
             )
             conn.commit()
 
+    # TODO (task P01): passkeys (chat/SPEC.md §10). Add to _SCHEMA:
+    #   passkeys(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, credential_id BLOB NOT NULL UNIQUE,
+    #            public_key BLOB NOT NULL, sign_count INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL,
+    #            created TEXT NOT NULL, last_used TEXT)
+    #   webauthn_challenges(key_hash TEXT PRIMARY KEY, kind TEXT NOT NULL, username TEXT, challenge BLOB NOT NULL,
+    #            expires REAL NOT NULL)          (expires = time.time() + ttl)
+    # and these methods (each with self._lock and self._connect(), like the others):
+    #   add_passkey(username, credential_id, public_key, sign_count, name) -> {"id", "name", "created"}
+    #   list_passkeys(username) -> [dict with id, name, created, last_used, credential_id], ORDER BY id
+    #   get_passkey(credential_id) -> dict of the row, or None
+    #   delete_passkey(passkey_id, username) -> True if a row was deleted
+    #   touch_passkey(passkey_id, sign_count) -> set sign_count and last_used = now
+    #   put_challenge(key_hash, kind, username, challenge, ttl=300) -> first delete expired rows, then INSERT OR REPLACE
+    #   take_challenge(key_hash, kind) -> ALWAYS delete the row; return (bytes(challenge), username) only if it
+    #                                     existed, kind matches and it has not expired; else None
+    # Also: delete_user must delete the user's passkeys too.
+
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
         with self._lock:
