@@ -31,7 +31,7 @@ Rules for every task:
   accept: make chat-test K="test_step_profiles and helpers"
 - [x] B08: In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say
   accept: make chat-test K="test_step_profiles and seed_prompt_budget"
-- [ ] B09: In chat/coder/profiles.py fill in `document_text` as its docstring says
+- [x] B09: In chat/coder/profiles.py fill in `document_text` as its docstring says
   accept: make chat-test K="test_step_profiles and document_text"
 - [ ] B10: In chat/coder/answer.py add tool rounds to `run_answer` (`TODO (task B10)`, above the function)
   accept: make chat-test K="test_step_profiles or test_step_answer or test_step_round2"

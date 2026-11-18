@@ -46,3 +46,7 @@
 - Implemented `budget(cfg, settings)`: calculates token budget breakdown -- total prompt tokens, per-document token deltas, and instruction token remainder, with max from `context.ctx_max(settings)`.
 - Implemented `public(cfg, settings)`: serializes profile config for API response, stripping content fields from sources and adding token counts for file sources.
 - All acceptance commands pass: `make chat-test K="test_step_profiles and seed_prompt_budget"` and `make check`.
+
+## Task B09 - document_text implementation (chat/coder/profiles.py:203)
+- Implemented `document_text(name, data)`: validates size (5 MB max), extracts text from PDFs via pypdf, decodes UTF-8 text/Markdown/HTML files, applies `tools.html_text()` for HTML files, and rejects null bytes or unparseable PDFs with appropriate DocumentError codes (413 for size, 415 for format).
+- All tests pass: `make chat-test K="test_step_profiles and document_text"` and `make check`.

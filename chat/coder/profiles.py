@@ -213,4 +213,33 @@ def document_text(name: str, data: bytes) -> str:
          and HTML documents."); a name ending in .html/.htm -> text = tools.html_text(text)[1] (import tools inside)
       4. len(text) > MAX_DOC_CHARS -> DocumentError(413, "That document is too long (max 200 000 characters).")
     """
-    raise NotImplementedError
+    if len(data) > MAX_DOC_BYTES:
+        raise DocumentError(413, "That document is too big (max 5 MB).")
+
+    if name.endswith(".pdf") or data.startswith(b"%PDF-"):
+        import io
+        import pypdf
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(data))
+            text = "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+        except Exception:
+            raise DocumentError(415, "That PDF could not be read.")
+        if not text:
+            raise DocumentError(415, "That PDF has no text (is it a scan?).")
+        return text
+
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise DocumentError(415, "Only PDF, text, Markdown and HTML documents.")
+    if "\x00" in text:
+        raise DocumentError(415, "Only PDF, text, Markdown and HTML documents.")
+
+    if name.endswith((".html", ".htm")):
+        from . import tools
+        _, text = tools.html_text(text)
+
+    if len(text) > MAX_DOC_CHARS:
+        raise DocumentError(413, "That document is too long (max 200 000 characters).")
+
+    return text
