@@ -32,7 +32,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: make chat-test K="test_step_context"
 - [x] S09: In chat/coder/answer.py fill in `sse`, `phase` and `make_title` as their docstrings say
   accept: make chat-test K="test_step_answer and test_helpers"
-- [ ] S10: In chat/coder/answer.py fill in `run_answer` steps 2–5 of its docstring (skip steps 1, 6, 7 for now; yield a done event)
+- [x] S10: In chat/coder/answer.py fill in `run_answer` steps 2–5 of its docstring (skip steps 1, 6, 7 for now; yield a done event)
   accept: make chat-test K="test_step_answer and (test_stream_events_and_store or test_count_without_usage or test_busy or test_gateway_errors)"
 - [ ] S11: In chat/coder/answer.py add steps 1, 6 and 7 of the `run_answer` docstring
   accept: make chat-test K="test_step_answer"

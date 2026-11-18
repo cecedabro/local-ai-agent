@@ -83,8 +83,83 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
          (S10 already yields a done event with the same keys; S11 makes "context" real.
           Until then use {"used": 0, "max": 0, "compress_at": 0}.)
     """
-    raise NotImplementedError
-    yield  # pragma: no cover
+    # Step 2
+    messages = context.build_messages(db, chat)
+
+    # Step 3: Start the stream, retrying while busy
+    start = clock()
+    waited = False
+    while True:
+        agen = stream(settings, messages, think)
+        try:
+            first = await agen.__anext__()
+        except gateway.Busy:
+            if not waited:
+                yield phase("waiting")
+                waited = True
+            if clock() - start >= settings.WAIT_LIMIT:
+                yield sse("error", {"error": "The model is still busy, try again in a minute.", "status": 503})
+                return
+            await sleep(2)
+            continue
+        except gateway.GatewayError as e:
+            yield sse("error", {"error": "The model could not answer.", "status": e.status})
+            return
+        except StopAsyncIteration:
+            first = None
+        break
+
+    # Step 4: Handle first and remaining events
+    text = ""
+    count = 0
+    t0 = None
+    usage = None
+    content_started = False
+
+    if first:
+        tag, val = first
+        if tag == "reasoning":
+            yield phase("thinking")
+        elif tag == "content":
+            content_started = True
+            yield phase("writing")
+            t0 = clock()
+            text = val
+            count += 1
+        elif tag == "usage":
+            usage = val
+
+    try:
+        async for event in agen:
+            tag, val = event
+            if tag == "reasoning":
+                yield phase("thinking")
+            elif tag == "content":
+                if not content_started:
+                    content_started = True
+                    yield phase("writing")
+                    t0 = clock()
+                yield sse("delta", {"text": val})
+                text += val
+                count += 1
+            elif tag == "usage":
+                usage = val
+    except gateway.GatewayError as e:
+        yield sse("error", {"error": "The model could not answer.", "status": e.status})
+        return
+
+    # Step 5
+    tokens = usage["completion_tokens"] if usage else count
+    tps = round(tokens / (clock() - t0), 1) if t0 else None
+
+    msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps)
+    if usage:
+        db.update_chat_usage(chat["id"], usage["prompt_tokens"], usage["completion_tokens"])
+
+    # Step 7 (S10: dummy context)
+    chat = db.get_chat(chat["id"], chat["username"])
+    yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
+                        "context": {"used": 0, "max": 0, "compress_at": 0}})
 
 
 def _unused() -> None:
