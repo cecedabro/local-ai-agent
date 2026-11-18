@@ -34,7 +34,7 @@ Rules for every task:
   accept: make chat-test
 - [x] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
+- [x] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
   accept: node --check chat/static/js/app.js && make chat-test

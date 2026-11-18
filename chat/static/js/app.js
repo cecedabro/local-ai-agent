@@ -133,6 +133,12 @@ function drawWelcome() {
  *   if stopped: insert <div class="note stopped">Stopped</div> right after meta (meta.insertAdjacentHTML("afterend", ...)).
  */
 function doneMeta(meta, content, tokens, tps, stopped, retryText) {
+  meta.innerHTML = TINY + `<span>${metaText(tokens, tps)}</span><button data-copy>Copy</button><button data-retry>Retry</button>`;
+  meta.querySelector("[data-copy]").addEventListener("click", () => { navigator.clipboard.writeText(content); });
+  meta.querySelector("[data-retry]").addEventListener("click", () => { if (state.busy) return; $("#input").value = retryText(); send(); });
+  if (stopped) {
+    meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
+  }
 }
 
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
@@ -149,6 +155,29 @@ function typedText(content) { return content.split("\n\nFile ")[0]; }
  *              ".u .msg.user" in #messages at this moment, or "")
  */
 function drawMessage(m) {
+  if (m.role === "summary") {
+    $("#messages").insertAdjacentHTML("beforeend", '<div class="note summary">Earlier messages summarised</div>');
+    return;
+  }
+  if (m.role === "user") {
+    let chips = "";
+    if (m.files) {
+      chips = m.files.map((f) => `<span class="file">${esc(f.name)}</span>`).join("");
+    }
+    let text = m.files ? typedText(m.content) : esc(m.content);
+    $("#messages").insertAdjacentHTML("beforeend", `<div class="u">${chips}<div class="msg user">${text}</div></div>`);
+    return;
+  }
+  // assistant
+  const div = document.createElement("div");
+  div.className = "ai";
+  div.innerHTML = ORB + `<div class="content"><div class="bub">${md.render(m.content)}</div><div class="meta2"></div></div>`;
+  $("#messages").appendChild(div);
+  const meta2 = div.querySelector(".meta2");
+  doneMeta(meta2, m.content, m.tokens, m.tps, m.stopped, () => {
+    const lastU = $("#messages").querySelectorAll(".u .msg.user").item(-1);
+    return lastU ? lastU.textContent : "";
+  });
 }
 
 /**

@@ -50,3 +50,11 @@ Modified `chat/static/js/app.js`:
 2. Implemented `loadChats()` — fetches `/api/chats` and `/api/folders` in parallel via `Promise.all`, stores them in `state.chats` and `state.folders`, filters by `#search` (case-insensitive title substring), then renders `#convs` with folders first (`<details class="folder">` with COUNT) followed by date groups (`<h4>LABEL</h4>`) for unfiled chats using `groupChats()`.
 
 Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
+
+## Task R11 — doneMeta and drawMessage, done (2026-11-18)
+
+Modified `chat/static/js/app.js`:
+1. Implemented `doneMeta(meta, content, tokens, tps, stopped, retryText)` — sets `meta.innerHTML` with TINY orb, `metaText(tokens, tps)` span, Copy and Retry buttons. Copy uses `navigator.clipboard.writeText(content)`. Retry skips if `state.busy`, else puts `retryText()` in `#input` and calls `send()`. If stopped, inserts `<div class="note stopped">Stopped</div>` after meta.
+2. Implemented `drawMessage(m)` — handles summary (`.note.summary`), user messages (`.u` with file chips and text via `typedText()` when files exist), and assistant messages (`.ai` with ORB + markdown-rendered content + `meta2` initialized with `doneMeta`). Retry callback gets the last `.u .msg.user` text from the DOM.
+
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
