@@ -83,6 +83,12 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
          (S10 already yields a done event with the same keys; S11 makes "context" real.
           Until then use {"used": 0, "max": 0, "compress_at": 0}.)
     """
+    # Step 1
+    if context.used(db, chat) >= context.window(settings)["compress_at"]:
+        yield phase("compressing")
+        await context.compress(db, chat, settings, complete)
+        chat = db.get_chat(chat["id"], chat["username"])
+
     # Step 2
     messages = context.build_messages(db, chat)
 
@@ -156,10 +162,17 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     if usage:
         db.update_chat_usage(chat["id"], usage["prompt_tokens"], usage["completion_tokens"])
 
-    # Step 7 (S10: dummy context)
+    # Step 6
+    if chat["title"] == "New chat":
+        msgs = db.get_messages(chat["id"], chat["username"])
+        first_user = next((m for m in msgs if m["role"] == "user"), None)
+        if first_user:
+            db.update_chat_title(chat["id"], chat["username"], make_title(first_user["content"]))
+
+    # Step 7
     chat = db.get_chat(chat["id"], chat["username"])
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
-                        "context": {"used": 0, "max": 0, "compress_at": 0}})
+                        "context": context.info(db, chat, settings)})
 
 
 def _unused() -> None:
