@@ -50,3 +50,12 @@
 ## Task B09 - document_text implementation (chat/coder/profiles.py:203)
 - Implemented `document_text(name, data)`: validates size (5 MB max), extracts text from PDFs via pypdf, decodes UTF-8 text/Markdown/HTML files, applies `tools.html_text()` for HTML files, and rejects null bytes or unparseable PDFs with appropriate DocumentError codes (413 for size, 415 for format).
 - All tests pass: `make chat-test K="test_step_profiles and document_text"` and `make check`.
+
+## Task B10 - tool rounds in run_answer (chat/coder/answer.py)
+- Implemented tool rounds loop in `run_answer()`: while loop that passes `tools=offer` (from `specs`) to `stream()`, handles `("tool_calls", calls)` events, executes tools via `run_tool`, accumulates `sources` with `[1]`, `[2]` citation numbers, yields cite lists as delta events, and appends assistant messages with tool_calls to the conversation history.
+- Added `content_started` guard to yield "writing" phase exactly once per round.
+- Moved `stop` event check to the end of every event iteration (after reasoning and content handlers) to correctly handle both "stopped before text" (breaks after reasoning, message_id=None) and "stopped during text" (captures all chunks before breaking).
+- Removed redundant stop check after event loop.
+- Updated `chat/coder/gateway.py`: `stream_chat()` now accepts `tools: list[dict] | None = None` and passes it to `request_body()`.
+- All 20 acceptance tests pass: `make chat-test K="test_step_profiles or test_step_answer or test_step_round2"`.
+- All project tests pass: `make check`.

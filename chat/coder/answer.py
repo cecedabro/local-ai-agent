@@ -11,7 +11,11 @@ import json
 import time
 from typing import Any, AsyncIterator, Callable
 
-from . import context, gateway
+import httpx
+
+from . import context, gateway, profiles, tools
+
+MAX_ROUNDS = 4
 
 LABELS = {
     "waiting": "Waiting for the model… you're next",
@@ -41,74 +45,18 @@ def make_title(text: str) -> str:
     return title
 
 
-# TODO (task B10): tool rounds (chat/SPEC.md §12.3). Tests: test_step_profiles.py::test_tool_rounds and
-# ::test_tool_rounds_stop_at_max, then all of test_step_answer.py and test_step_round2.py again.
-#   - imports: httpx, and `from . import profiles, tools`; MAX_ROUNDS = 4 at module level
-#   - run_answer gets the keyword `run_tool: Callable = tools.run_tool`
-#   - after messages = context.build_messages(...): cfg = profiles.config(db, chat["username"], chat["profile"]);
-#     specs = tools.tool_specs(cfg); then the reading phase as now
-#   - sources = []; rounds = 0; client = httpx.AsyncClient() (closed with `await client.aclose()` in the finally)
-#   - wrap the "start the stream (busy loop) + read its events" part in `while True:`
-#       offer = specs if specs and rounds < MAX_ROUNDS else None
-#       agen = stream(settings, messages, think, tools=offer) if offer else stream(settings, messages, think)
-#       per round keep `calls = []` and `said = ""` (this round's content, also added to text as now);
-#       the event ("tool_calls", list) -> calls = list
-#       after the events: if stopped or not calls or not offer: break
-#       else rounds += 1; ids = [c["id"] or f"call_{rounds}_{i}" ...];
-#         messages = messages + [{"role": "assistant", "content": said, "tool_calls": [{"id": ids[i], "type": "function",
-#                                 "function": {"name": c["name"], "arguments": c["arguments"]}} ...]}]
-#         per call: ph, label = tools.describe(name, arguments); yield sse("phase", {"phase": ph, "label": label});
-#           result, found = await run_tool(name, arguments, cfg, client, settings.SEARXNG_URL)
-#           per found source: the same url already in `sources` keeps its number, else append {**src, "n": len(sources)+1};
-#           if any: result += "\n\nCite these as:\n" + "\n".join(f"[{n}] {url}" for each found source)
-#           messages.append({"role": "tool", "tool_call_id": ids[i], "content": result})
-#           stop set -> stopped = True, break (and leave the while too)
-#         if text was already written: yield phase("writing") again; continue
-#   - the stored answer and the partial answer get sources=sources; done gets "sources": sources
-#   - error events still `return` (the finally closes agen and the client)
-
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                      stream: Callable = gateway.stream_chat,
                      complete: Callable = gateway.complete,
                      sleep: Callable = asyncio.sleep,
                      clock: Callable[[], float] = time.monotonic,
-                     stop: asyncio.Event | None = None) -> AsyncIterator[str]:
+                     stop: asyncio.Event | None = None,
+                     run_tool: Callable = tools.run_tool) -> AsyncIterator[str]:
     """Yield the SSE text of one answer. The user's message is already stored.
 
-    Round 2 (chat/SPEC.md §11.1–11.2). Tests: test_step_answer.py and test_step_round2.py.
-    Rewrite the body to this shape (the S10/S11 code below already does steps 1, 3 and most of 5):
-
-    TODO (task R03): phases, the first chunk, done.
-      a. LABELS gets "reading": "Reading your message…".
-      b. After the optional compress and `messages = context.build_messages(db, chat)`:
-         yield phase("reading")   (once, before the busy loop; "waiting" may follow it)
-      c. Handle `first` and the rest of `agen` in ONE loop, so the first chunk is treated like every
-         other one (today the first content chunk is never sent as a delta: a bug). For example:
-             async def events():
-                 if first is not None: yield first
-                 async for ev in agen: yield ev
-             async for tag, val in events(): ...
-         ("reasoning", _): only the first time: yield phase("thinking")   (it is sent once, not per chunk)
-         ("content", t) with t non-empty: the first time yield phase("writing") and t0 = clock();
-                                          then text += t; count += 1; yield sse("delta", {"text": t})
-         ("usage", u): usage = u
-      d. done gets two more keys: "title": the chat's title after the title step (from the re-read chat),
-         and "stopped": False (task R04 makes it True when stopped).
-
-    TODO (task R04): stop. Add the keyword parameter `stop: asyncio.Event | None = None`.
-      After handling each event in the loop of c.: if stop is not None and stop.is_set(): stopped = True; break.
-      Then: store the answer only if there is text (`if text or not stopped`), with
-      db.add_message(..., stopped=stopped); otherwise msg_id = None. done carries "stopped": stopped.
-      Close the gateway stream when leaving: `await agen.aclose()` (see R05, in the finally).
-
-    TODO (task R05): the browser went away. Wrap the loop of c. and everything after it in
-         try: ... finally:
-             if the answer was not stored yet (no add_message and no error event) and text:
-                 db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True)
-             try: await agen.aclose()
-             except Exception: pass
-      (Starlette closes the generator with aclose() when the client disconnects; the finally runs then.)
-      Keep the GatewayError handling: a GatewayError while reading -> yield the error event, store nothing.
+    Implements tool rounds (up to MAX_ROUNDS=4) per SPEC §12.3, with:
+      - compress phase, reading phase, tool loop (searching/reading), writing phase
+      - stop support (task R04), client disconnect (task R05), phases/chunks/done (task R03).
     """
     # Step 1
     if context.used(db, chat) >= context.window(settings)["compress_at"]:
@@ -118,84 +66,159 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
     # Step 2
     messages = context.build_messages(db, chat)
+    cfg = profiles.config(db, chat["username"], chat["profile"])
+    specs = tools.tool_specs(cfg)
     yield phase("reading")
 
-    # Step 3: Start the stream, retrying while busy
-    start = clock()
-    waited = False
-    while True:
-        agen = stream(settings, messages, think)
-        try:
-            first = await agen.__anext__()
-        except gateway.Busy:
-            if not waited:
-                yield phase("waiting")
-                waited = True
-            if clock() - start >= settings.WAIT_LIMIT:
-                yield sse("error", {"error": "The model is still busy, try again in a minute.", "status": 503})
-                return
-            await sleep(2)
-            continue
-        except gateway.GatewayError as e:
-            yield sse("error", {"error": "The model could not answer.", "status": e.status})
-            return
-        except StopAsyncIteration:
-            first = None
-        break
-
-    # Step 4: Handle first and remaining events in ONE loop
+    # Step 3-4: Tool rounds loop
+    sources: list[dict] = []
+    rounds = 0
+    client = httpx.AsyncClient()
     text = ""
     count = 0
     t0 = None
     usage = None
-    content_started = False
-    thinking_sent = False
-
-    async def events():
-        if first is not None:
-            yield first
-        async for ev in agen:
-            yield ev
-
     stopped = False
     msg_stored = False
+
     try:
-        async for tag, val in events():
-            if tag == "reasoning":
-                if not thinking_sent:
-                    yield phase("thinking")
-                    thinking_sent = True
-            elif tag == "content":
-                if not content_started:
-                    content_started = True
-                    yield phase("writing")
-                    t0 = clock()
-                text += val
-                count += 1
-                yield sse("delta", {"text": val})
-            elif tag == "usage":
-                usage = val
-            if stop is not None and stop.is_set():
-                stopped = True
+        while True:
+            start = clock()
+            waited = False
+            offer = specs if specs and rounds < MAX_ROUNDS else None
+
+            # Busy retry loop
+            while True:
+                if offer is not None:
+                    agen = stream(settings, messages, think, tools=offer)
+                else:
+                    agen = stream(settings, messages, think)
+                try:
+                    first = await agen.__anext__()
+                except gateway.Busy:
+                    if not waited:
+                        yield phase("waiting")
+                        waited = True
+                    if clock() - start >= settings.WAIT_LIMIT:
+                        yield sse("error", {"error": "The model is still busy, try again in a minute.", "status": 503})
+                        return
+                    await sleep(2)
+                    continue
+                except gateway.GatewayError as e:
+                    yield sse("error", {"error": "The model could not answer.", "status": e.status})
+                    return
+                except StopAsyncIteration:
+                    first = None
                 break
+
+            # Process events for this round
+            said = ""
+            calls = []
+            content_started = False
+
+            async def events():
+                if first is not None:
+                    yield first
+                async for ev in agen:
+                    yield ev
+
+            async for tag, val in events():
+                if tag == "reasoning":
+                    if not hasattr(events, "_thinking_sent") or not events._thinking_sent:
+                        yield phase("thinking")
+                        events._thinking_sent = True
+                elif tag == "content":
+                    if not content_started:
+                        content_started = True
+                        yield phase("writing")
+                        t0 = clock()
+                    said += val
+                    text += val
+                    count += 1
+                    yield sse("delta", {"text": val})
+                elif tag == "usage":
+                    usage = val
+                elif tag == "tool_calls":
+                    calls = list(val)
+                elif tag == "done":
+                    stopped = True
+                    break
+                if stop is not None and stop.is_set():
+                    stopped = True
+                    break
+
+            # Handle tool calls for this round
+            if calls and offer:
+                rounds += 1
+                ids = [c["id"] or f"call_{rounds}_{i}" for i, c in enumerate(calls)]
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": said,
+                    "tool_calls": [
+                        {"id": ids[i], "type": "function",
+                         "function": {"name": c["name"], "arguments": c["arguments"]}}
+                        for i, c in enumerate(calls)
+                    ],
+                }
+                messages = messages + [assistant_msg]
+
+                for i, call in enumerate(calls):
+                    name = call["name"]
+                    arguments = call["arguments"]
+                    ph, label = tools.describe(name, arguments)
+                    yield sse("phase", {"phase": ph, "label": label})
+
+                    result, found = await run_tool(name, arguments, cfg, client, settings.SEARXNG_URL)
+                    if isinstance(found, dict):
+                        found = [found] if found else []
+                    if not isinstance(found, list):
+                        found = []
+                    for src in found:
+                        src_url = src.get("url", "")
+                        existing = next((s for s in sources if s.get("url") == src_url), None)
+                        if existing:
+                            src["n"] = existing["n"]
+                        else:
+                            src = {**src, "n": len(sources) + 1}
+                            sources.append(src)
+                    if found:
+                        new_urls = {s.get("url") for s in found}
+                        result += "\n\nCite these as:\n" + "\n".join(
+                            f"[{s['n']}] {s['url']}" for s in sources if s.get("url") in new_urls
+                        )
+                    messages.append({"role": "tool", "tool_call_id": ids[i], "content": result})
+
+                if stop is not None and stop.is_set():
+                    stopped = True
+                    break
+
+                # Continue the loop if the model has already written text
+                if said:
+                    yield phase("writing")
+                    continue
+                continue
+            else:
+                break
+
         msg_stored = True
     except gateway.GatewayError as e:
         yield sse("error", {"error": "The model could not answer.", "status": e.status})
         return
     finally:
         if not msg_stored and text:
-            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True)
+            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True, sources=sources)
         try:
             await agen.aclose()
         except Exception:
             pass
+        await client.aclose()
 
     # Step 5
     tokens = usage["completion_tokens"] if usage else count
     tps = round(tokens / (clock() - t0), 1) if t0 else None
 
     if text or not stopped:
-        msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped)
+        msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped, sources=sources)
         msg_stored = True
     else:
         msg_id = None
@@ -213,7 +236,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     chat = db.get_chat(chat["id"], chat["username"])
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
                         "context": context.info(db, chat, settings),
-                        "title": chat["title"], "stopped": stopped})
+                        "title": chat["title"], "stopped": stopped,
+                        "sources": sources})
 
 
 def _unused() -> None:

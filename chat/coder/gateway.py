@@ -107,7 +107,7 @@ def merge_tool_calls(calls: dict[int, dict], fragments: list[dict]) -> None:
             c["arguments"] += func["arguments"]
 
 
-async def stream_chat(settings: Any, messages: list[dict], think: bool) -> AsyncIterator[tuple[str, Any]]:
+async def stream_chat(settings: Any, messages: list[dict], think: bool, tools: list[dict] | None = None) -> AsyncIterator[tuple[str, Any]]:
     """Stream one answer: yields ("reasoning", str), ("content", str) and ("usage", dict) events.
 
     TODO (task S03). Steps:
@@ -129,7 +129,7 @@ async def stream_chat(settings: Any, messages: list[dict], think: bool) -> Async
 
     try:
         async with httpx.AsyncClient(timeout=600) as client:
-            async with client.stream("POST", url, json=request_body(messages, think), headers=headers) as resp:
+            async with client.stream("POST", url, json=request_body(messages, think, tools=tools), headers=headers) as resp:
                 if resp.status_code in (503, 429):
                     raise Busy()
                 if resp.status_code != 200:
