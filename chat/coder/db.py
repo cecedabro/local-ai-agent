@@ -6,6 +6,7 @@ Times are ISO-8601 UTC strings.
 from __future__ import annotations
 
 import json
+import time
 
 import sqlite3
 import threading
@@ -84,6 +85,25 @@ CREATE TABLE IF NOT EXISTS login_failures (
     key  TEXT NOT NULL,
     at   TEXT NOT NULL,
     PRIMARY KEY (key, at)
+);
+
+CREATE TABLE IF NOT EXISTS passkeys (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL REFERENCES users(username),
+    credential_id BLOB NOT NULL UNIQUE,
+    public_key    BLOB NOT NULL,
+    sign_count    INTEGER NOT NULL DEFAULT 0,
+    name          TEXT NOT NULL,
+    created       TEXT NOT NULL,
+    last_used     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    key_hash  TEXT PRIMARY KEY,
+    kind      TEXT NOT NULL,
+    username  TEXT,
+    challenge BLOB NOT NULL,
+    expires   REAL NOT NULL
 );
 """
 
@@ -460,6 +480,7 @@ class DB:
             conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
             conn.execute("DELETE FROM chats WHERE username = ?", (username,))
             conn.execute("DELETE FROM files WHERE username = ?", (username,))
+            conn.execute("DELETE FROM passkeys WHERE username = ?", (username,))
             conn.execute("DELETE FROM users WHERE username = ?", (username,))
             conn.commit()
 
@@ -493,6 +514,95 @@ class DB:
                 (chat_id,),
             )
             conn.commit()
+
+    def add_passkey(self, username: str, credential_id: bytes, public_key: bytes,
+                    sign_count: int, name: str) -> dict[str, Any]:
+        now = _now_iso()
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "INSERT INTO passkeys (username, credential_id, public_key, sign_count, name, created) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (username, credential_id, public_key, sign_count, name, now),
+            )
+            conn.commit()
+            return {"id": cur.lastrowid, "name": name, "created": now}
+
+    def list_passkeys(self, username: str) -> list[dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            rows = conn.execute(
+                "SELECT id, name, created, last_used, credential_id FROM passkeys "
+                "WHERE username = ? ORDER BY id",
+                (username,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_passkey(self, credential_id: bytes) -> dict[str, Any] | None:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM passkeys WHERE credential_id = ?", (credential_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+    def delete_passkey(self, passkey_id: int, username: str) -> bool:
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "DELETE FROM passkeys WHERE id = ? AND username = ?",
+                (passkey_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def touch_passkey(self, passkey_id: int, sign_count: int) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "UPDATE passkeys SET sign_count = ?, last_used = ? WHERE id = ?",
+                (sign_count, _now_iso(), passkey_id),
+            )
+            conn.commit()
+
+    def put_challenge(self, key_hash: str, kind: str, username: str | None,
+                      challenge: bytes, ttl: float = 300) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "DELETE FROM webauthn_challenges WHERE expires < ?",
+                (time.time(),),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO webauthn_challenges (key_hash, kind, username, challenge, expires) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (key_hash, kind, username, challenge, time.time() + ttl),
+            )
+            conn.commit()
+
+    def take_challenge(self, key_hash: str, kind: str) -> tuple[bytes, str] | None:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM webauthn_challenges WHERE key_hash = ? AND kind = ?",
+                (key_hash, kind),
+            ).fetchone()
+            conn.execute(
+                "DELETE FROM webauthn_challenges WHERE key_hash = ?",
+                (key_hash,),
+            )
+            conn.commit()
+            if row is None:
+                return None
+            d = dict(row)
+            if d["expires"] < time.time():  # type: ignore[operator]
+                return None
+            username = d["username"] or ""
+            return (d["challenge"], username)  # type: ignore[return-value]
+
+    # TODO (task P02–P05): passkey registration, login endpoints in passkeys.py
 
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()

@@ -69,3 +69,11 @@ The data flow for a chat message:
 4. The status service sends the request to llama-server on the PC; responses stream back as SSE.
 5. The app parses the SSE events (reasoning, content, usage), yields them to the browser,
    and stores the completed assistant message when done.
+
+## Passkeys
+
+Sign in with Face ID, Touch ID or a phone instead of typing your password.
+Your password keeps working as a backup. Add one on your account page
+(`/account`, right after accepting an invite). In production, passkeys only
+work on the exact `RP_ID` + `ORIGIN` pair (e.g. `RP_ID=dewdrop.cedricschippers.dev`,
+`ORIGIN=https://dewdrop.cedricschippers.dev`).

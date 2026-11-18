@@ -1,95 +1,89 @@
-# PLAN: Chat app foundation
+# PLAN: Dewdrop passkeys
 
-Small steps. Every task names ONE file and ONE or two functions; the steps are in that function's
-docstring or comment (marked `TODO (task Sxx)`). Find it with `grep -n "task Sxx" <file>` and read
-only that function. Each task has its own small test.
+Sign in to Dewdrop with Face ID, Touch ID or a phone (passkeys, chat/SPEC.md §10). Small steps:
+every task names one file and one or two functions; the steps are in that function's docstring or
+TODO comment (`grep -n "task Pxx" <file>`), or in the "Pxx details" below. Each task has its own test.
 
 Rules for every task:
 - Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
-- Only change the function(s) the task names. Don't refactor, rename or move other code.
-- Never read a whole large file: `grep -n`, then `sed -n 'a,bp' <file>` for the lines you need.
-- Python: only the packages in `chat/requirements.txt` (httpx, not requests). JS: no packages.
-- Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/coder/templates/`, `Makefile`, `docs/`.
+- Only change what the task names. Don't refactor, rename or move other code.
+- Never read a whole large file (`chat/coder/app.py` is ~600 lines): `grep -n`, then `sed -n 'a,bp'`.
+- Python: only the packages in `chat/requirements.txt` (the `webauthn` package does the crypto).
+- Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/`, `chat/coder/templates/`,
+  `Makefile`, `docs/`. The pages and browser code for passkeys are already written.
 
-Done earlier (T01–T04, T07): settings, database, login, sessions, invites, users, chats, files.
-The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is done and human-owned: use it, don't edit it.
-
-- [x] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
-  accept: make chat-test K="test_step_context and test_db_helpers"
-- [x] S02: In chat/coder/gateway.py fill in `request_body` and `parse_line` as their docstrings say
-  accept: make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"
-- [x] S03: In chat/coder/gateway.py fill in `stream_chat` as its docstring says
-  accept: make chat-test K="test_step_gateway and (test_stream_chat or test_no_key_no_header)"
-- [x] S04: In chat/coder/gateway.py fill in `complete` as its docstring says
-  accept: make chat-test K="test_step_gateway"
-- [x] S05: In chat/coder/context.py fill in `ctx_max` and `window` as their docstrings say
-  accept: make chat-test K="test_step_context and test_ctx_max_and_cache"
-- [x] S06: In chat/coder/context.py fill in `context_messages` and `build_messages` as their docstrings say
-  accept: make chat-test K="test_step_context and test_context_and_build_messages"
-- [x] S07: In chat/coder/context.py fill in `used` and `info` as their docstrings say
-  accept: make chat-test K="test_step_context and test_used_and_info"
-- [x] S08: In chat/coder/context.py fill in `just_before` and `compress` as their docstrings say
-  accept: make chat-test K="test_step_context"
-- [x] S09: In chat/coder/answer.py fill in `sse`, `phase` and `make_title` as their docstrings say
-  accept: make chat-test K="test_step_answer and test_helpers"
-- [x] S10: In chat/coder/answer.py fill in `run_answer` steps 2–5 of its docstring (skip steps 1, 6, 7 for now; yield a done event)
-  accept: make chat-test K="test_step_answer and (test_stream_events_and_store or test_count_without_usage or test_busy or test_gateway_errors)"
-- [x] S11: In chat/coder/answer.py add steps 1, 6 and 7 of the `run_answer` docstring
-  accept: make chat-test K="test_step_answer"
-- [x] S12: In chat/coder/app.py fill in the route `api_create_message` as its docstring says (steps 1–4, 6, 7)
-  accept: make chat-test K="TestStream"
-- [x] S13: In chat/coder/app.py add step 5 (files) to `api_create_message`: see "S13 details" below
-  accept: make chat-test K="TestFiles or TestStream"
-- [x] S14: In chat/coder/app.py fill in `api_compress`, and make `api_get_chat` return `context.info(...)` as "context"
-  accept: make chat-test K="TestContext"
-- [x] S15: Make the whole chat suite green (run it, fix only what fails, in the app code)
+- [x] P01: In chat/coder/db.py add the passkey tables and methods, and in chat/coder/config.py the settings RP_ID and ORIGIN (see "P01 details")
+  accept: make chat-test K="test_step_passkeys and test_db_and_settings"
+- [x] P02: In chat/coder/passkeys.py fill in `user_handle` and `registration_options` as their docstrings say
+  accept: make chat-test K="test_step_passkeys and test_registration_options"
+- [x] P03: In chat/coder/passkeys.py fill in `verify_registration` as its docstring says
+  accept: make chat-test K="test_step_passkeys and test_verify_registration"
+- [x] P04: In chat/coder/passkeys.py fill in `authentication_options` and `credential_id` as their docstrings say
+  accept: make chat-test K="test_step_passkeys and test_authentication_options"
+- [x] P05: In chat/coder/passkeys.py fill in `verify_authentication` as its docstring says
+  accept: make chat-test K="test_step_passkeys"
+- [x] P06: In chat/coder/app.py add the passkey registration, list and delete routes (see "P06 details")
+  accept: make chat-test K="TestPasskeyRegister"
+- [x] P07: In chat/coder/app.py add the passkey sign-in routes (see "P07 details")
+  accept: make chat-test K="TestPasskeyLogin and not account"
+- [x] P08: In chat/coder/app.py add the page GET /account (see "P08 details")
   accept: make chat-test
-- [x] S16: stream.js: splitEvents and readEvents (done by hand: the writing engine)
-  accept: node --test chat/tests/js/stream.test.mjs
-- [x] S17: stream.js: Typewriter (done by hand: the writing engine)
-  accept: node --test chat/tests/js/stream.test.mjs
-- [x] S18: stream.js: groupChats and metaText (done by hand: the writing engine)
-  accept: node --test chat/tests/js/stream.test.mjs
-- [x] S19: In chat/static/js/app.js fill in `loadChats` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q "groupChats(state.chats" chat/static/js/app.js
-- [x] S20: In chat/static/js/app.js fill in `openChat` and `drawMessage` as their comments say
-  accept: node --check chat/static/js/app.js && grep -q "md.render(" chat/static/js/app.js && grep -q "welcome" chat/static/js/app.js
-- [x] S21: In chat/static/js/app.js fill in `send` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q "readEvents(" chat/static/js/app.js && grep -q "new Typewriter(" chat/static/js/app.js && grep -q "renderFade(" chat/static/js/app.js && grep -q "placeTail(" chat/static/js/app.js
-- [x] S22: In chat/static/js/app.js fill in `drawContext` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q -- "--used" chat/static/js/app.js && grep -q -- "--at" chat/static/js/app.js
-- [x] S23: In chat/static/js/app.js fill in `setupFiles` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q "/api/files" chat/static/js/app.js
-- [x] S24: In chat/static/js/app.js fill in `start` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q "coder-mode" chat/static/js/app.js && grep -q "setTheme" chat/static/js/app.js
-- [x] S25: Write chat/static/js/admin.js: see "S25 details" below
-  accept: node --check chat/static/js/admin.js && grep -q "/api/invites" chat/static/js/admin.js && grep -q "/api/users" chat/static/js/admin.js
-- [x] S26: Write chat/README.md: see "S26 details" below
-  accept: grep -q "## Running locally" chat/README.md && grep -q "## How it fits together" chat/README.md
+- [x] P09: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only the app code in chat/coder/
+  accept: make chat-test && make chat-browser-test
+- [x] P10: Add a "## Passkeys" section to chat/README.md (see "P10 details")
+  accept: grep -q "## Passkeys" chat/README.md && grep -q "RP_ID" chat/README.md && make chat-test
 
-## S13 details
-In `api_create_message`, at step 5: for each id in `file_ids`: `f = db.get_file(int(id), username)`;
-a non-number or None -> return 400 `{"error": "Unknown file."}`. Then for each file add to the text
-sent to the model: `content += f"\n\nFile {f['name']}:\n```\n{db.get_file_content(f['id']).decode('utf-8')}\n```"`.
-After `db.add_message(...)` (it returns the message id) call `db.add_message_files(msg_id, [ids])`
-when there were files. The 413 check stays on the typed text only (before adding files).
+## P01 details
+In `chat/coder/db.py` follow the `TODO (task P01)` comment (`grep -n "task P01" chat/coder/db.py`).
+In `chat/coder/config.py` add two settings like the others (add them to `__slots__` too):
+`RP_ID` (default `"localhost"`) and `ORIGIN` (default `"http://localhost:8090"`).
 
-## S25 details
-`chat/coder/templates/admin.html` has `#invite-new` (checkboxes `name=rights`, input `note`),
-`#invite-link`, `#invite-list`, `#user-list`. Every request sends header `X-Coder: 1` (and
-`Content-Type: application/json` with a JSON body). On load: GET /api/invites and GET /api/users and
-draw them as `<li>` rows (invites: rights, note, expires, "used by X" or a Delete button that calls
-DELETE /api/invites/ID; users: username, rights, last login, and a Delete button (DELETE
-/api/users/NAME, after confirm()) except for yourself). Submit of `#invite-new`: POST /api/invites
-{rights: checked values, note}; show `location.origin + result.url` in `#invite-link` with a Copy
-button (navigator.clipboard.writeText), then reload the lists. Escape all text you put in HTML.
+## P06 details
+Add inside `create_app` in `chat/coder/app.py`, next to the other `/api/` routes. Import
+`from . import passkeys` at the top (with the other `from . import` line) and use `hashlib`.
+Helper (inside `create_app`): `_wa_set(resp, key)` sets cookie `coder_wa` = key with `httponly=True,
+samesite="lax", path="/api/passkeys", max_age=300, secure=app.state.settings.SECURE_COOKIES`.
+Helper: `_wa_take(request, kind)`: `key = request.cookies.get("coder_wa")`; none -> `None`; else
+`return app.state.db.take_challenge(hashlib.sha256(key.encode()).hexdigest(), kind)`.
+1. `POST /api/passkeys/register/options`: session via `_require_session(request, app.state.db)`
+   (return it if it's a Response); `existing = [bytes(p["credential_id"]) for p in db.list_passkeys(username)]`;
+   `js, challenge = passkeys.registration_options(settings, username, existing)`;
+   `key = secrets.token_urlsafe(32)`; `db.put_challenge(sha256(key), "register", username, challenge)`;
+   return `Response(js, media_type="application/json")` with `_wa_set(resp, key)`.
+2. `POST /api/passkeys/register/verify`: session; body = request JSON (`{}` on error);
+   `got = _wa_take(request, "register")`; if not got, or `got[1] != username`, or
+   `body.get("credential")` is not a dict -> 400 `{"error": "That passkey could not be added. Try again."}`.
+   `cred_id, public_key, count = passkeys.verify_registration(settings, body["credential"], got[0])`
+   (PasskeyError -> the same 400). Name = `(str(body.get("name") or "").strip() or "Passkey")[:60]`.
+   `return JSONResponse(db.add_passkey(username, cred_id, public_key, count, name), status_code=201)`.
+3. `GET /api/passkeys`: session; `[{k: p[k] for k in ("id", "name", "created", "last_used")} for p in db.list_passkeys(username)]`.
+4. `DELETE /api/passkeys/{passkey_id}` (int): session; `db.delete_passkey(passkey_id, username)`
+   False -> 404 `{"error": "not found"}`; else `Response(status_code=204)`.
 
-## S26 details
-`chat/README.md` with: `## What it is` (two sentences: the public chat for the local model; it talks
-to the model only through the status service's gateway). `## Running locally` (a bash block:
-`make chat-test`, then `cd chat && DATA_DIR=./data SECURE_COOKIES=0 ADMIN_USER=me
-ADMIN_PASSWORD=change-me-please GATEWAY_URL=http://localhost:8080/v1 .venv/bin/uvicorn --factory
-coder.app:create_app --port 8090`). `## How it fits together`: one line each for
-`coder/app.py`, `config.py`, `db.py`, `auth.py`, `gateway.py`, `context.py`, `answer.py`,
-`templates/`, `static/js/theme.js`, `stream.js`, `app.js`, `login.js`, `invite.js`, `admin.js`,
-`static/css/`, and the path browser → chat → status gateway (`/v1`) → llama-server.
+## P07 details
+1. `POST /api/passkeys/login/options` (no session): `js, challenge = passkeys.authentication_options(settings)`;
+   new key; `db.put_challenge(sha256(key), "login", None, challenge)`; return the JSON with `_wa_set`.
+2. `POST /api/passkeys/login/verify` (no session), in this order:
+   - `ipkey = f"ip:{request.client.host if request.client else 'unknown'}"`;
+     `db.has_recent_failures(ipkey)` -> 429 `{"error": "Too many tries. Wait 15 minutes."}`
+   - body JSON (`{}` on error); `got = _wa_take(request, "login")`; `cred = body.get("credential")`
+   - in one `try`: no `got` or `cred` not a dict -> raise `passkeys.PasskeyError`;
+     `pk = db.get_passkey(passkeys.credential_id(cred))`, None -> raise PasskeyError;
+     `count = passkeys.verify_authentication(settings, cred, got[0], bytes(pk["public_key"]), pk["sign_count"])`
+   - `except passkeys.PasskeyError`: `db.record_login_failure(ipkey)` and return 401
+     `{"error": "That passkey did not work."}`
+   - `user = db.get_user(pk["username"])` (None -> the same 401); `db.touch_passkey(pk["id"], count)`;
+     `db.set_last_login(username)`; a new session exactly like `/api/login` does
+     (`secrets.token_urlsafe(32)`, `db.create_session`, the `coder_session` cookie with the same flags);
+     return `{"username", "rights": user["rights"]}`.
+
+## P08 details
+`GET /account` (HTML): no session -> `RedirectResponse("/login", status_code=303)`; else
+`templates.TemplateResponse(request, "account.html", {"me": {"username": username}})`
+(the template already exists).
+
+## P10 details
+Append to `chat/README.md` a section `## Passkeys` (4–6 lines): what they are (sign in with Face
+ID, Touch ID or a phone; the password stays as a backup), where you add one (`/account`, or right
+after accepting an invite), and that production needs the settings `RP_ID=dewdrop.cedricschippers.dev`
+and `ORIGIN=https://dewdrop.cedricschippers.dev` (passkeys only work on that exact domain).

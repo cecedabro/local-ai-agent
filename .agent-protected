@@ -28,3 +28,8 @@ chat/static/js/theme.js
 chat/static/js/login.js
 chat/static/js/invite.js
 chat/static/js/stream.js
+chat/tests/test_accept_passkeys.py
+chat/tests/test_step_passkeys.py
+chat/tests/soft_authenticator.py
+chat/tests/browser/
+chat/static/js/webauthn.js

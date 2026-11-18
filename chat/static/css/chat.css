@@ -220,3 +220,13 @@ body.admin header a{margin-left:auto}
 .pmenu .opt:hover{background:var(--chip)}
 .chips .file button{padding:0 4px;border:0;background:none;box-shadow:none}
 @media (prefers-reduced-motion:reduce){.badge.ok::after,.ai .bub .nw,.orb.tiny,.meta2 .orb{animation:none}}
+
+/* passkeys (SPEC §10) */
+.passkey-btn{display:flex;align-items:center;justify-content:center;gap:8px}
+.passkey-btn::before{content:"";width:18px;height:18px;border-radius:50%;
+  background:radial-gradient(circle at 50% 72%,#fff 0 12%,rgba(160,225,255,.5) 42%,rgba(70,165,230,.65));box-shadow:inset 0 0 0 1px #fff}
+#passkey-offer{display:grid;gap:10px;margin-top:16px;text-align:center}
+#passkey-offer[hidden]{display:none}
+#passkey-list li{display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+#passkey-list li:last-child{border-bottom:0}
+#passkey-list li button{margin-left:auto}
