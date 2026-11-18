@@ -109,7 +109,8 @@ def info(db: Any, chat: dict, settings: Any) -> dict:
 def just_before(iso: str) -> str:
     """TODO (task S08). The ISO-8601 time one microsecond before `iso`, same format.
     datetime.fromisoformat(iso) - timedelta(microseconds=1), then .isoformat()."""
-    raise NotImplementedError
+    dt = datetime.fromisoformat(iso) - timedelta(microseconds=1)
+    return dt.isoformat()
 
 
 async def compress(db: Any, chat: dict, settings: Any,
@@ -129,7 +130,26 @@ async def compress(db: Any, chat: dict, settings: Any,
       7. db.reset_chat_usage(chat["id"])   (so used() estimates again)
       8. return True
     """
-    raise NotImplementedError
+    msgs = db.get_messages(chat["id"], chat["username"])
+    last_summary_idx = -1
+    for i in range(len(msgs) - 1, -1, -1):
+        if msgs[i]["role"] == "summary":
+            last_summary_idx = i
+            break
+    those = [m for m in msgs[last_summary_idx + 1:] if m["role"] in ("user", "assistant")]
+    if len(those) <= KEEP:
+        return False
+    old, kept = those[:-KEEP], those[-KEEP:]
+    parts = []
+    if last_summary_idx >= 0:
+        parts.append(f"Earlier summary: {msgs[last_summary_idx]['content']}")
+    parts.append("\n\n".join(f"{m['role']}: {m['content']}" for m in old))
+    transcript = "\n\n".join(parts)
+    text = await complete(settings, [{"role": "system", "content": SUMMARISE_PROMPT},
+                                     {"role": "user", "content": transcript}])
+    db.add_message_at(chat["id"], "summary", text, just_before(kept[0]["created"]))
+    db.reset_chat_usage(chat["id"])
+    return True
 
 
 def _unused() -> None:  # imports you will need
