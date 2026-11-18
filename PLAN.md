@@ -32,7 +32,7 @@ Rules for every task:
   accept: make chat-test K="TestRound2Answer and (stop_endpoint or done_has_title)"
 - [x] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
   accept: make chat-test
-- [ ] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
+- [x] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
   accept: node --check chat/static/js/app.js && make chat-test

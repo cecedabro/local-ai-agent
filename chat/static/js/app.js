@@ -44,7 +44,12 @@ export function esc(s) {
  * aria-label="More">⋯</button></div>  ("on" when c.id === state.chatId; TITLE escaped with esc()).
  */
 function convHtml(c) {
-  return "";
+  const on = c.id === state.chatId ? " on" : "";
+  let tag = "";
+  if (c.profile === "evidence") {
+    tag = '<em class="tag">EH</em>';
+  }
+  return `<div class="conv${on}" data-id="${c.id}" draggable="true"><span>${esc(c.title)}</span>${tag}<button class="more" data-chat-menu="${c.id}" title="More" aria-label="More">⋯</button></div>`;
 }
 
 /**
@@ -57,6 +62,41 @@ function convHtml(c) {
  *   then for the shown chats with folder_id == null: per group of groupChats(those): <h4>LABEL</h4> + convHtml each.
  */
 async function loadChats() {
+  const [chatsRes, foldersRes] = await Promise.all([
+    api("/api/chats"),
+    api("/api/folders"),
+  ]);
+  state.chats = await chatsRes.json();
+  state.folders = await foldersRes.json();
+
+  const search = ($("#search")?.value || "").toLowerCase();
+  const shown = state.chats.filter((c) => !search || c.title.toLowerCase().includes(search));
+
+  const convs = $("#convs");
+  let html = "";
+
+  // Folders first
+  for (const folder of state.folders) {
+    const folderChats = shown.filter((c) => c.folder_id === folder.id);
+    const count = folderChats.length;
+    html += `<details class="folder" open data-folder="${folder.id}"><summary><span>${esc(folder.name)}</span><small>${count}</small><button class="more" data-folder-menu="${folder.id}" title="More" aria-label="More">⋯</button></summary>`;
+    for (const c of folderChats) {
+      html += convHtml(c);
+    }
+    html += "</details>";
+  }
+
+  // Then date groups for chats without a folder
+  const unfiled = shown.filter((c) => c.folder_id == null);
+  const groups = groupChats(unfiled);
+  for (const g of groups) {
+    html += `<h4>${g.label}</h4>`;
+    for (const c of g.chats) {
+      html += convHtml(c);
+    }
+  }
+
+  convs.innerHTML = html;
 }
 
 async function openChat(id) {

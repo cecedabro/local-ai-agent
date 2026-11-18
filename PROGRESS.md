@@ -42,3 +42,11 @@ Modified `chat/coder/app.py`:
 1. Fixed the PATCH `/api/folders/{folder_id}` response to return only `{"id", "name", "created"}` instead of the full folder dict (which included `username`). The test `TestFolders.test_crud` expects exactly those three keys.
 
 Tests: `make chat-test K="TestFolders"` — 3 passed. `make check` — 36 passed, OK.
+
+## Task R10 — convHtml and loadChats, done (2026-11-18)
+
+Modified `chat/static/js/app.js`:
+1. Implemented `convHtml(c)` — renders one sidebar chat item as `<div class="conv[ on]" data-id="ID" draggable="true"><span>TITLE</span>[<em class="tag">EH</em> for evidence profile]<button class="more" data-chat-menu="ID">⋯</button></div>` with "on" class when `c.id === state.chatId`, title escaped via `esc()`, and profile tag shown for "evidence" chats.
+2. Implemented `loadChats()` — fetches `/api/chats` and `/api/folders` in parallel via `Promise.all`, stores them in `state.chats` and `state.folders`, filters by `#search` (case-insensitive title substring), then renders `#convs` with folders first (`<details class="folder">` with COUNT) followed by date groups (`<h4>LABEL</h4>`) for unfiled chats using `groupChats()`.
+
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
