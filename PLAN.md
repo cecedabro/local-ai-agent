@@ -30,7 +30,7 @@ Rules for every task:
   accept: make chat-test K="TestFolders"
 - [x] R08: In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`)
   accept: make chat-test K="TestRound2Answer and (stop_endpoint or done_has_title)"
-- [ ] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
+- [x] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
   accept: make chat-test
 - [ ] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
   accept: node --check chat/static/js/app.js && make chat-test

@@ -461,7 +461,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
         for fid in file_ids:
             if not db.get_file(fid, username):
                 return JSONResponse({"error": "One or more files not found."}, status_code=400)
-        # TODO (task R09): the file block must be exactly "\n\nFile <name>:\n```\n<content>\n```" (SPEC §5, §11.1):
         if file_ids:
             for fid in file_ids:
                 f = db.get_file(fid, username)
