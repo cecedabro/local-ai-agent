@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="http://127.0.0.1:8791/static/style.css"><title>Bubble options</title>
+<style>
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;max-width:1300px;margin:16px auto;padding:0 16px}
+.log{display:flex;flex-direction:column;gap:10px}
+.card p{margin:12px 0 0}
+.msg.user{position:relative;isolation:isolate;overflow:hidden}
+/* A: frosted aqua glass */
+.aqua .msg.user{color:var(--ink);background:linear-gradient(180deg,rgba(150,225,255,.55),rgba(60,180,240,.32));
+  border:1px solid rgba(255,255,255,.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(20,120,200,.14);
+  backdrop-filter:blur(12px) saturate(170%);-webkit-backdrop-filter:blur(12px) saturate(170%)}
+/* B: soft green gel */
+.gel .msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,60,30,.25);background:linear-gradient(180deg,#5fdc9a,#22a866);
+  border:1px solid rgba(255,255,255,.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 12px rgba(20,150,80,.25)}
+.gel .msg.user::before{content:"";position:absolute;z-index:-1;left:8%;right:8%;top:2px;height:48%;border-radius:999px;
+  background:linear-gradient(rgba(255,255,255,.45),rgba(255,255,255,0))}
+/* C: pearl with an aqua-to-green rim */
+.pearl .msg.user{color:var(--ink);border:1.5px solid transparent;
+  background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(240,250,255,.8)) padding-box,linear-gradient(135deg,#5fc2ff,#34d399) border-box;
+  box-shadow:0 4px 14px rgba(30,150,160,.16)}
+/* D: sea glass (teal, frosted, soft glow) */
+.sea .msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
+  background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.55),transparent 60%),linear-gradient(160deg,#2bb7c9,#1f9d8a);
+  border:1px solid rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}
+@media (prefers-color-scheme:dark){
+ .aqua .msg.user{background:linear-gradient(180deg,rgba(90,190,255,.32),rgba(40,130,220,.22));border-color:rgba(160,220,255,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 4px 14px rgba(0,0,0,.25)}
+ .gel .msg.user{background:linear-gradient(180deg,#3fc583,#178a52)}
+ .pearl .msg.user{background:linear-gradient(180deg,rgba(40,60,80,.9),rgba(25,40,55,.85)) padding-box,linear-gradient(135deg,#5fc2ff,#34d399) border-box}
+ .sea .msg.user{background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a)}}
+@media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}}
+</style></head><body>
+<header><h1>Your messages: round two</h1></header>
+<div class="grid4">
+<div class="card aqua"><h2>A · Frosted aqua</h2><div class="log">
+ <div class="msg user">Why is my CI red?</div>
+ <div class="msg assistant">The test job fails at test_metrics: the fake clock never moves.</div>
+ <div class="msg user">and how do I fix it?</div></div>
+ <p class="small muted">See-through aqua glass, dark text. Same family as the cards, just tinted.</p></div>
+<div class="card gel"><h2>B · Green gel</h2><div class="log">
+ <div class="msg user">Why is my CI red?</div>
+ <div class="msg assistant">The test job fails at test_metrics: the fake clock never moves.</div>
+ <div class="msg user">and how do I fix it?</div></div>
+ <p class="small muted">Smooth green with a soft rounded highlight on top. Aero, but gentler than the buttons.</p></div>
+<div class="card pearl"><h2>C · Pearl</h2><div class="log">
+ <div class="msg user">Why is my CI red?</div>
+ <div class="msg assistant">The test job fails at test_metrics: the fake clock never moves.</div>
+ <div class="msg user">and how do I fix it?</div></div>
+ <p class="small muted">Bright pearl with an aqua-to-green rim. Calm and clean.</p></div>
+<div class="card sea"><h2>D · Sea glass</h2><div class="log">
+ <div class="msg user">Why is my CI red?</div>
+ <div class="msg assistant">The test job fails at test_metrics: the fake clock never moves.</div>
+ <div class="msg user">and how do I fix it?</div></div>
+ <p class="small muted">Teal glass with light glowing in from the top corner. Richest.</p></div>
+</div></body></html>

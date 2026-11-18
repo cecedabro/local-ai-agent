@@ -1,0 +1,350 @@
+<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Design options</title>
+<style>/* agent-status: "liquid glass" with Aero gloss. Light or dark: <html data-theme>, set before paint
+   by the head script from the header switch (Auto follows the device).
+   Colours live in the custom properties below; the rest of the sheet only uses them. */
+:root{color-scheme:light;
+--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--bg:#dff2ff;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),
+  linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.7),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.46);--tile-top:rgba(255,255,255,.75);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.7);--chip:rgba(255,255,255,.65);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(244,250,255,.85) 48%,rgba(222,238,250,.8) 52%,rgba(240,248,255,.9) 100%);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%);
+--shadow:0 10px 30px rgba(30,90,140,.13),0 1px 2px rgba(30,90,140,.08);
+--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);--glow:rgba(10,132,255,.35);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--bar-top:#5ad1ff;--bar-bottom:#0a84ff;
+--title-a:#0a4e7c;--title-b:#0d86c6;--gloss:1;
+--t1:rgba(90,190,255,.30);--t2:rgba(110,225,140,.30);--t3:rgba(255,200,90,.30);
+--t4:rgba(170,140,255,.28);--t5:rgba(70,220,200,.30);--t6:rgba(255,130,170,.26)}
+:root[data-theme=dark]{color-scheme:dark;
+--ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
+--ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
+--bg:#06121f;
+--scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),
+  linear-gradient(160deg,#071624,#06131d 55%,#07170f);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(120,200,255,.12),transparent 70%);
+--bar:rgba(10,22,36,.55);--glass:rgba(22,36,54,.45);--tile-top:rgba(255,255,255,.06);--bubble:rgba(255,255,255,.08);
+--field:rgba(0,0,0,.25);--chip:rgba(255,255,255,.08);
+--btn:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 52%,rgba(255,255,255,.08) 100%);
+--stroke:rgba(255,255,255,.14);--stroke-soft:rgba(255,255,255,.09);--hi:rgba(255,255,255,.18);--hi-soft:rgba(255,255,255,.07);
+--line:rgba(255,255,255,.08);--track:rgba(255,255,255,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%);
+--shadow:0 12px 34px rgba(0,0,0,.35);
+--primary:linear-gradient(180deg,#7fd3ff 0%,#2a9ff0 48%,#0b78d6 52%,#2aa4f2 100%);--glow:rgba(76,194,255,.35);
+--fill:linear-gradient(90deg,#2ee59d,#22c3ee 55%,#3b9cff);--bar-top:#7fe3ff;--bar-bottom:#2a7fe0;
+--title-a:#ffffff;--title-b:#8fd8ff;--gloss:.3;
+--t1:rgba(90,190,255,.16);--t2:rgba(110,225,140,.14);--t3:rgba(255,200,90,.13);
+--t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}
+
+/* ------------------------------------------------------------------ base */
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--bg)}
+body{margin:0;color:var(--ink);background:transparent;min-height:100vh;-webkit-font-smoothing:antialiased;
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable","Segoe UI",Roboto,system-ui,sans-serif}
+body::before{content:"";position:fixed;inset:-10vmax;z-index:-2;background:var(--scene)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--scene-top)}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.muted{color:var(--muted)}.small{font-size:13px}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.defs{position:absolute;width:0;height:0}
+/* Aero scrollbars: a slim glossy aqua-to-green capsule on a clear track */
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{border-radius:99px;border:3px solid transparent;background-clip:padding-box;
+  background-image:linear-gradient(90deg,rgba(255,255,255,.55),rgba(255,255,255,0) 60%),linear-gradient(180deg,#7fdcff,#22c3ee 55%,#34d399)}
+::-webkit-scrollbar-thumb:hover{border-width:2px}
+::-webkit-scrollbar-corner{background:transparent}
+@supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:#22c3ee transparent}}
+
+/* ------------------------------------------------------------------ frame */
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
+  padding:12px max(16px,calc((100% - 1200px)/2 + 16px));background:var(--bar);
+  backdrop-filter:blur(28px) saturate(190%);-webkit-backdrop-filter:blur(28px) saturate(190%);
+  border-bottom:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+header h1{font-size:19px;letter-spacing:-.01em;margin:0 auto 0 0;font-weight:750;
+  background:linear-gradient(180deg,var(--title-a),var(--title-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+main,#controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;max-width:1200px;margin:0 auto}
+#controls{padding-bottom:0}
+footer{padding:8px 16px 28px;text-align:center}
+.card{position:relative;isolation:isolate;min-width:0;background:var(--glass);border:1px solid var(--stroke);border-radius:24px;padding:16px 18px;
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  box-shadow:var(--shadow),inset 0 1px 0 var(--hi),inset 0 -1px 0 var(--hi-soft)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--sheen)}
+.wide{grid-column:1/-1}
+h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:650}
+h2::before{content:"";display:inline-block;width:9px;height:9px;margin-right:8px;border-radius:50%;vertical-align:1px;
+  background:radial-gradient(circle at 35% 30%,#fff 0 18%,#5fd0ff 40%,#0a84ff 100%);box-shadow:0 0 8px rgba(10,132,255,.5)}
+h3{font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 28px}
+.cols h3:first-child{margin-top:0}
+
+/* ------------------------------------------------------------------ badges, progress, tiles */
+.badge,.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:12px;padding:3px 10px;white-space:nowrap;font-weight:600;
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+.badge{font-size:13px;padding:4px 12px}
+.badge::before,.dot{content:"";display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent),0 0 10px currentColor}
+.dot{margin-right:4px;vertical-align:1px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.off{color:var(--off)}
+.dot.ok{background:var(--ok)}.dot.off{background:var(--off)}
+.now-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.repo{font-size:24px;font-weight:750;letter-spacing:-.02em}
+.task{font-size:17px;margin:10px 0 2px;font-weight:600}
+.idle{font-size:22px;font-weight:700;margin:4px 0;letter-spacing:-.01em}
+.progress{height:12px;background:var(--track);border-radius:99px;overflow:hidden;margin:14px 0 6px;box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
+.progress i{position:relative;display:block;height:100%;border-radius:99px;background:var(--fill);box-shadow:0 0 12px var(--glow)}
+.progress i::after{content:"";position:absolute;left:4px;right:4px;top:1px;height:45%;border-radius:99px;
+  background:linear-gradient(rgba(255,255,255,.75),rgba(255,255,255,.1))}
+/* A running loop: the colours stream left to right and the glow breathes. Paused: still and pale. */
+.progress.live i{background:linear-gradient(90deg,#34d399,#22c3ee,#0a84ff,#8f7bff,#22c3ee,#34d399);background-size:300% 100%;
+  animation:flow 9s linear infinite,glow 3.2s ease-in-out infinite}
+.progress.paused i{filter:saturate(.25);opacity:.7;box-shadow:none}
+@keyframes flow{from{background-position:300% 0}to{background-position:0 0}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px var(--glow)}50%{box-shadow:0 0 18px var(--glow)}}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tiles.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile{position:relative;border-radius:18px;padding:12px 14px;border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft);
+  background:linear-gradient(180deg,var(--tile-top),var(--tint,var(--t1)))}
+.tile:nth-child(6n+2){--tint:var(--t2)}.tile:nth-child(6n+3){--tint:var(--t3)}.tile:nth-child(6n+4){--tint:var(--t4)}
+.tile:nth-child(6n+5){--tint:var(--t5)}.tile:nth-child(6n+6){--tint:var(--t6)}
+.tile::after{content:"";position:absolute;left:6px;right:6px;top:1px;height:40%;pointer-events:none;opacity:var(--gloss);
+  border-radius:16px 16px 50% 50%/16px 16px 10px 10px;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0))}
+.tile .label{position:relative;font-size:12px;color:var(--muted);font-weight:600}
+.tile .value{font-size:26px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile small{font-size:12px;color:var(--muted);font-weight:500}
+
+/* ------------------------------------------------------------------ charts, lists, tables */
+.chart{width:100%;height:auto;display:block}
+.chart .bar{fill:url(#bar-fill)}.chart .axis{stroke:var(--line)}.chart .hit{fill:transparent}
+.chart g:hover .bar{opacity:.7}.chart .tick{fill:var(--muted);font-size:11px}
+ol.jobs{list-style:none;margin:0;padding:0}
+.job{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.job:last-child{border-bottom:0}
+.job>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.job .pos{flex:none;width:24px;height:24px;line-height:24px;border-radius:50%;text-align:center;font-size:12px;
+  color:var(--muted);background:var(--chip);font-variant-numeric:tabular-nums}
+.job.running .pos{color:#fff;background:var(--ok)}
+ul.plain{list-style:none;padding:0;margin:0}ul.plain li{padding:3px 0}
+ol.plan{margin:0;padding-left:20px}ol.plan li{padding:2px 0}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:12.5px}
+th,td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.text{overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}
+
+/* ------------------------------------------------------------------ controls */
+input,select,textarea{font:inherit;color:inherit;background:var(--field);border:1px solid var(--stroke-soft);border-radius:12px;
+  padding:7px 12px;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+input[type=checkbox]{accent-color:var(--accent);box-shadow:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+button{font:inherit;font-weight:600;cursor:pointer;color:var(--ink);border-radius:999px;padding:7px 16px;
+  background:var(--btn);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.08)}
+button:hover{filter:brightness(1.05)}button:active{transform:translateY(1px)}
+button:disabled{opacity:.5;cursor:default}
+button.primary,#unlock button{color:#fff;border-color:transparent;background:var(--primary);
+  text-shadow:0 1px 1px rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px var(--glow)}
+button.link{border:0;background:none;box-shadow:none;color:var(--link);padding:0 4px}
+.btns{display:flex;gap:4px}.btns button{width:30px;height:30px;padding:0}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.card-head{display:flex;align-items:baseline;gap:12px}.card-head h2{margin-right:auto}
+#add{display:grid;gap:10px}
+#add .fields{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.6fr);gap:8px}
+#add .fields>*{width:100%;min-width:0}
+#add .opts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+#add .opts .spacer{flex:1}
+select{appearance:none;-webkit-appearance:none;padding-right:32px;cursor:pointer;
+  background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2322c3ee' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center/12px 8px}
+/* "max 24 h" as a glass chip with a bare number field */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:13px;color:var(--muted);
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+.chip input{width:44px;padding:3px 4px;text-align:center;border-radius:8px;font-weight:650;color:var(--ink);-moz-appearance:textfield}
+.chip input::-webkit-inner-spin-button,.chip input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+/* checkbox as a glossy switch */
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch .track{position:relative;width:40px;height:24px;border-radius:999px;background:var(--track);
+  border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 3px rgba(0,0,0,.18);transition:background .2s}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff 0 30%,#e6f2fa 100%);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}
+.switch input:checked+.track{background:var(--primary);border-color:transparent}
+.switch input:checked+.track::after{transform:translateX(16px)}
+.switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
+#unlock input{flex:1 1 200px}
+#msg{min-height:1.2em}
+body.locked .ctl,body.locked #add{display:none}
+body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
+
+/* ------------------------------------------------------------------ chat */
+body.locked #chat{display:none}
+.chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
+#chat .log{max-height:min(62vh,600px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:10px 12px 10px 2px;
+  -webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent);
+  mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent)}
+#chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
+#chat.full .log{max-height:none;flex:1}
+.msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:9px 14px;border-radius:20px;max-width:85%}
+/* Your messages: frosted aqua glass in light mode, teal "sea glass" in dark mode. */
+.msg.user{align-self:flex-end;border-bottom-right-radius:6px;color:var(--ink);
+  background:linear-gradient(180deg,rgba(150,225,255,.55),rgba(60,180,240,.32));border:1px solid rgba(255,255,255,.8);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(20,120,200,.14);
+  backdrop-filter:blur(12px) saturate(170%);-webkit-backdrop-filter:blur(12px) saturate(170%)}
+:root[data-theme=dark] .msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
+  background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a);
+  border-color:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}
+.msg.assistant{align-self:flex-start;background:var(--bubble);border:1px solid var(--stroke-soft);border-bottom-left-radius:6px;
+  box-shadow:inset 0 1px 0 var(--hi-soft)}
+.msg.note{color:var(--muted);font-size:13px}
+.meta{font-size:12px;color:var(--muted);margin:-4px 0 0 6px}
+#chat form{display:block;margin-top:10px}
+#chat textarea{display:block;width:100%;border-radius:18px;padding:10px 14px;resize:vertical;min-height:52px}
+.composer-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.composer-bar .spacer{flex:1}
+
+/* Quick / Think switch: two radios with a sliding glossy thumb */
+.seg{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:999px;
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 14px;border-radius:999px;
+  font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer;transition:color .2s}
+.seg label svg{width:15px;height:15px}
+.seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--primary);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 10px var(--glow);transition:transform .28s cubic-bezier(.3,1.4,.5,1)}
+.seg input:nth-of-type(2):checked~.thumb{transform:translateX(100%)}
+.seg.three{grid-template-columns:repeat(3,1fr)}.seg.three .thumb{width:calc(33.333% - 2px)}
+.seg.three input:nth-of-type(3):checked~.thumb{transform:translateX(200%)}
+.seg.icons label{padding:5px 9px}.seg.icons label svg{width:16px;height:16px}
+.seg input:checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Loading: an Aero orb that turns and shimmers, with a shimmering status line.
+   .fast while the model is thinking. */
+.loading{display:flex;align-items:center;gap:12px;padding:2px 0;white-space:normal}
+.orb{position:relative;flex:none;width:30px;height:30px;border-radius:50%;overflow:hidden;
+  box-shadow:0 0 16px rgba(34,195,238,.55);animation:breathe 1.8s ease-in-out infinite}
+.orb i{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,#22c3ee,#34d399,#a6ec7e,#5fc2ff,#8f7bff,#22c3ee);animation:spin 2.4s linear infinite}
+.orb::before{content:"";position:absolute;inset:-20%;z-index:1;
+  background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.75) 50%,transparent 65%);
+  background-size:250% 100%;animation:sweep 1.6s linear infinite}
+.orb::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
+.loading.fast .orb i{animation-duration:.9s}
+.loading.fast .orb{box-shadow:0 0 20px rgba(143,123,255,.6)}
+.shimmer{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
+@media (prefers-reduced-motion:reduce){.orb,.orb i,.orb::before,.shimmer,.progress.live i{animation:none}}
+
+/* ------------------------------------------------------------------ phone */
+@media (max-width:700px){
+main,#controls,.cols{grid-template-columns:minmax(0,1fr)}
+main,#controls{gap:12px;padding:12px}
+.card{border-radius:20px;padding:14px}
+.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile .value{font-size:21px}
+#add .fields{grid-template-columns:minmax(0,1fr)}
+.events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
+.cols h3:first-child{margin-top:14px}}
+
+body{padding-bottom:40px}
+.wrap{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.opt{display:grid;gap:8px}.opt>p{margin:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+@media (max-width:800px){.grid2,.grid4{grid-template-columns:1fr}}
+.demo-log{display:flex;flex-direction:column;gap:10px;padding:6px 2px}
+h3.optname{margin:4px 0 0;color:var(--ink);font-size:14px}
+
+/* ---- tiles A: one calm glass for every tile */
+.tA .tile{background:linear-gradient(180deg,var(--tile-top),rgba(255,255,255,.18))}
+:root[data-theme=dark] .tA .tile{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03))}
+/* ---- tiles B: neutral glass + small glossy icon orb (the only colour) */
+.tB .tile{background:linear-gradient(180deg,var(--tile-top),rgba(255,255,255,.18));padding-left:58px}
+:root[data-theme=dark] .tB .tile{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03))}
+.tB .ic{position:absolute;left:12px;top:14px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;
+  background:radial-gradient(circle at 35% 28%,#fff 0 10%,#7fdcff 35%,#0a84ff 100%);box-shadow:0 3px 10px var(--glow),inset 0 1px 0 rgba(255,255,255,.6)}
+.tB .ic svg{width:18px;height:18px}
+/* ---- tiles C: no boxes, a clean stat strip with hairline dividers */
+.strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
+.strip .cell{padding:4px 16px;border-left:1px solid var(--line)}.strip .cell:first-child{border-left:0;padding-left:0}
+.strip .label{font-size:12px;color:var(--muted);font-weight:600}
+.strip .value{font-size:28px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+@media (max-width:800px){.strip{grid-template-columns:repeat(2,1fr);gap:12px}.strip .cell{border-left:0;padding:0}}
+/* ---- tiles D: neutral glass, the number itself in an aqua-to-green gradient */
+.tD .tile{background:linear-gradient(180deg,var(--tile-top),rgba(255,255,255,.18))}
+:root[data-theme=dark] .tD .tile{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03))}
+.tD .value{background:linear-gradient(90deg,#0a84ff,#22c3ee 50%,#2fb36b);-webkit-background-clip:text;background-clip:text;color:transparent}
+:root[data-theme=dark] .tD .value{background-image:linear-gradient(90deg,#6cc4ff,#5ee0f0 50%,#5fe0a0)}
+
+/* ---- chat 1: denser "pearl" panel, lifted with a deeper shadow */
+.cA{background:rgba(255,255,255,.78);box-shadow:0 18px 50px rgba(20,70,120,.22),inset 0 1px 0 #fff}
+:root[data-theme=dark] .cA{background:rgba(14,24,38,.82);box-shadow:0 18px 50px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.12)}
+/* ---- chat 2: the messages sit in a recessed glass "screen" */
+.cB .demo-log{background:rgba(255,255,255,.55);border-radius:18px;padding:14px;box-shadow:inset 0 2px 8px rgba(20,70,120,.15),inset 0 0 0 1px rgba(255,255,255,.8)}
+:root[data-theme=dark] .cB .demo-log{background:rgba(0,0,0,.28);box-shadow:inset 0 2px 10px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.06)}
+/* ---- chat 3: aqua-to-green glowing rim */
+.cC{box-shadow:0 0 0 4px rgba(34,195,238,.10),0 0 24px rgba(34,195,238,.25),0 14px 40px rgba(20,140,160,.22)}
+.cC::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:linear-gradient(135deg,#5fc2ff,#34d399);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+/* ---- chat 4: pearl panel + recessed screen (1 + 2 together) */
+.cD{background:rgba(255,255,255,.78);box-shadow:0 18px 50px rgba(20,70,120,.22),inset 0 1px 0 #fff}
+:root[data-theme=dark] .cD{background:rgba(14,24,38,.82);box-shadow:0 18px 50px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.12)}
+.cD .demo-log{background:rgba(230,245,255,.6);border-radius:18px;padding:14px;box-shadow:inset 0 2px 8px rgba(20,70,120,.12)}
+:root[data-theme=dark] .cD .demo-log{background:rgba(0,0,0,.25);box-shadow:inset 0 2px 10px rgba(0,0,0,.45)}
+
+/* ---- loading variants */
+.orb.plain::before{display:none}                         /* first demo: spin + breathe, no sweep */
+.orb.glint::before{display:none}
+.orb.glint{animation:breathe 1.8s ease-in-out infinite}
+.orb.glint::after{background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
+.orb.glint b{position:absolute;inset:0;z-index:3;border-radius:50%;
+  background:conic-gradient(from 0deg,transparent 0 70%,rgba(255,255,255,.9) 82%,transparent 90%);
+  -webkit-mask:radial-gradient(circle,transparent 52%,#000 56%);mask:radial-gradient(circle,transparent 52%,#000 56%);
+  animation:spin 1.6s linear infinite}
+.skel{display:grid;gap:7px;margin-top:10px}
+.skel b{display:block;height:9px;border-radius:99px;
+  background:linear-gradient(100deg,var(--track) 30%,rgba(120,210,255,.55) 45%,rgba(140,240,190,.55) 55%,var(--track) 70%);
+  background-size:250% 100%;animation:sweep 1.6s linear infinite}
+.skel b:nth-child(2){width:80%;animation-delay:.12s}.skel b:nth-child(3){width:55%;animation-delay:.24s}
+</style></head><body>
+<header><h1>Design options</h1><button id="t">Dark</button></header>
+<div class="wrap">
+<section class="card"><h2>1 · All-time tiles without the rainbow</h2>
+ <div class="opt"><h3 class="optname">A · Calm glass</h3><div class="tiles tA"><div class="tile"><div class="label">Commits</div><div class="value">8</div><div class="muted small">0 tasks skipped</div></div><div class="tile"><div class="label">Lines</div><div class="value">+2,269</div><div class="muted small">−66 removed</div></div><div class="tile"><div class="label">Tokens generated</div><div class="value">1.2M</div><div class="muted small">48M read</div></div><div class="tile"><div class="label">PRs opened</div><div class="value">3</div><div class="muted small">5 runs</div></div><div class="tile"><div class="label">Agent time</div><div class="value">2.3 h</div><div class="muted small">avg 17.5 min per task</div></div><div class="tile"><div class="label">First try</div><div class="value">88%</div><div class="muted small">tasks done on attempt 1</div></div></div><p class="small muted">Every tile the same frosted glass. Quietest.</p></div>
+ <div class="opt"><h3 class="optname">B · Glass + glossy icon orbs</h3><div class="tiles tB"><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"/><path d="M3 12h5.5M15.5 12H21"/></svg></span><div class="label">Commits</div><div class="value">8</div><div class="muted small">0 tasks skipped</div></div><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h10M5 17h7"/></svg></span><div class="label">Lines</div><div class="value">+2,269</div><div class="muted small">−66 removed</div></div><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 6v12M17 6v12M4 18h16"/></svg></span><div class="label">Tokens generated</div><div class="value">1.2M</div><div class="muted small">48M read</div></div><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4"/></svg></span><div class="label">PRs opened</div><div class="value">3</div><div class="muted small">5 runs</div></div><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span><div class="label">Agent time</div><div class="value">2.3 h</div><div class="muted small">avg 17.5 min per task</div></div><div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8" fill="currentColor"/></svg></span><div class="label">First try</div><div class="value">88%</div><div class="muted small">tasks done on attempt 1</div></div></div><p class="small muted">Same glass; a small Aero icon bubble per number is the only colour. Easy to scan.</p></div>
+ <div class="opt"><h3 class="optname">C · Stat strip</h3><div class="strip"><div class="cell"><div class="label">Commits</div><div class="value">8</div><div class="muted small">0 tasks skipped</div></div><div class="cell"><div class="label">Lines</div><div class="value">+2,269</div><div class="muted small">−66 removed</div></div><div class="cell"><div class="label">Tokens generated</div><div class="value">1.2M</div><div class="muted small">48M read</div></div><div class="cell"><div class="label">PRs opened</div><div class="value">3</div><div class="muted small">5 runs</div></div><div class="cell"><div class="label">Agent time</div><div class="value">2.3 h</div><div class="muted small">avg 17.5 min per task</div></div><div class="cell"><div class="label">First try</div><div class="value">88%</div><div class="muted small">tasks done on attempt 1</div></div></div><p class="small muted">No boxes at all: six numbers in a row with hairline dividers (two columns on a phone). Most Apple-like.</p></div>
+ <div class="opt"><h3 class="optname">D · Gradient numbers</h3><div class="tiles tD"><div class="tile"><div class="label">Commits</div><div class="value">8</div><div class="muted small">0 tasks skipped</div></div><div class="tile"><div class="label">Lines</div><div class="value">+2,269</div><div class="muted small">−66 removed</div></div><div class="tile"><div class="label">Tokens generated</div><div class="value">1.2M</div><div class="muted small">48M read</div></div><div class="tile"><div class="label">PRs opened</div><div class="value">3</div><div class="muted small">5 runs</div></div><div class="tile"><div class="label">Agent time</div><div class="value">2.3 h</div><div class="muted small">avg 17.5 min per task</div></div><div class="tile"><div class="label">First try</div><div class="value">88%</div><div class="muted small">tasks done on attempt 1</div></div></div><p class="small muted">Same glass; the numbers carry the aqua-to-green gradient.</p></div>
+</section>
+<section class="card"><h2>2 · Making the chat stand apart</h2>
+ <div class="grid2">
+  <div class="opt"><h3 class="optname">1 · Pearl panel</h3><div class="card cA"><div class="chat-head"><h2>Chat</h2></div><div class="log demo-log"><div class="msg user">Why is my CI red?</div><div class="msg assistant">The test job fails at test_metrics: the fake clock never moves, so the sample counts as zero.</div><div class="msg user">and how do I fix it?</div></div><textarea placeholder="Message the local model" style="width:100%;margin-top:10px;border-radius:18px;padding:10px 14px"></textarea></div><p class="small muted">Denser, less see-through panel, lifted with a deeper shadow.</p></div>
+  <div class="opt"><h3 class="optname">2 · Recessed screen</h3><div class="card cB"><div class="chat-head"><h2>Chat</h2></div><div class="log demo-log"><div class="msg user">Why is my CI red?</div><div class="msg assistant">The test job fails at test_metrics: the fake clock never moves, so the sample counts as zero.</div><div class="msg user">and how do I fix it?</div></div><textarea placeholder="Message the local model" style="width:100%;margin-top:10px;border-radius:18px;padding:10px 14px"></textarea></div><p class="small muted">The messages sit in a sunken glass "screen" inside the card.</p></div>
+  <div class="opt"><h3 class="optname">3 · Glowing rim</h3><div class="card cC"><div class="chat-head"><h2>Chat</h2></div><div class="log demo-log"><div class="msg user">Why is my CI red?</div><div class="msg assistant">The test job fails at test_metrics: the fake clock never moves, so the sample counts as zero.</div><div class="msg user">and how do I fix it?</div></div><textarea placeholder="Message the local model" style="width:100%;margin-top:10px;border-radius:18px;padding:10px 14px"></textarea></div><p class="small muted">Thin aqua-to-green rim with a soft glow around the chat card.</p></div>
+  <div class="opt"><h3 class="optname">4 · Pearl + screen</h3><div class="card cD"><div class="chat-head"><h2>Chat</h2></div><div class="log demo-log"><div class="msg user">Why is my CI red?</div><div class="msg assistant">The test job fails at test_metrics: the fake clock never moves, so the sample counts as zero.</div><div class="msg user">and how do I fix it?</div></div><textarea placeholder="Message the local model" style="width:100%;margin-top:10px;border-radius:18px;padding:10px 14px"></textarea></div><p class="small muted">1 and 2 together: a solid panel with a sunken message area. Clearest.</p></div>
+ </div>
+</section>
+<section class="card"><h2>3 · Loading while the model works</h2>
+ <div class="grid4">
+  <div class="opt"><h3 class="optname">i · First demo</h3><div class="msg assistant" style="min-width:240px"><div class="loading"><span class="orb plain"><i></i></span><span class="shimmer">Thinking…</span></div></div><p class="small muted">Spinning, breathing orb; the text shimmers. What you picked from the first demo.</p></div>
+  <div class="opt"><h3 class="optname">ii · Live now</h3><div class="msg assistant" style="min-width:240px"><div class="loading"><span class="orb "><i></i></span><span class="shimmer">Thinking…</span></div></div><p class="small muted">Today's version: the same plus a light band sweeping over the orb.</p></div>
+  <div class="opt"><h3 class="optname">iii · Orbiting glint</h3><div class="msg assistant" style="min-width:240px"><div class="loading"><span class="orb glint"><i></i><b></b></span><span class="shimmer">Thinking…</span></div></div><p class="small muted">The orb spins; a bright glint circles its rim like light on glass.</p></div>
+  <div class="opt"><h3 class="optname">iv · Orb + shimmer lines</h3><div class="msg assistant" style="min-width:240px"><div class="loading"><span class="orb plain"><i></i></span><span class="shimmer">Thinking…</span></div><div class="skel"><b></b><b></b><b></b></div></div><p class="small muted">Spinning orb with the liquid-shimmer placeholder lines under it, as in the first demo's option B.</p></div>
+ </div>
+</section>
+</div><script>document.getElementById('t').onclick=e=>{const d=document.documentElement;
+d.dataset.theme=d.dataset.theme==='dark'?'light':'dark';e.target.textContent=d.dataset.theme==='dark'?'Light':'Dark'};</script></body></html>

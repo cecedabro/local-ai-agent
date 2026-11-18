@@ -1,0 +1,251 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Progress bar options</title><style>/* agent-status: "liquid glass" with Aero gloss. Light and dark follow the device setting.
+   Colours live in the custom properties below; the rest of the sheet only uses them. */
+:root{color-scheme:light;
+--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--bg:#dff2ff;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),
+  linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.7),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.46);--tile-top:rgba(255,255,255,.75);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.7);--chip:rgba(255,255,255,.65);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(244,250,255,.85) 48%,rgba(222,238,250,.8) 52%,rgba(240,248,255,.9) 100%);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%);
+--shadow:0 10px 30px rgba(30,90,140,.13),0 1px 2px rgba(30,90,140,.08);
+--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);--glow:rgba(10,132,255,.35);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--bar-top:#5ad1ff;--bar-bottom:#0a84ff;
+--title-a:#0a4e7c;--title-b:#0d86c6;--gloss:1;
+--t1:rgba(90,190,255,.30);--t2:rgba(110,225,140,.30);--t3:rgba(255,200,90,.30);
+--t4:rgba(170,140,255,.28);--t5:rgba(70,220,200,.30);--t6:rgba(255,130,170,.26)}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;
+--ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
+--ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
+--bg:#06121f;
+--scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),
+  linear-gradient(160deg,#071624,#06131d 55%,#07170f);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(120,200,255,.12),transparent 70%);
+--bar:rgba(10,22,36,.55);--glass:rgba(22,36,54,.45);--tile-top:rgba(255,255,255,.06);--bubble:rgba(255,255,255,.08);
+--field:rgba(0,0,0,.25);--chip:rgba(255,255,255,.08);
+--btn:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 52%,rgba(255,255,255,.08) 100%);
+--stroke:rgba(255,255,255,.14);--stroke-soft:rgba(255,255,255,.09);--hi:rgba(255,255,255,.18);--hi-soft:rgba(255,255,255,.07);
+--line:rgba(255,255,255,.08);--track:rgba(255,255,255,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%);
+--shadow:0 12px 34px rgba(0,0,0,.35);
+--primary:linear-gradient(180deg,#7fd3ff 0%,#2a9ff0 48%,#0b78d6 52%,#2aa4f2 100%);--glow:rgba(76,194,255,.35);
+--fill:linear-gradient(90deg,#2ee59d,#22c3ee 55%,#3b9cff);--bar-top:#7fe3ff;--bar-bottom:#2a7fe0;
+--title-a:#ffffff;--title-b:#8fd8ff;--gloss:.3;
+--t1:rgba(90,190,255,.16);--t2:rgba(110,225,140,.14);--t3:rgba(255,200,90,.13);
+--t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}}
+
+/* ------------------------------------------------------------------ base */
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--bg)}
+body{margin:0;color:var(--ink);background:transparent;min-height:100vh;-webkit-font-smoothing:antialiased;
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable","Segoe UI",Roboto,system-ui,sans-serif}
+body::before{content:"";position:fixed;inset:-10vmax;z-index:-2;background:var(--scene)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--scene-top)}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.muted{color:var(--muted)}.small{font-size:13px}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.defs{position:absolute;width:0;height:0}
+
+/* ------------------------------------------------------------------ frame */
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
+  padding:12px max(16px,calc((100% - 1200px)/2 + 16px));background:var(--bar);
+  backdrop-filter:blur(28px) saturate(190%);-webkit-backdrop-filter:blur(28px) saturate(190%);
+  border-bottom:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+header h1{font-size:19px;letter-spacing:-.01em;margin:0 auto 0 0;font-weight:750;
+  background:linear-gradient(180deg,var(--title-a),var(--title-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+main,#controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;max-width:1200px;margin:0 auto}
+#controls{padding-bottom:0}
+footer{padding:8px 16px 28px;text-align:center}
+.card{position:relative;isolation:isolate;min-width:0;background:var(--glass);border:1px solid var(--stroke);border-radius:24px;padding:16px 18px;
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  box-shadow:var(--shadow),inset 0 1px 0 var(--hi),inset 0 -1px 0 var(--hi-soft)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--sheen)}
+.wide{grid-column:1/-1}
+h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:650}
+h2::before{content:"";display:inline-block;width:9px;height:9px;margin-right:8px;border-radius:50%;vertical-align:1px;
+  background:radial-gradient(circle at 35% 30%,#fff 0 18%,#5fd0ff 40%,#0a84ff 100%);box-shadow:0 0 8px rgba(10,132,255,.5)}
+h3{font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 28px}
+.cols h3:first-child{margin-top:0}
+
+/* ------------------------------------------------------------------ badges, progress, tiles */
+.badge,.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:12px;padding:3px 10px;white-space:nowrap;font-weight:600;
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+.badge{font-size:13px;padding:4px 12px}
+.badge::before,.dot{content:"";display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent),0 0 10px currentColor}
+.dot{margin-right:4px;vertical-align:1px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.off{color:var(--off)}
+.dot.ok{background:var(--ok)}.dot.off{background:var(--off)}
+.now-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.repo{font-size:24px;font-weight:750;letter-spacing:-.02em}
+.task{font-size:17px;margin:10px 0 2px;font-weight:600}
+.idle{font-size:22px;font-weight:700;margin:4px 0;letter-spacing:-.01em}
+.progress{height:12px;background:var(--track);border-radius:99px;overflow:hidden;margin:14px 0 6px;box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
+.progress i{position:relative;display:block;height:100%;border-radius:99px;background:var(--fill);box-shadow:0 0 12px var(--glow)}
+.progress i::after{content:"";position:absolute;left:4px;right:4px;top:1px;height:45%;border-radius:99px;
+  background:linear-gradient(rgba(255,255,255,.75),rgba(255,255,255,.1))}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tiles.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile{position:relative;border-radius:18px;padding:12px 14px;border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft);
+  background:linear-gradient(180deg,var(--tile-top),var(--tint,var(--t1)))}
+.tile:nth-child(6n+2){--tint:var(--t2)}.tile:nth-child(6n+3){--tint:var(--t3)}.tile:nth-child(6n+4){--tint:var(--t4)}
+.tile:nth-child(6n+5){--tint:var(--t5)}.tile:nth-child(6n+6){--tint:var(--t6)}
+.tile::after{content:"";position:absolute;left:6px;right:6px;top:1px;height:40%;pointer-events:none;opacity:var(--gloss);
+  border-radius:16px 16px 50% 50%/16px 16px 10px 10px;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0))}
+.tile .label{position:relative;font-size:12px;color:var(--muted);font-weight:600}
+.tile .value{font-size:26px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile small{font-size:12px;color:var(--muted);font-weight:500}
+
+/* ------------------------------------------------------------------ charts, lists, tables */
+.chart{width:100%;height:auto;display:block}
+.chart .bar{fill:url(#bar-fill)}.chart .axis{stroke:var(--line)}.chart .hit{fill:transparent}
+.chart g:hover .bar{opacity:.7}.chart .tick{fill:var(--muted);font-size:11px}
+ol.jobs{list-style:none;margin:0;padding:0}
+.job{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.job:last-child{border-bottom:0}
+.job>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.job .pos{flex:none;width:24px;height:24px;line-height:24px;border-radius:50%;text-align:center;font-size:12px;
+  color:var(--muted);background:var(--chip);font-variant-numeric:tabular-nums}
+.job.running .pos{color:#fff;background:var(--ok)}
+ul.plain{list-style:none;padding:0;margin:0}ul.plain li{padding:3px 0}
+ol.plan{margin:0;padding-left:20px}ol.plan li{padding:2px 0}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:12.5px}
+th,td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.text{overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}
+
+/* ------------------------------------------------------------------ controls */
+input,select,textarea{font:inherit;color:inherit;background:var(--field);border:1px solid var(--stroke-soft);border-radius:12px;
+  padding:7px 12px;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+input[type=checkbox]{accent-color:var(--accent);box-shadow:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+button{font:inherit;font-weight:600;cursor:pointer;color:var(--ink);border-radius:999px;padding:7px 16px;
+  background:var(--btn);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.08)}
+button:hover{filter:brightness(1.05)}button:active{transform:translateY(1px)}
+button:disabled{opacity:.5;cursor:default}
+button.primary,#add>button:not(.link),#unlock button{color:#fff;border-color:transparent;background:var(--primary);
+  text-shadow:0 1px 1px rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px var(--glow)}
+button.link{border:0;background:none;box-shadow:none;color:var(--link);padding:0 4px}
+.btns{display:flex;gap:4px}.btns button{width:30px;height:30px;padding:0}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+form input[name=repo],form select[name=repo]{flex:1 1 200px}form input[name=ref]{flex:1 1 150px}
+form input[name=note]{flex:2 1 200px}form input[name=max_hours]{width:72px}
+#unlock input{flex:1 1 200px}
+#msg{min-height:1.2em}
+body.locked .ctl,body.locked #add{display:none}
+body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
+
+/* ------------------------------------------------------------------ chat */
+body.locked #chat{display:none}
+.chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
+#chat .log{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px}
+#chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
+#chat.full .log{max-height:none;flex:1}
+.msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:9px 14px;border-radius:20px;max-width:85%}
+/* Your messages: frosted aqua glass in light mode, teal "sea glass" in dark mode. */
+.msg.user{align-self:flex-end;border-bottom-right-radius:6px;color:var(--ink);
+  background:linear-gradient(180deg,rgba(150,225,255,.55),rgba(60,180,240,.32));border:1px solid rgba(255,255,255,.8);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(20,120,200,.14);
+  backdrop-filter:blur(12px) saturate(170%);-webkit-backdrop-filter:blur(12px) saturate(170%)}
+@media (prefers-color-scheme:dark){.msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
+  background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a);
+  border-color:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}}
+.msg.assistant{align-self:flex-start;background:var(--bubble);border:1px solid var(--stroke-soft);border-bottom-left-radius:6px;
+  box-shadow:inset 0 1px 0 var(--hi-soft)}
+.msg.note{color:var(--muted);font-size:13px}
+.meta{font-size:12px;color:var(--muted);margin:-4px 0 0 6px}
+#chat form{display:block;margin-top:10px}
+#chat textarea{display:block;width:100%;border-radius:18px;padding:10px 14px;resize:vertical;min-height:52px}
+.composer-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.composer-bar .spacer{flex:1}
+
+/* Quick / Think switch: two radios with a sliding glossy thumb */
+.seg{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:999px;
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 14px;border-radius:999px;
+  font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer;transition:color .2s}
+.seg label svg{width:15px;height:15px}
+.seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--primary);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 10px var(--glow);transition:transform .28s cubic-bezier(.3,1.4,.5,1)}
+.seg input:nth-of-type(2):checked~.thumb{transform:translateX(100%)}
+.seg input:checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Loading: an Aero orb that turns and shimmers, with a shimmering status line.
+   .fast while the model is thinking. */
+.loading{display:flex;align-items:center;gap:12px;padding:2px 0;white-space:normal}
+.orb{position:relative;flex:none;width:30px;height:30px;border-radius:50%;overflow:hidden;
+  box-shadow:0 0 16px rgba(34,195,238,.55);animation:breathe 1.8s ease-in-out infinite}
+.orb i{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,#22c3ee,#34d399,#a6ec7e,#5fc2ff,#8f7bff,#22c3ee);animation:spin 2.4s linear infinite}
+.orb::before{content:"";position:absolute;inset:-20%;z-index:1;
+  background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.75) 50%,transparent 65%);
+  background-size:250% 100%;animation:sweep 1.6s linear infinite}
+.orb::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
+.loading.fast .orb i{animation-duration:.9s}
+.loading.fast .orb{box-shadow:0 0 20px rgba(143,123,255,.6)}
+.shimmer{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
+@media (prefers-reduced-motion:reduce){.orb,.orb i,.orb::before,.shimmer{animation:none}}
+
+/* ------------------------------------------------------------------ phone */
+@media (max-width:700px){
+main,#controls,.cols{grid-template-columns:minmax(0,1fr)}
+main,#controls{gap:12px;padding:12px}
+.card{border-radius:20px;padding:14px}
+.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile .value{font-size:21px}
+form input[name=repo],form select[name=repo],form input[name=note]{flex-basis:100%}
+.events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
+.cols h3:first-child{margin-top:14px}}
+
+main{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* A: liquid sheen */
+.pa i{overflow:hidden}
+.pa i::before{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.65) 45%,transparent 70%);background-size:220% 100%;
+  animation:sweep 2.2s ease-in-out infinite}
+/* B: glowing bead at the leading edge */
+.pb{overflow:visible}
+.pb i::before{content:"";position:absolute;right:-6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff 0 18%,#7fe0ff 45%,#0a84ff 100%);animation:bead 1.6s ease-in-out infinite}
+@keyframes bead{0%,100%{box-shadow:0 0 6px 1px rgba(34,195,238,.55);transform:scale(.9)}
+  50%{box-shadow:0 0 16px 6px rgba(34,195,238,.35);transform:scale(1.1)}}
+/* C: Aero bubbles drifting through the fill */
+.pc i{overflow:hidden}
+.pc i::before{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:radial-gradient(circle 3px at 10% 60%,rgba(255,255,255,.85) 98%,transparent),
+  radial-gradient(circle 2px at 30% 35%,rgba(255,255,255,.75) 98%,transparent),
+  radial-gradient(circle 2.5px at 55% 65%,rgba(255,255,255,.8) 98%,transparent),
+  radial-gradient(circle 2px at 80% 40%,rgba(255,255,255,.75) 98%,transparent);
+  background-size:60px 100%;animation:drift 2.4s linear infinite}
+@keyframes drift{from{background-position:0 0}to{background-position:60px 0}}
+/* D: flowing aurora */
+.pd i{background:linear-gradient(90deg,#34d399,#22c3ee,#0a84ff,#8f7bff,#22c3ee,#34d399);background-size:300% 100%;
+  animation:flow 4s linear infinite,glow 2s ease-in-out infinite}
+@keyframes flow{from{background-position:0 0}to{background-position:300% 0}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px var(--glow)}50%{box-shadow:0 0 18px var(--glow)}}
+.paused i{filter:saturate(.25);opacity:.7}
+</style></head><body><header><h1>Progress bar while a loop runs</h1><button id="t">Dark mode</button></header><main><section class="card"><h2>A · Liquid sheen</h2><div class="now-head"><span class="repo">woodshed</span><code>agent/2026-11-16-1040</code><span class="muted">running 42 min</span></div><p class="task"><b>T72</b> Attachment list</p><div class="progress pa"><i style="width:46%"></i></div><p class="muted small">A soft band of light glides along the bar, like the orb's shimmer. Calm.</p></section><section class="card"><h2>B · Glowing bead</h2><div class="now-head"><span class="repo">woodshed</span><code>agent/2026-11-16-1040</code><span class="muted">running 42 min</span></div><p class="task"><b>T72</b> Attachment list</p><div class="progress pb"><i style="width:46%"></i></div><p class="muted small">A glossy bead at the front edge breathes: 'working right here'.</p></section><section class="card"><h2>C · Aero bubbles</h2><div class="now-head"><span class="repo">woodshed</span><code>agent/2026-11-16-1040</code><span class="muted">running 42 min</span></div><p class="task"><b>T72</b> Attachment list</p><div class="progress pc"><i style="width:46%"></i></div><p class="muted small">Tiny bubbles drift through the fill. The most playful.</p></section><section class="card"><h2>D · Flowing aurora</h2><div class="now-head"><span class="repo">woodshed</span><code>agent/2026-11-16-1040</code><span class="muted">running 42 min</span></div><p class="task"><b>T72</b> Attachment list</p><div class="progress pd"><i style="width:46%"></i></div><p class="muted small">The colours stream along and the glow breathes. The most vivid.</p></section><section class="card wide"><h2>Paused (any option)</h2><div class="progress paused"><i style="width:46%"></i></div><p class="muted small">When the loop is paused the animation stops and the bar goes pale.</p></section></main><script>document.getElementById('t').onclick=e=>{const old=document.getElementById('dk');
+if(old){old.remove();e.target.textContent='Dark mode';return}
+const s=document.createElement('style');s.id='dk';
+s.textContent=[...document.styleSheets[0].cssRules].filter(r=>r.media&&r.media.mediaText.includes('dark'))
+  .map(r=>[...r.cssRules].map(x=>x.cssText).join('')).join('');
+document.head.appendChild(s);e.target.textContent='Light mode'}</script></body></html>

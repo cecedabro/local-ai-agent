@@ -1,0 +1,219 @@
+<!doctype html><html lang="en"><head><script>try{localStorage.setItem('agent-status-token','dev');localStorage.setItem('agent-status-chat',"[{\"role\": \"user\", \"content\": \"Give me a bash one-liner to find the 5 biggest files in a repo\"}, {\"role\": \"assistant\", \"content\": \"Here you go:\\n\\n```bash\\ngit ls-files -z | xargs -0 du -h | sort -rh | head -5\\n```\\n\\n**How it works:**\\n- `git ls-files` lists tracked files only\\n- `du -h` prints sizes, `sort -rh` puts the biggest first\"}, {\"role\": \"user\", \"content\": \"nice, thanks!\"}]")}catch(e){}</script><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Agent status</title><style>
+:root{color-scheme:light;--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--bg:#dff3ff;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),
+  linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.7),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.46);--tile:rgba(255,255,255,.55);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.7);--btn:linear-gradient(rgba(255,255,255,.95),rgba(255,255,255,.6));--chip:rgba(255,255,255,.65);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%);
+--shadow:0 10px 30px rgba(30,90,140,.13),0 1px 2px rgba(30,90,140,.08);
+--primary:linear-gradient(180deg,#5cc0ff 0%,#1a8cff 52%,#0a74ef 100%);--glow:rgba(10,132,255,.35);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--bar-top:#5ad1ff;--bar-bottom:#0a84ff}
+
+*{box-sizing:border-box}
+html{min-height:100%}
+body{margin:0;color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable","Segoe UI",Roboto,system-ui,sans-serif;
+  background:var(--bg);-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:"";position:fixed;inset:-10vmax;z-index:-2;background:var(--scene);filter:saturate(115%)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--scene-top)}
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px max(16px,calc((100% - 1200px)/2 + 16px));
+  background:var(--bar);backdrop-filter:blur(28px) saturate(190%);-webkit-backdrop-filter:blur(28px) saturate(190%);
+  border-bottom:1px solid var(--stroke-soft);box-shadow:0 1px 0 var(--hi-soft) inset}
+header h1{font-size:19px;letter-spacing:-.01em;margin:0 auto 0 0;font-weight:700}
+main,#controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;max-width:1200px;margin:0 auto}
+#controls{padding-bottom:0}
+.card{position:relative;isolation:isolate;background:var(--glass);border:1px solid var(--stroke);border-radius:24px;padding:16px 18px;min-width:0;
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  box-shadow:var(--shadow),inset 0 1px 0 var(--hi),inset 0 -1px 0 var(--hi-soft)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--sheen)}
+.wide{grid-column:1/-1}
+h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:650}
+h3{font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
+.muted{color:var(--muted)}.small{font-size:13px}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.badge,.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;font-size:12px;padding:3px 10px;white-space:nowrap;
+  background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft);font-weight:600}
+.badge{font-size:13px;padding:4px 12px}
+.badge::before,.dot{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent),0 0 10px currentColor}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.off{color:var(--off)}
+.dot.ok{background:var(--ok)}.dot.off{background:var(--off)}
+.now-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.repo{font-size:24px;font-weight:750;letter-spacing:-.02em}
+.task{font-size:17px;margin:10px 0 2px;font-weight:550}
+.idle{font-size:22px;font-weight:700;margin:4px 0;letter-spacing:-.01em}
+.progress{height:12px;background:var(--track);border-radius:99px;overflow:hidden;margin:14px 0 6px;box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
+.progress i{position:relative;display:block;height:100%;border-radius:99px;background:var(--fill);box-shadow:0 0 12px var(--glow)}
+.progress i::after{content:"";position:absolute;left:4px;right:4px;top:1px;height:45%;border-radius:99px;background:linear-gradient(rgba(255,255,255,.75),rgba(255,255,255,.1))}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tiles.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tile{position:relative;border-radius:18px;padding:12px 14px;background:var(--tile);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 0 var(--hi-soft)}
+.tile .label{font-size:12px;color:var(--muted);font-weight:600}
+.tile .value{font-size:26px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile small{font-size:12px;color:var(--muted);font-weight:500}
+.chart{width:100%;height:auto;display:block}
+.chart .bar{fill:url(#bar-fill)}.chart .axis{stroke:var(--line)}.chart .hit{fill:transparent}
+.chart g:hover .bar{opacity:.7}.chart .tick{fill:var(--muted);font-size:11px}
+ol.jobs{list-style:none;margin:0;padding:0}
+.job{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.job:last-child{border-bottom:0}
+.job>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.job .pos{width:24px;height:24px;line-height:24px;border-radius:50%;text-align:center;color:var(--muted);background:var(--chip);font-size:12px;font-variant-numeric:tabular-nums}
+.job.running .pos{color:#fff;background:var(--ok)}
+ul.plain{list-style:none;padding:0;margin:0}ul.plain li{padding:3px 0}
+ol.plan{margin:0;padding-left:20px}ol.plan li{padding:2px 0}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:12.5px}
+th,td{padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.text{overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 28px}
+.cols h3:first-child{margin-top:0}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+input,select,textarea{font:inherit;color:inherit;background:var(--field);border:1px solid var(--stroke-soft);border-radius:12px;padding:7px 12px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+button{font:inherit;font-weight:600;cursor:pointer;color:var(--ink);border-radius:999px;padding:7px 16px;
+  background:var(--btn);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.08)}
+button:hover{filter:brightness(1.05)}
+#add>button:not(.link),#unlock button,#chat form button:not(.stop){color:#fff;border-color:transparent;background:var(--primary);
+  text-shadow:0 1px 1px rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px var(--glow)}
+button.link{border:0;background:none;box-shadow:none;color:var(--link);padding:0 4px}
+.btns{display:flex;gap:4px}.btns button{padding:3px 9px}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+form input[name=repo],form select[name=repo]{flex:1 1 180px}form input[name=note]{flex:2 1 200px}
+form input[name=max_hours]{width:80px}
+#msg{min-height:1.2em}
+body.locked .ctl,body.locked #add{display:none}
+body:not(.locked) #unlock,body:not(.locked) #unlock-card{display:none}
+footer{padding:8px 16px 28px;text-align:center}
+.chat-head{display:flex;align-items:baseline;gap:12px}.chat-head h2{margin-right:auto}
+#chat .log{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px}
+#chat.full{display:flex;flex-direction:column;height:calc(100dvh - 110px)}
+#chat.full .log{max-height:none;flex:1}
+.msg{white-space:pre-wrap;overflow-wrap:anywhere;padding:9px 14px;border-radius:20px;max-width:85%}
+.msg.user{align-self:flex-end;color:#fff;background:var(--primary);border-bottom-right-radius:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 14px var(--glow)}
+.msg.assistant{align-self:flex-start;background:var(--bubble);border:1px solid var(--stroke-soft);border-bottom-left-radius:6px;
+  box-shadow:inset 0 1px 0 var(--hi-soft)}
+.msg.note{color:var(--muted);font-size:13px}
+.meta{font-size:12px;color:var(--muted);margin:-4px 0 0 6px}
+#chat form{flex-wrap:nowrap;align-items:flex-end;margin-top:10px}
+#chat textarea{flex:1;border-radius:18px;padding:10px 14px;resize:vertical;min-height:46px}
+.chat-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+body.locked #chat{display:none}
+@media (max-width:700px){main,#controls,.cols{grid-template-columns:minmax(0,1fr)}
+main,#controls{gap:12px;padding:12px}
+.card{border-radius:20px;padding:14px}
+.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+.events td:nth-child(2),.runs th:nth-child(5),.runs td:nth-child(5),.runs th:nth-child(6),.runs td:nth-child(6){display:none}
+.cols h3:first-child{margin-top:14px}
+.tile .value{font-size:21px}}
+</style></head><body class="locked"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="bar-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--bar-top)"/><stop offset="1" stop-color="var(--bar-bottom)"/></linearGradient></defs></svg><header><h1>Agent status</h1><span id="model" class="badge bad">model unreachable</span><span id="updated" class="muted small"></span></header><section id="controls"><div class="card wide"><form id="add" autocomplete="off"><input name="repo" list="repos" placeholder="owner/repo" required aria-label="Repository"><datalist id="repos"><option value="cecedabro/scrum-agent"><option value="cecedabro/weatherstation"></datalist><input name="ref" placeholder="branch (default)" aria-label="Branch"><input name="note" placeholder="note" maxlength="200" aria-label="Note"><label class="small">max h <input name="max_hours" type="number" min="0.1" max="24" step="0.5" value="24"></label><label class="small"><input name="ci" type="checkbox" checked> wait for CI</label><button>Add to queue</button><button type="button" id="lock" class="link">lock</button></form><form id="unlock"><span class="small muted">Read-only. Paste the status token to add and manage jobs:</span><input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required><button>Unlock</button></form><div id="msg" class="small muted"></div></div><div id="chat" class="card wide"><div class="chat-head"><h2>Chat</h2><a class="small" href="/chat">full chat →</a><button type="button" class="clear link small">clear</button></div><div class="log" aria-live="polite"></div><form autocomplete="off"><textarea name="q" rows="2" placeholder="Message the local model (Enter to send, Shift+Enter for a new line)" aria-label="Message" required></textarea><div class="chat-actions"><label class="small"><input name="think" type="checkbox"> think</label><button type="button" class="stop" hidden>Stop</button><button>Send</button></div></form></div></section><main id="live"><section class="card wide" id="now"><h2>Now</h2><div class="now-head"><span class="repo">woodshed</span><code>agent/2026-11-16-1040</code><span class="muted">running 42 min</span></div><p class="task"><b>T72</b> Attachment list: show every uploaded file with size and a delete button</p><p class="muted small">attempt 2 · for 42 min</p><div class="progress" title="2 of 5 tasks"><i style="width:40%"></i></div><p class="muted small">2 of 5 plan tasks · 1 done, 0 skipped this run · last event 42 min ago</p></section><section class="card wide" id="activity-live"><h2>Model activity</h2><div class="cols"><div><p class="muted">No requests right now. Chat and scrum requests go before agent-loop ones.</p><h3>Last requests</h3><div class="table-wrap"><table class="small"><tbody><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>chat</td><td>3 tok</td><td class="muted">40.0 tok/s</td><td class="muted"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>chat</td><td>3 tok</td><td class="muted">40.0 tok/s</td><td class="muted"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>agent-loop</td><td>3 tok</td><td class="muted">40.0 tok/s</td><td class="muted"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td>3 tok</td><td class="muted">40.0 tok/s</td><td class="muted"></td></tr></tbody></table></div></div><div><h3>By client</h3><div class="table-wrap"><table class="small"><thead><tr><th>Client</th><th>Requests</th><th>Written</th><th>tok/s</th><th>24 h</th></tr></thead><tbody><tr><td>chat</td><td>2</td><td>6</td><td>40.0</td><td>2 req · 6 tok</td></tr><tr><td>scrum-agent</td><td>1</td><td>3</td><td>40.0</td><td>1 req · 3 tok</td></tr><tr><td>agent-loop</td><td>1</td><td>3</td><td>40.0</td><td>1 req · 3 tok</td></tr></tbody></table></div></div></div></section><section class="card wide" id="queue"><h2>Queue</h2><div class="cols"><div><ol class="jobs"><li class="job"><span class="pos">1</span><div><b>cecedabro/weatherstation</b><div class="muted small">#1 · max 24 h · added 42 min ago · next batch of firmware tasks</div></div><span class="ctl btns"><button data-job="1" data-act="move" data-to="up" title="Move up">↑</button><button data-job="1" data-act="move" data-to="down" title="Move down">↓</button><button data-job="1" data-act="cancel" title="Remove">✕</button></span></li><li class="job"><span class="pos">2</span><div><b>cecedabro/scrum-agent</b><div class="muted small">#2 · max 24 h · added 42 min ago</div></div><span class="ctl btns"><button data-job="2" data-act="move" data-to="up" title="Move up">↑</button><button data-job="2" data-act="move" data-to="down" title="Move down">↓</button><button data-job="2" data-act="cancel" title="Remove">✕</button></span></li></ol><p class="small"><span class="pill warn">no worker</span> <span class="muted">agent-queue is not polling; queued jobs wait.</span></p></div><div><h3>Next in woodshed (3 tasks)</h3><ol class="plan small"><li><b>T72</b> Attachment list</li><li><b>T73</b> Delete attachment</li><li><b>T74</b> Search page</li></ol></div></div></section><section class="card wide" id="stats"><h2>All time <span class="muted small">since 2026-11-16</span></h2><div class="tiles"><div class="tile"><div class="label">Commits</div><div class="value">9</div><div class="muted small">0 tasks skipped</div></div><div class="tile"><div class="label">Lines</div><div class="value">+853</div><div class="muted small">−127 removed</div></div><div class="tile"><div class="label">Tokens generated</div><div class="value">2.4M</div><div class="muted small">48.1M read</div></div><div class="tile"><div class="label">PRs opened</div><div class="value">2</div><div class="muted small">3 runs</div></div><div class="tile"><div class="label">Agent time</div><div class="value">1.6 h</div><div class="muted small">avg 10.6 min per task (30 d)</div></div><div class="tile"><div class="label">First try</div><div class="value">78%</div><div class="muted small">tasks done on attempt 1</div></div></div><p class="muted small">Last 24 h: 0.375 tasks/h · 9 done, 0 skipped in the last 30 days</p></section><section class="card" id="tokens"><h2>Token speed</h2><div class="tiles four"><div class="tile"><div class="label">writing now</div><div class="value">–<small> tok/s</small></div></div><div class="tile"><div class="label">writing avg</div><div class="value">39.5<small> tok/s</small></div></div><div class="tile"><div class="label">reading now</div><div class="value">–<small> tok/s</small></div></div><div class="tile"><div class="label">reading avg</div><div class="value">789.8<small> tok/s</small></div></div></div><h3>Tokens written per hour, last 24 h</h3><svg class="chart" viewBox="0 0 480 120" role="img" aria-label="No tokens written in the last 24 h."><line class="axis" x1="0" y1="100.5" x2="480" y2="100.5"/><g><path class="bar" d="M1.0,100 V40.4 Q1.0,36.4 5.0,36.4 H15.0 Q19.0,36.4 19.0,40.4 V100 Z"/><rect class="hit" x="0.0" y="0" width="20.0" height="100"/><title>22:00 UTC: 22,760 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M21.0,100 V28.5 Q21.0,24.5 25.0,24.5 H35.0 Q39.0,24.5 39.0,28.5 V100 Z"/><rect class="hit" x="20.0" y="0" width="20.0" height="100"/><title>23:00 UTC: 27,003 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M41.0,100 V81.3 Q41.0,77.3 45.0,77.3 H55.0 Q59.0,77.3 59.0,81.3 V100 Z"/><rect class="hit" x="40.0" y="0" width="20.0" height="100"/><title>00:00 UTC: 8,110 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M61.0,100 V40.2 Q61.0,36.2 65.0,36.2 H75.0 Q79.0,36.2 79.0,40.2 V100 Z"/><rect class="hit" x="60.0" y="0" width="20.0" height="100"/><title>01:00 UTC: 22,805 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M81.0,100 V24.3 Q81.0,20.3 85.0,20.3 H95.0 Q99.0,20.3 99.0,24.3 V100 Z"/><rect class="hit" x="80.0" y="0" width="20.0" height="100"/><title>02:00 UTC: 28,500 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M101.0,100 V62.4 Q101.0,58.4 105.0,58.4 H115.0 Q119.0,58.4 119.0,62.4 V100 Z"/><rect class="hit" x="100.0" y="0" width="20.0" height="100"/><title>03:00 UTC: 14,869 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M121.0,100 V35.1 Q121.0,31.1 125.0,31.1 H135.0 Q139.0,31.1 139.0,35.1 V100 Z"/><rect class="hit" x="120.0" y="0" width="20.0" height="100"/><title>04:00 UTC: 24,643 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M141.0,100 V52.4 Q141.0,48.4 145.0,48.4 H155.0 Q159.0,48.4 159.0,52.4 V100 Z"/><rect class="hit" x="140.0" y="0" width="20.0" height="100"/><title>05:00 UTC: 18,445 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M161.0,100 V45.4 Q161.0,41.4 165.0,41.4 H175.0 Q179.0,41.4 179.0,45.4 V100 Z"/><rect class="hit" x="160.0" y="0" width="20.0" height="100"/><title>06:00 UTC: 20,948 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M181.0,100 V67.6 Q181.0,63.6 185.0,63.6 H195.0 Q199.0,63.6 199.0,67.6 V100 Z"/><rect class="hit" x="180.0" y="0" width="20.0" height="100"/><title>07:00 UTC: 13,004 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M201.0,100 V40.8 Q201.0,36.8 205.0,36.8 H215.0 Q219.0,36.8 219.0,40.8 V100 Z"/><rect class="hit" x="200.0" y="0" width="20.0" height="100"/><title>08:00 UTC: 22,619 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M221.0,100 V47.7 Q221.0,43.7 225.0,43.7 H235.0 Q239.0,43.7 239.0,47.7 V100 Z"/><rect class="hit" x="220.0" y="0" width="20.0" height="100"/><title>09:00 UTC: 20,147 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M241.0,100 V35.5 Q241.0,31.5 245.0,31.5 H255.0 Q259.0,31.5 259.0,35.5 V100 Z"/><rect class="hit" x="240.0" y="0" width="20.0" height="100"/><title>10:00 UTC: 24,488 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M261.0,100 V39.9 Q261.0,35.9 265.0,35.9 H275.0 Q279.0,35.9 279.0,39.9 V100 Z"/><rect class="hit" x="260.0" y="0" width="20.0" height="100"/><title>11:00 UTC: 22,924 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M281.0,100 V26.6 Q281.0,22.6 285.0,22.6 H295.0 Q299.0,22.6 299.0,26.6 V100 Z"/><rect class="hit" x="280.0" y="0" width="20.0" height="100"/><title>12:00 UTC: 27,676 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M301.0,100 V40.4 Q301.0,36.4 305.0,36.4 H315.0 Q319.0,36.4 319.0,40.4 V100 Z"/><rect class="hit" x="300.0" y="0" width="20.0" height="100"/><title>13:00 UTC: 22,761 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M321.0,100 V58.1 Q321.0,54.1 325.0,54.1 H335.0 Q339.0,54.1 339.0,58.1 V100 Z"/><rect class="hit" x="320.0" y="0" width="20.0" height="100"/><title>14:00 UTC: 16,424 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M341.0,100 V12.0 Q341.0,8.0 345.0,8.0 H355.0 Q359.0,8.0 359.0,12.0 V100 Z"/><rect class="hit" x="340.0" y="0" width="20.0" height="100"/><title>15:00 UTC: 32,902 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M361.0,100 V30.0 Q361.0,26.0 365.0,26.0 H375.0 Q379.0,26.0 379.0,30.0 V100 Z"/><rect class="hit" x="360.0" y="0" width="20.0" height="100"/><title>16:00 UTC: 26,452 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M381.0,100 V29.0 Q381.0,25.0 385.0,25.0 H395.0 Q399.0,25.0 399.0,29.0 V100 Z"/><rect class="hit" x="380.0" y="0" width="20.0" height="100"/><title>17:00 UTC: 26,833 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M401.0,100 V28.1 Q401.0,24.1 405.0,24.1 H415.0 Q419.0,24.1 419.0,28.1 V100 Z"/><rect class="hit" x="400.0" y="0" width="20.0" height="100"/><title>18:00 UTC: 27,161 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M421.0,100 V48.0 Q421.0,44.0 425.0,44.0 H435.0 Q439.0,44.0 439.0,48.0 V100 Z"/><rect class="hit" x="420.0" y="0" width="20.0" height="100"/><title>19:00 UTC: 20,042 tokens, 39.0 tok/s</title></g><g><path class="bar" d="M441.0,100 V70.8 Q441.0,66.8 445.0,66.8 H455.0 Q459.0,66.8 459.0,70.8 V100 Z"/><rect class="hit" x="440.0" y="0" width="20.0" height="100"/><title>20:00 UTC: 11,885 tokens, 39.0 tok/s</title></g><g><rect class="hit" x="460.0" y="0" width="20.0" height="100"/><title>21:00 UTC: 0 tokens</title></g><text class="tick" x="0" y="116">22:00 UTC</text><text class="tick" x="480" y="116" text-anchor="end">now</text><text class="tick" x="480" y="12" text-anchor="end">max 33k</text></svg><p class="muted small">Sampled from llama-server 42 min ago.</p></section><section class="card" id="activity"><h2>Commits per day</h2><svg class="chart" viewBox="0 0 480 120" role="img" aria-label="No commits in the last 14 days."><line class="axis" x1="0" y1="100.5" x2="480" y2="100.5"/><g><path class="bar" d="M1.0,100 V64.6 Q1.0,60.6 5.0,60.6 H29.3 Q33.3,60.6 33.3,64.6 V100 Z"/><rect class="hit" x="0.0" y="0" width="34.3" height="100"/><title>2026-11-03: 6 commits, +95/−0 lines, 0 skipped, 112,750 tokens</title></g><g><path class="bar" d="M35.3,100 V31.7 Q35.3,27.7 39.3,27.7 H63.6 Q67.6,27.7 67.6,31.7 V100 Z"/><rect class="hit" x="34.3" y="0" width="34.3" height="100"/><title>2026-11-04: 11 commits, +41/−0 lines, 0 skipped, 129,574 tokens</title></g><g><path class="bar" d="M69.6,100 V18.6 Q69.6,14.6 73.6,14.6 H97.9 Q101.9,14.6 101.9,18.6 V100 Z"/><rect class="hit" x="68.6" y="0" width="34.3" height="100"/><title>2026-11-05: 13 commits, +809/−0 lines, 0 skipped, 188,049 tokens</title></g><g><path class="bar" d="M103.9,100 V64.6 Q103.9,60.6 107.9,60.6 H132.1 Q136.1,60.6 136.1,64.6 V100 Z"/><rect class="hit" x="102.9" y="0" width="34.3" height="100"/><title>2026-11-06: 6 commits, +668/−0 lines, 0 skipped, 171,435 tokens</title></g><g><path class="bar" d="M138.1,100 V44.9 Q138.1,40.9 142.1,40.9 H166.4 Q170.4,40.9 170.4,44.9 V100 Z"/><rect class="hit" x="137.1" y="0" width="34.3" height="100"/><title>2026-11-07: 9 commits, +119/−0 lines, 0 skipped, 149,345 tokens</title></g><g><path class="bar" d="M172.4,100 V71.1 Q172.4,67.1 176.4,67.1 H200.7 Q204.7,67.1 204.7,71.1 V100 Z"/><rect class="hit" x="171.4" y="0" width="34.3" height="100"/><title>2026-11-08: 5 commits, +52/−0 lines, 0 skipped, 82,448 tokens</title></g><g><path class="bar" d="M206.7,100 V18.6 Q206.7,14.6 210.7,14.6 H235.0 Q239.0,14.6 239.0,18.6 V100 Z"/><rect class="hit" x="205.7" y="0" width="34.3" height="100"/><title>2026-11-09: 13 commits, +267/−0 lines, 0 skipped, 37,146 tokens</title></g><g><path class="bar" d="M241.0,100 V25.1 Q241.0,21.1 245.0,21.1 H269.3 Q273.3,21.1 273.3,25.1 V100 Z"/><rect class="hit" x="240.0" y="0" width="34.3" height="100"/><title>2026-11-10: 12 commits, +237/−0 lines, 0 skipped, 109,349 tokens</title></g><g><path class="bar" d="M275.3,100 V84.3 Q275.3,80.3 279.3,80.3 H303.6 Q307.6,80.3 307.6,84.3 V100 Z"/><rect class="hit" x="274.3" y="0" width="34.3" height="100"/><title>2026-11-11: 3 commits, +538/−0 lines, 0 skipped, 54,543 tokens</title></g><g><rect class="hit" x="308.6" y="0" width="34.3" height="100"/><title>2026-11-12: 0 commits, +260/−0 lines, 0 skipped, 66,423 tokens</title></g><g><path class="bar" d="M343.9,100 V58.0 Q343.9,54.0 347.9,54.0 H372.1 Q376.1,54.0 376.1,58.0 V100 Z"/><rect class="hit" x="342.9" y="0" width="34.3" height="100"/><title>2026-11-13: 7 commits, +192/−0 lines, 0 skipped, 8,296 tokens</title></g><g><path class="bar" d="M378.1,100 V12.0 Q378.1,8.0 382.1,8.0 H406.4 Q410.4,8.0 410.4,12.0 V100 Z"/><rect class="hit" x="377.1" y="0" width="34.3" height="100"/><title>2026-11-14: 14 commits, +438/−0 lines, 0 skipped, 56,549 tokens</title></g><g><path class="bar" d="M412.4,100 V58.0 Q412.4,54.0 416.4,54.0 H440.7 Q444.7,54.0 444.7,58.0 V100 Z"/><rect class="hit" x="411.4" y="0" width="34.3" height="100"/><title>2026-11-15: 7 commits, +254/−0 lines, 0 skipped, 169,721 tokens</title></g><g><rect class="hit" x="445.7" y="0" width="34.3" height="100"/><title>2026-11-16: 0 commits, +224/−127 lines, 0 skipped, 110,420 tokens</title></g><text class="tick" x="0" y="116">11-03</text><text class="tick" x="480" y="116" text-anchor="end">today</text><text class="tick" x="480" y="12" text-anchor="end">max 14</text></svg><div class="table-wrap"><table class="small"><thead><tr><th>Repo</th><th>Commits</th><th>Lines</th><th>PRs</th><th>Last</th></tr></thead><tbody><tr><td>woodshed</td><td>1</td><td>+140 −8</td><td>0</td><td>42 min ago</td></tr><tr><td>scrum-agent</td><td>4</td><td>+330 −44</td><td>1</td><td>42 min ago</td></tr><tr><td>weatherstation</td><td>4</td><td>+383 −75</td><td>1</td><td>42 min ago</td></tr></tbody></table></div></section><section class="card wide" id="recent"><h2>Recent</h2><div class="table-wrap"><table class="small events"><tbody><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>woodshed</td><td><span class="pill off">task_started</span></td><td>T72</td><td class="text">Attachment list: show every uploaded file with size and a delete button</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>woodshed</td><td><span class="pill ok">task_done</span></td><td>T70</td><td class="text">Cover art fetch <code>f16676e</code> +140/−8</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>woodshed</td><td><span class="pill off">run_started</span></td><td></td><td class="text"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill ok">run_finished</span></td><td></td><td class="text"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill ok">task_done</span></td><td>T03</td><td class="text">Some task <code>abc1234</code> +74/−1</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill ok">task_done</span></td><td>T02</td><td class="text">Some task <code>abc1234</code> +64/−6</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill ok">task_done</span></td><td>T01</td><td class="text">Some task <code>abc1234</code> +157/−23</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill ok">task_done</span></td><td>T00</td><td class="text">Some task <code>abc1234</code> +35/−14</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>scrum-agent</td><td><span class="pill off">run_started</span></td><td></td><td class="text"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill ok">run_finished</span></td><td></td><td class="text"></td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill ok">task_done</span></td><td>T03</td><td class="text">Some task <code>abc1234</code> +122/−35</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill ok">task_done</span></td><td>T02</td><td class="text">Some task <code>abc1234</code> +43/−4</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill ok">task_done</span></td><td>T01</td><td class="text">Some task <code>abc1234</code> +121/−30</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill ok">task_done</span></td><td>T00</td><td class="text">Some task <code>abc1234</code> +97/−6</td></tr><tr><td class="muted"><time datetime="2026-11-16T20:33:52+00:00">20:33</time></td><td>weatherstation</td><td><span class="pill off">run_started</span></td><td></td><td class="text"></td></tr></tbody></table></div></section><section class="card wide" id="runs"><h2>Runs</h2><div class="table-wrap"><table class="small runs"><thead><tr><th>State</th><th>Repo</th><th>Branch</th><th>Done</th><th>Skipped</th><th>Started</th><th>PR</th></tr></thead><tbody><tr><td><span class="pill ok">running</span></td><td>woodshed</td><td><code>agent/2026-11-16-1040</code></td><td>1</td><td>0</td><td>42 min ago</td><td></td></tr><tr><td><span class="pill off">finished</span></td><td>scrum-agent</td><td><code>agent/x</code></td><td>4</td><td>0</td><td>42 min ago</td><td>https://x/pull/1</td></tr><tr><td><span class="pill off">finished</span></td><td>weatherstation</td><td><code>agent/x</code></td><td>4</td><td>0</td><td>42 min ago</td><td>https://x/pull/1</td></tr></tbody></table></div></section></main><footer class="small muted">JSON: <a href="/api/status">/api/status</a> · refreshes every 5 s</footer><script>
+const TK='agent-status-token';
+const tok=()=>{try{return localStorage.getItem(TK)||''}catch(e){return ''}};
+const msg=(t)=>{document.getElementById('msg').textContent=t||''};
+function localTimes(){document.querySelectorAll('time[datetime]').forEach(t=>{const d=new Date(t.getAttribute('datetime'));
+  if(!isNaN(d))t.textContent=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})})}
+function lockState(){document.body.classList.toggle('locked',!tok())}
+async function post(path,body){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok()},body:JSON.stringify(body||{})});
+  let j={};try{j=await r.json()}catch(e){}
+  if(r.status===401){try{localStorage.removeItem(TK)}catch(e){};lockState();msg('Token missing or wrong.')}
+  else if(!r.ok){msg(j.error||('Error '+r.status))}else{msg('')}
+  return r.ok;
+}
+async function refresh(){
+  try{
+    const r=await fetch('/partial',{cache:'no-store'});
+    if(!r.ok)throw new Error(r.status);
+    const live=document.getElementById('live');
+    const open=[...live.querySelectorAll('details[open]')].map(d=>d.closest('section').id);
+    live.innerHTML=await r.text();
+    open.forEach(id=>{const d=document.querySelector('#'+id+' details');if(d)d.open=true});
+    localTimes();
+    const s=await fetch('/api/status/head',{cache:'no-store'}).then(r=>r.json());
+    const b=document.getElementById('model');b.className='badge '+s.badge;b.textContent='model '+s.model;
+    document.getElementById('updated').textContent='updated '+new Date().toLocaleTimeString();
+  }catch(e){document.getElementById('updated').textContent='offline, retrying'}
+}
+if(document.getElementById('live'))setInterval(refresh,5000);  // same data as /api/status, rendered on the server
+document.addEventListener('click',async ev=>{
+  const b=ev.target.closest('button[data-job]');if(!b)return;
+  if(b.dataset.act==='cancel'&&!confirm(b.closest('.running')?'Stop this run after its current task?':'Remove this job from the queue?'))return;
+  b.disabled=true;await post('/api/jobs/'+b.dataset.job+'/'+b.dataset.act,b.dataset.to?{to:b.dataset.to}:{});refresh();
+});
+document.getElementById('unlock')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const t=ev.target.token.value.trim();
+  try{localStorage.setItem(TK,t)}catch(e){}
+  if(await post('/api/auth',{})){ev.target.reset();msg('Controls unlocked in this browser.')}
+  lockState();
+});
+document.getElementById('add')?.addEventListener('submit',async ev=>{
+  ev.preventDefault();const f=ev.target;
+  const ok=await post('/api/jobs',{repo:f.repo.value.trim(),ref:f.ref.value.trim(),note:f.note.value.trim(),
+    max_hours:parseFloat(f.max_hours.value||'24'),ci:f.ci.checked});
+  if(ok){f.ref.value='';f.note.value='';msg('Job added.')}
+  refresh();
+});
+document.getElementById('lock')?.addEventListener('click',()=>{try{localStorage.removeItem(TK)}catch(e){};lockState()});
+lockState();localTimes();
+
+(function(){
+const box=document.getElementById('chat');if(!box)return;
+const KEY='agent-status-chat';
+const log=box.querySelector('.log'),form=box.querySelector('form'),ta=form.q,stopB=box.querySelector('.stop');
+let hist=[];try{hist=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){}
+let ctl=null;
+const sys=()=>'You are a helpful assistant running on a local model in a home lab. Today is '+
+  new Date().toDateString()+'. Answer concisely; use plain text or simple Markdown.';
+function save(){try{localStorage.setItem(KEY,JSON.stringify(hist.slice(-40)))}catch(e){}}
+function bubble(role,text){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+function draw(){log.textContent='';hist.forEach(m=>bubble(m.role,m.content));
+  if(!hist.length)bubble('note','Ask the local model anything. Chat requests go before agent work; the history stays in this browser.')}
+draw();
+box.querySelector('.clear').addEventListener('click',()=>{if(ctl)ctl.abort();hist=[];save();draw()});
+stopB.addEventListener('click',()=>{if(ctl)ctl.abort()});
+ta.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();form.requestSubmit()}});
+form.addEventListener('submit',async ev=>{
+  ev.preventDefault();const q=ta.value.trim();if(!q||ctl)return;
+  if(!hist.length)log.textContent='';
+  hist.push({role:'user',content:q});bubble('user',q);ta.value='';save();
+  const out=bubble('assistant','');const meta=document.createElement('div');meta.className='meta';
+  log.appendChild(meta);meta.textContent='waiting for the model…';
+  ctl=new AbortController();stopB.hidden=false;let text='',n=0,tps='';
+  const think=form.think.checked;
+  try{
+    const r=await fetch('/v1/chat/completions',{method:'POST',signal:ctl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok()},
+      body:JSON.stringify({model:'coder',stream:true,max_tokens:think?8192:2048,
+        messages:[{role:'system',content:sys()},...hist.slice(-20)],chat_template_kwargs:{enable_thinking:think}})});
+    if(!r.ok){let j={};try{j=await r.json()}catch(e){}
+      if(r.status===401){try{localStorage.removeItem(TK)}catch(e){};lockState()}
+      throw new Error((j.error&&j.error.message)||('HTTP '+r.status))}
+    const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+    for(;;){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+      let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+        if(!line.startsWith('data: ')||line==='data: [DONE]')continue;
+        let o;try{o=JSON.parse(line.slice(6))}catch(e){continue}
+        const d=(o.choices&&o.choices[0]&&o.choices[0].delta)||{};
+        if(d.reasoning_content&&!text)meta.textContent='thinking…';
+        if(d.content){text+=d.content;n++;out.textContent=text;log.scrollTop=log.scrollHeight}
+        if(o.timings&&o.timings.predicted_per_second)tps=' · '+o.timings.predicted_per_second.toFixed(1)+' tok/s';
+      }
+      if(text)meta.textContent=n+' tokens'+tps;
+    }
+    if(!text)meta.textContent='(empty answer)';
+  }catch(e){meta.textContent=e.name==='AbortError'?'stopped':'error: '+e.message;if(!text)out.remove()}
+  ctl=null;stopB.hidden=true;
+  if(text){hist.push({role:'assistant',content:text});save()}
+});
+})();
+</script></body></html>
