@@ -1360,7 +1360,7 @@ def render_live(st: dict) -> str:
 
 STATIC = Path(__file__).resolve().parent / "static"
 STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-                ".svg": "image/svg+xml"}
+                ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/manifest+json"}
 
 
 def static_files() -> dict[str, tuple[bytes, str]]:
@@ -1385,7 +1385,12 @@ THEME_SCRIPT = """
 document.querySelectorAll('.theme input').forEach(i=>{i.checked=i.value===(document.documentElement.dataset.themePref||'auto');
   i.addEventListener('change',()=>window.setTheme(i.value))});
 """
-HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+        # a home-screen app on phones: full screen, its own icon and name (static/manifest.json)
+        '<meta name="theme-color" content="#0a2f36"><meta name="apple-mobile-web-app-capable" content="yes">'
+        '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+        '<meta name="apple-mobile-web-app-title" content="Agent"><link rel="manifest" href="/static/manifest.json">'
+        f'<link rel="apple-touch-icon" href="/static/app-icon-180.png?v={STATIC_VERSION}">'
         f'{THEME_HEAD}<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">'
         f'<link rel="icon" type="image/svg+xml" href="/static/icon.svg?v={STATIC_VERSION}">')
 ICON = {

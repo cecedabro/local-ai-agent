@@ -348,3 +348,21 @@ body.locked .loop-intro{display:none}
 #add .start-loop{justify-self:end;padding:8px 22px}
 @media (max-width:760px){#add .loop-fields{grid-template-columns:minmax(0,1fr)}}
 .hidden-repos{margin:8px 0 0}
+
+/* ------------------------------------------------------------------ phones and the home-screen app */
+header{padding-top:max(12px,env(safe-area-inset-top))}
+main{padding-bottom:max(16px,env(safe-area-inset-bottom))}
+@media (max-width:700px){
+  html,body{overflow-x:hidden}
+  header{flex-wrap:nowrap;gap:8px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  header h1{font-size:17px;white-space:nowrap}
+  header #updated{display:none}
+  header .badge{font-size:12px;padding:4px 10px 4px 22px;white-space:nowrap}
+  header .seg label{padding:5px 7px}
+  /* wide tables scroll inside their card instead of widening the page */
+  .card table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card{min-width:0;overflow-wrap:anywhere}
+  .card code{white-space:normal;word-break:break-all}
+  #chat textarea{font-size:16px}   /* 16px: iOS does not zoom in on focus */
+  #unlock input,#add input,#add select{font-size:16px}
+}
