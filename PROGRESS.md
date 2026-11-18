@@ -33,3 +33,9 @@
 - Fixed deadlock: changed `self._lock` from `threading.Lock()` to `threading.RLock()` to support nested calls (e.g., `add_source` -> `get_source`).
 - Fixed `update_source` WHERE clause: swapped `username`/`source_id` bind order to match `WHERE id = ? AND username = ?`.
 - Acceptance command passes: `make chat-test K="test_step_profiles and profile_db"`.
+
+## Task B07 - profile helpers: tokens, domain_of, clean_filters (chat/coder/profiles.py)
+- Implemented `tokens(text)`: returns `math.ceil(len(text) / 4)`, the rough token count used everywhere.
+- Implemented `domain_of(url)`: extracts the domain from a URL (adds `https://` prefix if needed), strips `www.`, validates scheme is http/https, host contains `.` and only valid characters, returns `None` otherwise.
+- Implemented `clean_filters(f)`: filters PubMed filter values to known types/languages, validates years is int 1–50, defaults non-dict input to empty dict.
+- All acceptance commands pass: `make chat-test K="test_step_profiles and helpers"` and `make check`.

@@ -29,25 +29,45 @@ CITE = ("When you use a search result or page, cite it with its number in square
 
 
 def tokens(text: str) -> int:
-    """TODO (task B07). The rough token count the app uses everywhere: ceil(len(text) / 4).
+    """The rough token count the app uses everywhere: ceil(len(text) / 4).
     """
-    raise NotImplementedError
+    return math.ceil(len(text) / 4)
 
 
 def domain_of(url: str) -> str | None:
-    """TODO (task B07). 'https://www.rivm.nl/griep' -> 'rivm.nl'; 'rivm.nl' -> 'rivm.nl'; not usable -> None.
+    """'https://www.rivm.nl/griep?x=1' -> 'rivm.nl'; 'rivm.nl' -> 'rivm.nl'; not usable -> None.
     Add "https://" when there is no "://"; urlsplit; host = hostname lower-cased without a trailing dot;
     None unless the scheme is http/https, the host has a "." and only letters, digits, "." and "-"; drop a leading "www.".
     """
-    raise NotImplementedError
+    if "://" not in url:
+        url = "https://" + url
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host or "." not in host:
+        return None
+    import re
+    if not re.match(r'^[a-z0-9.\-]+$', host):
+        return None
+    if host.startswith("www."):
+        host = host[4:]
+    return host
 
 
 def clean_filters(f: Any) -> dict:
-    """TODO (task B07). Keep only the known PubMed filter values (SPEC §12.1); `f` that is not a dict counts as {}:
+    """Keep only the known PubMed filter values (SPEC §12.1); `f` that is not a dict counts as {}:
     {"types": [t for t in FILTER_TYPES if t in f types], "years": years when an int 1–50 else None,
      "humans": bool(f humans), "languages": [x for x in FILTER_LANGS if x in f languages]}
     """
-    raise NotImplementedError
+    if not isinstance(f, dict):
+        f = {}
+    return {
+        "types": [t for t in FILTER_TYPES if t in f.get("types", [])],
+        "years": f["years"] if isinstance(f.get("years"), int) and 1 <= f["years"] <= 50 else None,
+        "humans": bool(f.get("humans")),
+        "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
+    }
 
 
 def config(db: Any, username: str, profile: str) -> dict:

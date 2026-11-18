@@ -27,7 +27,7 @@ Rules for every task:
   accept: make chat-test K="test_step_tools or test_step_gateway"
 - [x] B06: In chat/coder/db.py add the profile tables and methods (`TODO (task B06)`)
   accept: make chat-test K="test_step_profiles and profile_db or test_step_round2"
-- [ ] B07: In chat/coder/profiles.py fill in `tokens`, `domain_of` and `clean_filters` as their docstrings say
+- [x] B07: In chat/coder/profiles.py fill in `tokens`, `domain_of` and `clean_filters` as their docstrings say
   accept: make chat-test K="test_step_profiles and helpers"
 - [ ] B08: In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say
   accept: make chat-test K="test_step_profiles and seed_prompt_budget"
