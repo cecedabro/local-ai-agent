@@ -157,7 +157,30 @@ async def web_search(client: httpx.AsyncClient, searxng_url: str, query: str, si
          skip urls whose host is not within it (_within(host, site)); keep {"title": (title or url)[:200], "url": url,
          "snippet": (item "content" or "")[:300]}; stop at n results.
     """
-    raise NotImplementedError
+    if not searxng_url:
+        raise ToolError("web search is not set up (SEARXNG_URL is empty)")
+    q = f"site:{site} {query}" if site else query
+    try:
+        r = await client.get(searxng_url.rstrip("/") + "/search",
+                             params={"q": q, "format": "json"},
+                             headers={"User-Agent": UA}, timeout=20)
+    except httpx.HTTPError as e:
+        raise ToolError(f"search failed ({type(e).__name__})") from e
+    if r.status_code != 200:
+        raise ToolError(f"search answered {r.status_code}")
+    results = []
+    for item in r.json().get("results", []):
+        url = item.get("url", "")
+        if not url.startswith(("http://", "https://")):
+            continue
+        if site and not _within(urlsplit(url).hostname or "", site):
+            continue
+        results.append({"title": (item.get("title", "") or url)[:200],
+                        "url": url,
+                        "snippet": (item.get("content", "") or "")[:300]})
+        if len(results) >= n:
+            break
+    return results
 
 
 def _within(host: str, domain: str) -> bool:

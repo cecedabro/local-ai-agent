@@ -15,7 +15,7 @@ Rules for every task:
   `chat/coder/templates/`, `Makefile`, `docs/`, and in `chat/coder/tools.py` the finished functions
   `html_text`, `is_public` and `fetch_page` (they guard against private addresses).
 
-- [ ] B01: In chat/coder/tools.py fill in `web_search` as its docstring says
+- [x] B01: In chat/coder/tools.py fill in `web_search` as its docstring says
   accept: make chat-test K="test_step_tools and web_search"
 - [ ] B02: In chat/coder/tools.py fill in `pubmed_term` and `pubmed_search` as their docstrings say
   accept: make chat-test K="test_step_tools and pubmed"
