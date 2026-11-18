@@ -84,11 +84,12 @@ def test_stream_events_and_store(db):
     stream, calls = fake_stream([("reasoning", "hm"), ("content", "Hel"), ("content", "lo"),
                                  ("usage", {"prompt_tokens": 40, "completion_tokens": 3})])
     evs = run(db, chat, stream)
-    assert [e for e, _ in evs] == ["phase", "phase", "delta", "delta", "done"]
-    assert [d["phase"] for e, d in evs if e == "phase"] == ["thinking", "writing"]
+    assert [e for e, _ in evs] == ["phase", "phase", "phase", "delta", "delta", "done"]
+    assert [d["phase"] for e, d in evs if e == "phase"] == ["reading", "thinking", "writing"]
     assert "".join(d["text"] for e, d in evs if e == "delta") == "Hello"
     done = evs[-1][1]
-    assert done["tokens"] == 3 and set(done) == {"message_id", "tokens", "tps", "context"}
+    assert done["tokens"] == 3 and set(done) == {"message_id", "tokens", "tps", "context", "title", "stopped"}
+    assert done["stopped"] is False and done["title"] == "hello there"
     msgs = db.get_messages(chat["id"], "u1")
     assert msgs[-1]["role"] == "assistant" and msgs[-1]["content"] == "Hello" and msgs[-1]["id"] == done["message_id"]
     assert calls["messages"][0]["role"] == "system" and calls["messages"][-1] == {"role": "user", "content": "hello there"}
@@ -105,7 +106,7 @@ def test_busy_then_ok(db):
     chat = new_chat(db)
     stream, calls = fake_stream([("content", "ok")], busy_times=2)
     evs = run(db, chat, stream)
-    assert [d["phase"] for e, d in evs if e == "phase"] == ["waiting", "writing"], "one waiting phase"
+    assert [d["phase"] for e, d in evs if e == "phase"] == ["reading", "waiting", "writing"], "one waiting phase"
     assert calls["n"] == 3 and evs[-1][0] == "done"
 
 
@@ -126,7 +127,8 @@ def test_gateway_errors(db):
     chat = new_chat(db)
     stream, _ = fake_stream([], error=500)
     evs = run(db, chat, stream)
-    assert evs == [("error", {"error": "The model could not answer.", "status": 500})]
+    assert evs == [("phase", {"phase": "reading", "label": "Reading your message…"}),
+                   ("error", {"error": "The model could not answer.", "status": 500})]
     stream, _ = fake_stream([("content", "a"), ("content", "b")], error_after=1)
     evs = run(db, chat, stream)
     assert evs[-1][0] == "error"

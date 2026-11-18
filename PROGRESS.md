@@ -1,76 +1,89 @@
-# PROGRESS
+## Task R03 — phases, first chunk, done (2026-11-18)
 
-- [P06] `chat/coder/app.py`: Added 4 passkey routes — `POST /api/passkeys/register/options` (session check, `passkeys.registration_options`, challenge cookie), `POST /api/passkeys/register/verify` (session + challenge + credential validation → `passkeys.verify_registration` → `db.add_passkey`), `GET /api/passkeys` (list), `DELETE /api/passkeys/{passkey_id}` (delete). Added helper functions `_wa_set` / `_wa_take` for WebAuthn cookie/challenge handling. All 4 `TestPasskeyRegister` tests pass. `make check` green.
+Modified `chat/coder/answer.py`:
+1. Added `"reading": "Reading your message…"` to `LABELS` dict.
+2. After `messages = context.build_messages(db, chat)`, yields `phase("reading")` once, before the retry loop.
+3. Merged the `first` event and the `agen` stream into a single `events()` async generator, so the first content chunk is sent as a delta (fixes the bug where the first chunk was never emitted).
+4. Added `thinking_sent` flag so `phase("thinking")` is yielded only once regardless of how many reasoning chunks arrive.
+5. Wrapped the unified loop in `try/except gateway.GatewayError` to properly handle errors mid-stream.
+6. The `done` SSE event now includes `"title"` (from the re-read chat) and `"stopped": False` (placeholder for R04).
 
-- [P07] `chat/coder/app.py`: Added 2 passkey login routes — `POST /api/passkeys/login/options` (no session, `passkeys.authentication_options`, challenge cookie, IP rate-limit key), `POST /api/passkeys/login/verify` (no session, IP rate-limit check → 429, WebAuthn verify → `db.get_passkey` → `passkeys.verify_authentication` → `db.touch_passkey` → `db.set_last_login` → session creation via `secrets.token_urlsafe(32)` + `db.create_session` + `coder_session` cookie, returns `{"username", "rights"}`). Wrapped challenge/credential/passkey-fetch validation in `try`/`except passkeys.PasskeyError` to record failure and return 401. All 7 `TestPasskeyLogin` tests pass. `make check` green.
+Tests: `make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"` — 9 passed. `make check` — 36 passed, OK.
 
-- [P08] `chat/coder/app.py`: Added `GET /account` route — no session → `RedirectResponse("/login", status_code=303)`, else `templates.TemplateResponse("account.html", {"me": {"username": username}})`. Template already existed. `make chat-test K="test_account_page"` passes. `make check` green.
+Next: Task R04 adds `stop: asyncio.Event | None` parameter and per-event stop checking, setting `stopped=True` on the done event. Task R05 wraps the loop in try/finally for client disconnect handling.
 
-- [P09] `make chat-browser-test` — all browser tests pass: password sign-in + message + answer finish, and passkey flow (add on /account, sign out, sign in with passkey).
+## Task R04 — stop event, done (2026-11-18)
 
-- [P10] `chat/README.md`: Appended `## Passkeys` section (4 lines: what they are, where to add them, production RP_ID+ORIGIN requirement). `grep -q "## Passkeys"` + `grep -q "RP_ID"` + `make chat-test` all pass.
+Modified `chat/coder/answer.py`:
+1. Added `stop: asyncio.Event | None = None` parameter to `run_answer` signature.
+2. Added `stopped = False` flag before the event loop.
+3. After each event in the loop: check `stop.is_set()` and if so, set `stopped = True` and break.
+4. Wrapped the loop in `try/finally` that calls `await agen.aclose()` on exit (serves R04 and R05).
+5. Store the message only if `text or not stopped`, passing `stopped=stopped` to `db.add_message`.
+6. `done` SSE event now carries `"stopped": stopped` (True when stopped, False on normal completion).
 
-- [T03] `chat/coder/app.py` + `chat/coder/db.py`: Fixed §3 invite acceptance tests (`TestInvites`) — patched `timezone` import in `api_accept_invite`, added `threading.local()` for per-thread SQLite connections in `db.py`, rewrote `api_create_invite`/`api_list_invites`/`api_delete_invite` with correct session/CSRF validation and status codes, added `_is_admin()` helper, fixed `admin_page` to use `_session_from_cookie`, fixed `api_list_users` to bypass explicit CSRF wrapper, fixed `api_delete_user` path param name mismatch (`{username}` → `{target_username}`). All 4 `TestInvites` tests pass.
+Tests: `make chat-test K="test_step_answer or (test_step_round2 and stop_event)"` — 9 passed. `make check` — 36 passed, OK.
 
-- [T06] `status/backfill.py`: added `opencode_tokens(db_path: Path) -> list[dict]` — reads OpenCode's SQLite DB via `file:ro` URI, uses `json_valid` + `json_extract` to safely filter assistant rows with tokens, groups by UTC date, sums input/output+reasoning, returns sorted list.
-- `make check` + `BackfillOpencodeTest` both pass; no new dependencies, stdlib only.
-- [T09] `status/app.py`: refactored `App.status()` to batch `run_control` query before the run iteration loop, replacing N per-run SQL queries with a single `IN` query and dict lookup; added `"pause": not fin and pause_req` to run dicts; hardened finish to always clear `pause` to `False`. `make check` + `PauseApiTest` both pass.
-- [T10] `status/app.py` SPEC §13: Now card run selection prioritizes "running" over "paused"; pause button uses `data-run="{run_id}"` (was `"now"`); resume button on paused run uses `data-run="{run_id}"`; added `<span class="pill warn">paused</span>` pill when paused; progress bar gains `paused` class when `run["pause"]` is True; JavaScript click handler dispatches `button[data-run]` clicks to `/api/runs/<run_id>/<act>` via `encodeURIComponent`. `make check` + `PauseApiTest` (7 tests) both pass.
-- [T11] `status/backfill.py`: Fixed `send()` — now posts to `url.rstrip("/") + "/api/import"` (was posting to `url` directly); builds batches as `batches = [...] or [[]]` so empty events still sends one request; uses `urllib.request.urlopen(req, timeout=60)`. Fixed `main()` — calls `send()` when `all_events or all_tokens` (was only `all_events`); prints `{token_days} token days` per answer. `make check` + `test_accept_history.py` both pass.
-- [T11-docs] `status/README.md`: Appended `## History import` section (what backfill.py reads: git commits via `git log`, PRs via `gh`, tokens from OpenCode's SQLite DB; how to run on devbox; idempotency). Appended `## Pause` section (two sentences about Pause/Resume on Now card). Added curl lines for `POST /api/import` and `POST /api/runs/r1/pause` to the endpoints code block. `make check` + `make status-test` both pass.
+Note: The `try/finally` with `agen.aclose()` is already in place, so R05 (client disconnect handling via try/finally) has a head start — it only needs to add the partial-store logic.
 
-- [S01] `chat/coder/db.py`: Added `add_message_at(chat_id, role, content, created)` — inserts a message with a user-provided ISO timestamp (tokens/tps NULL); added `reset_chat_usage(chat_id)` — sets `last_prompt_tokens` and `last_completion_tokens` to NULL; changed `ORDER BY m.created` to `ORDER BY m.created, m.id` in both `get_messages` and `get_messages_for_completion` for deterministic ordering. `make chat-test K="test_step_context and test_db_helpers"` + `make check` both pass.
+## Task R05 — client disconnect partial store, done (2026-11-18)
 
-- [S02] `chat/coder/gateway.py`: Implemented `request_body()` — builds the POST body dict with model "coder", messages, stream flag, chat_template_kwargs (enable_thinking), and stream_options when streaming; implemented `parse_line()` — parses SSE lines: rejects non-"data:" lines, handles "[DONE]", json-decodes payload, extracts reasoning_content → ("reasoning", text), content → ("content", text), and usage dict → ("usage", dict) in that order. `make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"` + `make check` both pass.
+Modified `chat/coder/answer.py`:
+1. Added `msg_stored = False` flag before the try block (line 135).
+2. After `db.add_message(...)` in Step 5, set `msg_stored = True`.
+3. In the `finally` block, before `agen.aclose()`, added partial-store logic: if `not msg_stored and text`, store accumulated text with `stopped=True`.
+(When Starlette calls `aclose()` on the generator due to client disconnect, the finally block catches it and saves the partial answer.)
 
-- [S03] `chat/coder/gateway.py`: Implemented `stream_chat()` — opens httpx.AsyncClient(timeout=600), POSTs to `{GATEWAY_URL}/chat/completions` with the request body and optional Bearer auth header, raises Busy on 503/429 and GatewayError on other non-200 or connection errors (502), iterates SSE lines via `parse_line()`, yields events and returns on "done". `make chat-test K="test_step_gateway and (test_stream_chat or test_no_key_no_header)"` + `make check` both pass.
+Tests: `make chat-test K="test_step_answer or test_step_round2"` — 14 passed. `make check` — 36 passed, OK.
 
-- [S04] `chat/coder/gateway.py`: Implemented `complete()` — POSTs non-streaming request (think=False, stream=False) to gateway, reads full JSON response via `resp.aread()`, returns `choices[0]["message"]["content"]`. Same error handling as `stream_chat` (Busy on 503/429, GatewayError on other non-200/connection errors). `make chat-test K="test_step_gateway"` + `make check` both pass.
+## Task R07 — folder routes, done (2026-11-18)
 
-- [S05] `chat/coder/context.py`: Implemented `ctx_max()` — returns `settings.CTX_DEFAULT` when STATUS_URL empty, returns cached value if <300s old, fetches from `{STATUS_URL}/api/status` via httpx otherwise (caches positive int n_ctx on success, falls back to default on any error). Implemented `window()` — returns `{"max": m, "compress_at": (m * 3) // 4}` with `m = ctx_max(settings)`. `make chat-test K="test_step_context and test_ctx_max_and_cache"` + `make check` both pass.
+Modified `chat/coder/app.py`:
+1. Fixed the PATCH `/api/folders/{folder_id}` response to return only `{"id", "name", "created"}` instead of the full folder dict (which included `username`). The test `TestFolders.test_crud` expects exactly those three keys.
 
-- [S06] `chat/coder/context.py`: Implemented `context_messages()` — gets messages via `db.get_messages()`, finds last "summary" message, returns system summary line (prefixed with `SUMMARY_PREFIX`) plus all user/assistant messages after it. Implemented `build_messages()` — prepends the system prompt for the chat's profile to `context_messages()` result. `make chat-test K="test_step_context and test_context_and_build_messages"` + `make check` both pass.
+Tests: `make chat-test K="TestFolders"` — 3 passed. `make check` — 36 passed, OK.
 
-- [S07] `chat/coder/context.py`: Implemented `used()` — returns `last_prompt_tokens + (last_completion_tokens or 0)` when tokens are recorded, else estimates as `math.ceil(total chars of build_messages() / 4)`. Implemented `info()` — returns `{"used": used(db, chat), "max": w["max"], "compress_at": w["compress_at"]}` merging `window(settings)`. `make chat-test K="test_step_context and test_used_and_info"` + `make check` both pass.
+## Task R10 — convHtml and loadChats, done (2026-11-18)
 
-- [S08] `chat/coder/context.py`: Implemented `just_before(iso)` — parses ISO-8601 timestamp, subtracts 1 microsecond via `timedelta`, returns formatted string. Implemented `compress(db, chat, settings, complete)` — finds user/assistant messages after last summary, splits into old/kept (last 4), builds transcript with optional "Earlier summary:" prefix, calls `complete()` to summarize old messages, inserts summary message at `just_before(kept[0]["created"])`, resets chat usage. `make chat-test K="test_step_context"` + `make check` both pass.
+Modified `chat/static/js/app.js`:
+1. Implemented `convHtml(c)` — renders one sidebar chat item as `<div class="conv[ on]" data-id="ID" draggable="true"><span>TITLE</span>[<em class="tag">EH</em> for evidence profile]<button class="more" data-chat-menu="ID">⋯</button></div>` with "on" class when `c.id === state.chatId`, title escaped via `esc()`, and profile tag shown for "evidence" chats.
+2. Implemented `loadChats()` — fetches `/api/chats` and `/api/folders` in parallel via `Promise.all`, stores them in `state.chats` and `state.folders`, filters by `#search` (case-insensitive title substring), then renders `#convs` with folders first (`<details class="folder">` with COUNT) followed by date groups (`<h4>LABEL</h4>`) for unfiled chats using `groupChats()`.
 
-- [S09] `chat/coder/answer.py`: Implemented `sse(event, data)` — formats a single SSE event as `f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"`. Implemented `phase(name)` — yields `sse("phase", {"phase": name, "label": LABELS[name]})`. Implemented `make_title(text)` — collapses whitespace to single spaces, strips; truncates to 59 chars + "…" when over 60 chars total. `make chat-test K="test_step_answer and test_helpers"` + `make check` both pass.
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
 
-- [S10] `chat/coder/answer.py`: Implemented `run_answer()` steps 2–5 (skip 1, 6, 7): step 2 calls `context.build_messages(db, chat)`; step 3 wraps `stream(settings, messages, think)` in a retry loop with Busy handling (yield "waiting" phase, WAIT_LIMIT timeout); step 4 iterates stream events — yields "thinking" phase on first "reasoning", "writing" phase + deltas on first/remaining "content", stores "usage"; catches GatewayError mid-stream; step 5 computes tokens (usage or count), tps, stores assistant message via `db.add_message`, updates chat usage; yields done event with dummy context `{"used": 0, "max": 0, "compress_at": 0}`. `make chat-test K="test_step_answer and (test_stream_events_and_store or test_count_without_usage or test_busy or test_gateway_errors)"` + `make check` both pass.
+## Task R13 — moveChat, newFolder, openMenu, chatMenu, folderMenu, menuAction, done (2026-11-18)
 
-- [S11] `chat/coder/answer.py`: Implemented `run_answer()` steps 1, 6, 7 — step 1 checks if context.used >= compress_at, yields "compressing" phase and calls `context.compress()` before refreshing chat; step 6 updates chat title from first user message when title is "New chat" using `make_title()`; step 7 yields real context via `context.info(db, chat, settings)` instead of dummy values. `make chat-test K="test_step_answer"` + `make check` both pass.
+Modified `chat/static/js/app.js`:
+1. Implemented `moveChat(chatId, folderId)` — PATCHes `/api/chats/CHAT` with `{folder_id}` (null clears folder), then reloads sidebar via `loadChats()`.
+2. Implemented `newFolder()` — prompts for folder name, trims it, POSTs to `/api/folders`, returns the new folder's id or null on failure.
+3. Implemented `openMenu(button, html)` — sets `#cmenu` innerHTML to `html`, positions it via `--x`/`--y` CSS variables based on `getBoundingClientRect()` of the button, and shows it.
+4. Implemented `chatMenu(button, chatId)` — builds the chat context menu HTML (Rename, Move to per-folder buttons, "No folder" if applicable, New folder, Delete), opens it, and sets `#cmenu.dataset.chat = chatId`.
+5. Implemented `folderMenu(button, folderId)` — builds the folder context menu HTML (Rename, Delete folder), opens it, and sets `#cmenu.dataset.folder = folderId`.
+6. Implemented `menuAction(act, btn)` — handles all menu actions: rename (PATCH chat title), move (calls `moveChat`), newfolder (creates folder + moves chat), delete (confirms, DELETEs chat, resets open chat UI), rename-folder, delete-folder.
+7. Implemented `setupSidebar()` — wires `#convs` click (menu buttons + conv open), drag-and-drop (dragstart/dragover/drop for moving chats into folders), `#cmenu` click (dispatches `menuAction`), outside-click + Escape to close menu, and `#new-folder` click.
 
-- [S12] `chat/coder/app.py`: Filled in `api_create_message` — step 1: `_require_session` for auth; step 2: `db.get_chat` with 404; step 3: parse JSON body for content/file_ids; step 4: validation (empty → 400, >20000 chars → 413); step 6: `db.add_message` to store user message; step 7: return `StreamingResponse` with `answer.run_answer` streaming SSE. `make chat-test K="TestStream"` + `make check` both pass.
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make chat-browser-test` — all 7 tests passed including "round 2: folders: new folder, move a chat with the menu, delete a chat". `make check` — 36 passed, OK.
 
-- [S13] `chat/coder/app.py`: Filled in `api_create_message` step 5 (files) — validates each file_id belongs to the current user via `db.get_file()` (returns 400 if not found); step 6 — appends file content blocks (`\nFile <name>:\n```\n<content>\n``` `) to the user message content, stores the enriched message via `db.add_message`, and calls `db.add_message_files(msg_id, file_ids)` to persist associations. `make chat-test K="TestFiles or TestStream"` + `make check` both pass.
+## Task R11 — doneMeta and drawMessage, done (2026-11-18)
 
-- [S14] `chat/coder/app.py`: Filled in `api_compress` — session check via `_require_session`, chat lookup with 404, calls `await context.compress(db, chat, settings, gateway.complete)`, reloads chat, returns `{"context": context.info(db, chat, settings)}`. Changed `api_get_chat` to return real context via `context.info(app.state.db, chat, app.state.settings)` instead of hardcoded values. `make chat-test K="TestContext"` + `make check` both pass.
+Modified `chat/static/js/app.js`:
+1. Implemented `doneMeta(meta, content, tokens, tps, stopped, retryText)` — sets `meta.innerHTML` with TINY orb, `metaText(tokens, tps)` span, Copy and Retry buttons. Copy uses `navigator.clipboard.writeText(content)`. Retry skips if `state.busy`, else puts `retryText()` in `#input` and calls `send()`. If stopped, inserts `<div class="note stopped">Stopped</div>` after meta.
+2. Implemented `drawMessage(m)` — handles summary (`.note.summary`), user messages (`.u` with file chips and text via `typedText()` when files exist), and assistant messages (`.ai` with ORB + markdown-rendered content + `meta2` initialized with `doneMeta`). Retry callback gets the last `.u .msg.user` text from the DOM.
 
-- [S15] Verified `make chat-test` (50 passed) and `make check` (32 passed) — both already green, no code changes needed.
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
 
-- [S19] `chat/static/js/app.js`: Implemented `loadChats` — fetches GET /api/chats, stores in state.chats, filters by #search value (case-insensitive title substring), groups via groupChats(), renders sidebar with <h4> group labels, <div class="conv" data-id> items with escaped titles, <em class="tag">EH</em> for evidence profile, and "on" class for the active chat. `node --check` + `grep` validation + `make check` all pass.
+## Task R12 — setBusy, stopAnswer, send, done (2026-11-18)
 
-- [S20] `chat/static/js/app.js`: Implemented `openChat(id)` — fetches GET /api/chats/ID, sets state.chatId/profile/chat-title, draws messages via drawMessage() or welcome screen (MARBLE + USERNAME + example chips), calls drawContext() + loadChats(). Implemented `drawMessage(m)` — user messages show file chips + text (stripped of `\n\nFile ` blocks), assistant messages show ORB + md.render(content) in bubble + meta2 with TINY + metaText(tokens,tps) + Copy/Retry buttons, summary messages show `.note.summary` line. `node --check` + `grep` validation + `make check` all pass.
+Modified `chat/static/js/app.js`:
+1. Implemented `setBusy(on)` — sets `state.busy = on`, toggles "stop" class on `#send`, updates title and aria-label to "Stop" while busy, "Send" otherwise.
+2. Implemented `stopAnswer()` — if `state.busy` and there is an open chat, calls `setBusy(false)` then POSTs to `/api/chats/{id}/stop`.
+3. Implemented `send()` — full message send flow: validates input, creates chat if needed, draws user message and assistant placeholder, streams via `readEvents()` with phase/delta/done/error handling, uses `Typewriter` for smooth text rendering, calls `doneMeta` on completion, handles errors and stopped state.
 
-- [S21] `chat/static/js/app.js`: Implemented `send()` — gets #input text + state.files ids, POSTs to `/api/chats/ID/messages` with `{content, mode, files}` (mode from checked radio); creates new chat via POST `/api/chats` when no open chat; draws user message with file chips, then assistant placeholder with ORB/bub/meta2/tiny; creates `Typewriter` before reading events; handles `phase` (updates orb.dataset.phase + phase-label), `delta` (typewriter.push), `done` (typewriter.finish, tiny.remove, idle phase, metaText with copy/retry buttons, drawContext, loadChats), `error` (idle phase, error note); sets state.busy during stream; scrolls #thread when user is near bottom. `node --check` + grep validation (`readEvents`, `Typewriter`, `renderFade`, `placeTail`) + `make check` (32 tests) + `make chat-test` (50 tests) + JS stream tests (6 tests) all pass.
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
 
-- [S22] `chat/static/js/app.js`: Implemented `drawContext(ctx)` — added `fmt(n)` helper (numbers >= 1000 as one decimal + "k", trailing ".0k" → "k"); sets CSS variables `--used` on `.ctx .bar > i` and `--at` on `.ctx .line` via `style.setProperty`; sets `#ctx-text` to "Context X / Y"; adds click handler to `#compress` that POSTs to `/api/chats/ID/compress` and reopens the chat. `node --check` + `grep` validation (`--used`, `--at`) + `make check` (32 tests) all pass.
+## Task R16 — README.md Round 2 section, done (2026-11-18)
 
-- [S23] `chat/static/js/app.js`: Implemented `setupFiles()` — adds change listener to `#file-input`, POSTs each file as FormData (field "file") to `/api/files` via `api()`, pushes `{id, name, size}` to `state.files`, draws chip `<span class="file">NAME <button data-remove="ID">×</button></span>` in `#file-chips`; handles 413 (alert "File too big (max 200 KB)") and 415 (alert "Only text files"); × button removes file from state and DOM; clears `#file-input` value. `node --check` + `grep "/api/files"` + `make check` (32 tests) all pass.
+Modified `chat/README.md`:
+1. Appended a "## Round 2" section (6 lines) covering: reading phase shimmer, stop button with partial answer persistence, folder organisation (the ⋯ menu + drag-and-drop), coloured code blocks with Copy and Download, and scroll-pinning with "↓ Latest".
 
-- [S24] `chat/static/js/app.js`: Implemented `drawWelcome()` — extracts welcome screen creation into a reusable function (MARBLE + USERNAME greeting + example chips). Implemented `start()` — wires all event listeners: #composer submit + Enter/Shift+Enter on #input, #new-chat resets chat, #convs click opens chat, double-click #chat-title prompts rename via PATCH, #search filters on input, #profile toggles #pmenu, .opt selects profile and resets chat, theme radios sync to dataset.themePref and call window.setTheme(), mode radios persist to localStorage "coder-mode", #logout POSTs to /api/logout then redirects, then calls setupFiles(), loadChats(), and opens first chat or welcome screen. `node --check` + grep validation (`coder-mode`, `setTheme`) + `make check` (32) + `make chat-test` (50) + JS stream tests (6) all pass.
-
-- [S26] `chat/README.md`: Created the README with `## Running locally` (setup venv, run with uvicorn, required env vars, access) and `## How it fits together` (position in the stack, data flow for a chat message through status service gateway to llama-server). `make check` (32 tests) passes.
-
-- [S25] `chat/static/js/admin.js`: Created the admin page JS script. Implemented `api()` (fetch helper with X-Coder:1 header, 401 redirect), `esc()` (XSS escaping), `loadInvites()` (GET /api/invites, draws `<li>` with rights/note/expires/used-by or Delete button), `loadUsers()` (GET /api/users, draws `<li>` with username/rights/last-login/Delete button, skips delete for current user), `handleInviteCreate()` (submit #invite-new → POST /api/invites, shows location.origin + result.url in #invite-link with Copy button), `handleDeletes()` (delegated click handler for data-del-invite and data-del-user buttons with confirm()), `loadAll()` (parallel fetch), and `start()` (wires up DOMContentLoaded listener). All text is escaped; all requests send X-Coder:1 header. `node --check` + grep validation (`/api/invites`, `/api/users`) + `make check` (32 tests) all pass.
-
-- [P01] `chat/coder/config.py`: Added `RP_ID` (default `"localhost"`) and `ORIGIN` (default `"http://localhost:8090"`) to `Settings.__slots__` and `__init__`. `chat/coder/db.py`: Added `passkeys` and `webauthn_challenges` tables to `_SCHEMA`; implemented `add_passkey`, `list_passkeys`, `get_passkey`, `delete_passkey`, `touch_passkey`, `put_challenge`, `take_challenge`; updated `delete_user` to also delete passkeys. `make chat-test K="test_step_passkeys and test_db_and_settings"` + `make check` both pass.
-
-- [P02] `chat/coder/passkeys.py`: Implemented `user_handle()` — returns `username.encode("utf-8")`. Implemented `registration_options()` — calls `generate_registration_options()` with the specified parameters (rp_id, rp_name=RP_NAME, user_id, user_name, user_display_name, exclude_credentials, authenticator_selection with resident_key=user_verification=REQUIRED, supported_pub_key_algs=ALGORITHMS) and returns `(options_to_json(opts), opts.challenge)`. `make chat-test K="test_step_passkeys and test_registration_options"` + `make check` both pass.
-
-- [P03] `chat/coder/passkeys.py`: Implemented `verify_registration()` — calls `verify_registration_response(credential=credential, expected_challenge=challenge, expected_rp_id=settings.RP_ID, expected_origin=settings.ORIGIN, require_user_verification=True)`, returns `(v.credential_id, v.credential_public_key, v.sign_count)`, wraps any exception in `PasskeyError`. `make chat-test K="test_step_passkeys and test_verify_registration"` + `make check` both pass.
-
-- [P04] `chat/coder/passkeys.py`: Implemented `authentication_options()` — calls `generate_authentication_options(rp_id=settings.RP_ID, allow_credentials=[], user_verification=UserVerificationRequirement.REQUIRED)` and returns `(options_to_json(o), o.challenge)`. Implemented `credential_id()` — extracts credential ID via `base64url_to_bytes(credential["rawId"])` with fallback to `credential["id"]`; raises `PasskeyError` on missing/malformed values. `make chat-test K="test_step_passkeys and test_authentication_options"` + `make check` both pass.
-
-- [P05] `chat/coder/passkeys.py`: Implemented `verify_authentication()` — calls `verify_authentication_response(credential=credential, expected_challenge=challenge, expected_rp_id=settings.RP_ID, expected_origin=settings.ORIGIN, credential_public_key=public_key, credential_current_sign_count=sign_count, require_user_verification=True)`, returns `v.new_sign_count`, wraps any exception in `PasskeyError`. `make chat-test K="test_step_passkeys"` + `make check` both pass.
+Tests: `make chat-test` — 79 passed. `grep -q "## Round 2"` and `grep -q "folders"` confirmed.

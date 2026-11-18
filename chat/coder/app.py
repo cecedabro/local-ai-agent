@@ -5,6 +5,7 @@ both uvicorn and the test client.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -46,6 +47,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     app = FastAPI(title="Coder Chat", version="0.1.0", lifespan=_lifespan)
     app.state.settings = settings_obj
+    app.state.running: dict[int, asyncio.Event] = {}
 
     # ------------------------------------------------------------------ #
     #  Security middleware (CSRF + headers)                               #
@@ -254,23 +256,105 @@ def create_app(settings: dict | None = None) -> FastAPI:
         return JSONResponse(chat)
 
     @app.patch("/api/chats/{chat_id}")
-    async def api_update_chat(chat_id: str, request: Request) -> JSONResponse:
-        r = _require_session_and_csrf(request, app.state.db)
+    async def api_update_chat(chat_id: int, request: Request) -> JSONResponse:
+        """Rename a chat and/or move it to a folder (SPEC §4, §11.3)."""
+        r = _require_session(request, app.state.db)
         if isinstance(r, Response):
             return r
         username, _ = r
         try:
             body = await request.json()
         except Exception:
-            return JSONResponse({"error": "invalid json"}, status_code=400)
-        title = body.get("title", "")
-        if not title or not title.strip():
-            return JSONResponse({"error": "title is required and must not be empty"}, status_code=400)
-        chat = _get_chat_or_404(app.state.db, chat_id, username)
+            body = None
+        if not isinstance(body, dict) or ("title" not in body and "folder_id" not in body):
+            return JSONResponse({"error": "Nothing to change."}, status_code=400)
+        chat = app.state.db.get_chat(chat_id, username)
         if chat is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        app.state.db.update_chat_title(chat_id, username, title.strip())
-        return JSONResponse({"ok": True, "id": chat_id, "title": title.strip()})
+        if "title" in body:
+            title = str(body.get("title") or "").strip()
+            if not title or len(title) > 120:
+                return JSONResponse({"error": "A title needs 1 to 120 characters."}, status_code=400)
+            app.state.db.update_chat_title(chat_id, username, title)
+        if "folder_id" in body:
+            fid = body["folder_id"]
+            if fid is not None and (isinstance(fid, bool) or not isinstance(fid, int) or
+                                    app.state.db.get_folder(fid, username) is None):
+                return JSONResponse({"error": "That folder does not exist."}, status_code=400)
+            app.state.db.set_chat_folder(chat_id, username, fid)
+        c = app.state.db.get_chat(chat_id, username)
+        return JSONResponse({k: c[k] for k in ("id", "title", "profile", "updated", "folder_id")})
+
+    async def _folder_name(request: Request) -> str | None:
+        """Return stripped folder name or None if invalid."""
+        try:
+            body = await request.json()
+        except Exception:
+            return None
+        if not isinstance(body, dict):
+            return None
+        name = str(body.get("name") or "").strip()
+        if not name or len(name) > 60:
+            return None
+        return name
+
+    @app.get("/api/folders")
+    async def api_list_folders(request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        return JSONResponse(app.state.db.list_folders(username))
+
+    @app.post("/api/folders", status_code=201)
+    async def api_create_folder(request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        name = await _folder_name(request)
+        if name is None:
+            return JSONResponse({"error": "A folder name needs 1 to 60 characters."}, status_code=400)
+        return JSONResponse(app.state.db.create_folder(username, name), status_code=201)
+
+    @app.patch("/api/folders/{folder_id:int}")
+    async def api_update_folder(folder_id: int, request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        if app.state.db.get_folder(folder_id, username) is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        name = await _folder_name(request)
+        if name is None:
+            return JSONResponse({"error": "A folder name needs 1 to 60 characters."}, status_code=400)
+        app.state.db.rename_folder(folder_id, username, name)
+        f = app.state.db.get_folder(folder_id, username)
+        return JSONResponse({k: f[k] for k in ("id", "name", "created")})
+
+    @app.delete("/api/folders/{folder_id:int}")
+    async def api_delete_folder(folder_id: int, request: Request) -> Response:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        if not app.state.db.delete_folder(folder_id, username):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return Response(status_code=204)
+
+    @app.post("/api/chats/{chat_id:int}/stop")
+    async def api_stop_chat(chat_id: int, request: Request) -> Response:
+        r = _require_session(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = app.state.db.get_chat(chat_id, username)
+        if chat is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        ev = app.state.running.get(chat_id)
+        if ev is not None:
+            ev.set()
+        return Response(status_code=204)
 
     @app.delete("/api/chats/{chat_id}")
     async def api_delete_chat(chat_id: str, request: Request) -> Response:
@@ -381,12 +465,20 @@ def create_app(settings: dict | None = None) -> FastAPI:
             for fid in file_ids:
                 f = db.get_file(fid, username)
                 fc = db.get_file_content(fid)
-                content += f'\nFile {f["name"]}:\n```\n{fc.decode()}```'
+                content += f'\n\nFile {f["name"]}:\n```\n{fc.decode()}\n```'
         msg_id = db.add_message(chat_id, "user", content)
         if file_ids:
             db.add_message_files(msg_id, file_ids)
-        return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
-                                 media_type="text/event-stream")
+        stop = asyncio.Event()
+        app.state.running[chat_id] = stop
+        async def events():
+            try:
+                async for chunk in answer.run_answer(db, settings, chat, body.get("mode") == "think", stop=stop):
+                    yield chunk
+            finally:
+                if app.state.running.get(chat_id) is stop:
+                    del app.state.running[chat_id]
+        return StreamingResponse(events(), media_type="text/event-stream")
 
     # ── POST /api/chats/{chat_id}/compress ─────────────────────────────────
 

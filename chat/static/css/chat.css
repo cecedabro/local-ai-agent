@@ -230,3 +230,76 @@ body.admin header a{margin-left:auto}
 #passkey-list li{display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 #passkey-list li:last-child{border-bottom:0}
 #passkey-list li button{margin-left:auto}
+
+/* ================================================================ round 2 (SPEC §11) */
+/* the composer stacks: chips, text, bar (base.css gives every form display:flex) */
+.composer{display:flex;flex-direction:column;align-items:stretch;gap:2px}
+.cbar{width:100%}
+/* the phase label shimmers in the theme accent while something happens */
+.phase-label{background:linear-gradient(90deg,var(--muted) 30%,var(--accent) 50%,var(--muted) 70%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+.welcome .orb{--s:88px}
+/* send turns into stop while an answer is on its way */
+.send.stop{font-size:0;background:var(--panel);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 3px 10px var(--glow)}
+.send.stop::before{content:"";width:12px;height:12px;border-radius:3px;background:var(--ink)}
+.note.stopped{font-size:12.5px;color:var(--muted);margin-top:4px}
+/* "↓ Latest": shown while the reader has scrolled up during an answer */
+.dock{position:relative}
+.jump{position:absolute;left:50%;top:-48px;z-index:5;transform:translateX(-50%);padding:6px 14px;font-size:13px;
+  box-shadow:var(--shadow),inset 0 1px 0 var(--hi)}
+.jump[hidden]{display:none}
+/* code blocks: head with the file name, Copy and Download; colours by highlight.js */
+.ai .bub .code{margin:8px 0 12px;border-radius:14px;overflow:hidden;background:#0d1b2a;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.ai .bub .code pre{margin:0;border-radius:0;background:none}
+.code-head{display:flex;align-items:center;gap:4px;padding:6px 8px 6px 14px;border-bottom:1px solid rgba(255,255,255,.08);
+  font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#8fa6bd}
+.code-head .lang{margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.code-head button{padding:2px 9px;font:600 11.5px system-ui,sans-serif;color:#d8ecff;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);box-shadow:none;border-radius:8px}
+.code-head button:hover{background:rgba(255,255,255,.16)}
+.hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-doctag{color:#7fdcff}
+.hljs-string,.hljs-regexp,.hljs-addition,.hljs-template-tag{color:#a6ec7e}
+.hljs-comment,.hljs-quote{color:#6f88a3;font-style:italic}
+.hljs-number,.hljs-symbol,.hljs-bullet,.hljs-link{color:#ffcf7a}
+.hljs-title,.hljs-section,.hljs-title.function_,.hljs-title.class_{color:#c8a6ff}
+.hljs-attr,.hljs-attribute,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id{color:#ffb3c7}
+.hljs-name,.hljs-tag{color:#7fdcff}
+.hljs-built_in,.hljs-type,.hljs-params{color:#5eead4}
+.hljs-meta,.hljs-meta .hljs-keyword{color:#8fa6bd}
+.hljs-variable,.hljs-template-variable{color:#ffd8a8}
+.hljs-deletion{color:#ff8f8f}
+.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}
+:root[data-theme=blossom] .ai .bub .code{background:#2a1220}
+:root[data-theme=blossom] .hljs-keyword,:root[data-theme=blossom] .hljs-name,:root[data-theme=blossom] .hljs-tag{color:#ff9fd0}
+/* folders in the sidebar; the ⋯ menu of a chat or folder */
+.folder{margin:2px 0}
+.folder>summary{list-style:none;display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:12px;cursor:pointer;
+  font-size:13.5px;font-weight:650;color:var(--ink)}
+.folder>summary::-webkit-details-marker{display:none}
+.folder>summary::before{content:"";width:0;height:0;border:4px solid transparent;border-left:6px solid var(--muted);
+  transition:transform .2s;transform-origin:30% 50%}
+.folder[open]>summary::before{transform:rotate(90deg)}
+.folder>summary span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folder>summary small{color:var(--muted);font-weight:500}
+.folder>summary:hover{background:var(--chip)}
+.folder .conv{margin-left:12px}
+.folder.drop>summary,.convs.drop{background:var(--chip);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.more{flex:none;width:24px;height:24px;padding:0;display:grid;place-items:center;font-size:15px;line-height:1;
+  border:0;background:none;box-shadow:none;color:var(--muted);opacity:0;border-radius:8px}
+.conv:hover .more,.folder>summary:hover .more,.more:focus-visible,.conv.on .more{opacity:1}
+.more:hover{background:var(--chip)}
+@media (hover:none){.more{opacity:1}}
+.side-actions{display:flex;gap:6px}.side-actions .search{flex:1}
+.newfolder{flex:none;width:36px;padding:0;display:grid;place-items:center}
+.cmenu{position:fixed;left:var(--x,0);top:var(--y,0);z-index:50;min-width:190px;padding:5px;border-radius:14px;background:var(--glass);
+  border:1px solid var(--stroke);box-shadow:0 18px 44px rgba(0,0,0,.2),inset 0 1px 0 var(--hi);
+  backdrop-filter:blur(30px) saturate(190%);-webkit-backdrop-filter:blur(30px) saturate(190%)}
+:root[data-theme=dark] .cmenu{background:rgba(20,34,52,.94)}
+.cmenu[hidden]{display:none}
+.cmenu button{display:block;width:100%;text-align:left;padding:7px 10px;border:0;background:none;box-shadow:none;border-radius:9px;
+  font-size:13.5px;font-weight:500;color:var(--ink)}
+.cmenu button:hover{background:var(--chip)}
+.cmenu button.danger{color:var(--bad)}
+.cmenu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.cmenu small{display:block;padding:4px 10px 2px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+@media (prefers-reduced-motion:reduce){.phase-label{animation:none;color:var(--muted)}}

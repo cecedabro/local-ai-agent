@@ -141,3 +141,125 @@ export function groupChats(chats, now = new Date()) {
 export function metaText(tokens, tps) {
   return `Dewdrop · ${tokens} tokens` + (tps == null ? "" : ` · ${tps} tok/s`);
 }
+
+// ------------------------------------------------------------------ round 2 (SPEC §11)
+
+/**
+ * Keeps the thread pinned to the newest text while an answer is written, until the reader takes
+ * over: any scroll up (wheel, touch, keys, the scrollbar) stops following, so the screen stays
+ * exactly where they are reading. Scrolling back to the bottom (or bottom()) follows again.
+ * onChange(following) runs when that flips (app.js shows the "↓ Latest" button while false).
+ *   const follow = new Follow(thread, (on) => (jump.hidden = on));
+ *   follow.stick()   // after new text: scroll down only while following
+ *   follow.bottom()  // after sending: always jump to the bottom and follow again
+ */
+export class Follow {
+  constructor(el, onChange = () => {}) {
+    this.el = el;
+    this.on = true;
+    this.onChange = onChange;
+    this.lastTop = el.scrollTop;
+    const off = () => this.set(false);
+    el.addEventListener("wheel", (e) => { if (e.deltaY < 0) off(); }, { passive: true });
+    el.addEventListener("touchmove", () => { if (this.gap() > 4) off(); }, { passive: true });
+    el.addEventListener("keydown", (e) => { if (["ArrowUp", "PageUp", "Home"].includes(e.key)) off(); });
+    el.addEventListener("scroll", () => {
+      if (el.scrollTop < this.lastTop - 2 && this.gap() > 4) off();   // dragged the scrollbar up
+      else if (this.gap() <= 4) this.set(true);                        // back at the bottom
+      this.lastTop = el.scrollTop;
+    }, { passive: true });
+  }
+  gap() { return this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight; }
+  set(on) { if (on !== this.on) { this.on = on; this.onChange(on); } }
+  stick() { if (this.on) { this.el.scrollTop = this.el.scrollHeight; this.lastTop = this.el.scrollTop; } }
+  bottom() { this.set(true); this.stick(); }
+}
+
+const EXT = { javascript: "js", js: "js", mjs: "mjs", jsx: "jsx", typescript: "ts", ts: "ts", tsx: "tsx", python: "py",
+  py: "py", html: "html", xml: "xml", svg: "svg", css: "css", scss: "scss", less: "less", json: "json", bash: "sh",
+  sh: "sh", shell: "sh", zsh: "sh", yaml: "yml", yml: "yml", markdown: "md", md: "md", sql: "sql", c: "c", cpp: "cpp",
+  "c++": "cpp", java: "java", go: "go", rust: "rs", rs: "rs", ruby: "rb", rb: "rb", php: "php", swift: "swift",
+  kotlin: "kt", kt: "kt", csharp: "cs", cs: "cs", lua: "lua", r: "r", ini: "ini", toml: "toml", diff: "diff",
+  makefile: "mk", dockerfile: "Dockerfile", text: "txt", txt: "txt", plaintext: "txt", csv: "csv", ino: "ino",
+  arduino: "ino", vue: "vue" };
+const ALIAS = { html: "xml", svg: "xml", vue: "xml", sh: "bash", zsh: "bash", shell: "bash", yml: "yaml",
+  ino: "cpp", arduino: "cpp", toml: "ini", py: "python", js: "javascript", mjs: "javascript", ts: "typescript",
+  rb: "ruby", rs: "rust", kt: "kotlin", cs: "csharp", md: "markdown", txt: "plaintext", text: "plaintext" };
+const MIME = { html: "text/html", css: "text/css", js: "text/javascript", mjs: "text/javascript", json: "application/json",
+  svg: "image/svg+xml", xml: "application/xml", md: "text/markdown", csv: "text/csv" };
+
+/**
+ * What a code fence's info string says: "html index.html" -> {lang: "html", file: "index.html"};
+ * "index.html" -> {lang: "html", file: "index.html"}; "python" -> {lang: "python", file: "code.py"};
+ * "" -> {lang: "", file: "code.txt"}. File names keep only safe characters (no folders).
+ */
+export function codeInfo(info) {
+  const words = String(info || "").trim().split(/\s+/).filter(Boolean);
+  let lang = "", file = "";
+  for (const w of words) {
+    if (!file && /^[\w.-]+\.[A-Za-z0-9]+$/.test(w) && (lang || words.length === 1)) file = w;
+    else if (!lang) lang = w.toLowerCase();
+  }
+  if (!lang && file) lang = file.split(".").pop().toLowerCase();
+  if (file) file = file.replace(/[^\w.-]/g, "_").replace(/^\.+/, "").slice(0, 80);
+  if (!file) {
+    const ext = EXT[lang] || "txt";
+    file = ext === "Dockerfile" ? "Dockerfile" : "code." + ext;
+  }
+  return { lang, file };
+}
+
+function escHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+/** Coloured code (highlight.js, window.hljs) as HTML; plain escaped text when the language is unknown. */
+export function highlight(code, lang, hljs = globalThis.hljs) {
+  const name = ALIAS[lang] || lang;
+  if (hljs && name && hljs.getLanguage(name)) {
+    try { return hljs.highlight(code, { language: name, ignoreIllegals: true }).value; } catch { /* plain below */ }
+  }
+  return escHtml(code);
+}
+
+/**
+ * Teach a markdown-it instance Dewdrop's code blocks: coloured, with a head that names the file and
+ * has Copy and Download buttons (codeActions() makes them work):
+ *   <div class="code"><div class="code-head"><span class="lang">FILE</span>
+ *   <button type="button" data-copy-code>Copy</button><button type="button" data-download="FILE">Download</button></div>
+ *   <pre><code class="hljs language-LANG">…</code></pre></div>
+ */
+export function codeBlocks(md, hljs = globalThis.hljs) {
+  md.renderer.rules.fence = (tokens, idx) => {
+    const t = tokens[idx];
+    const { lang, file } = codeInfo(t.info);
+    const cls = lang ? ` class="hljs language-${escHtml(lang)}"` : ' class="hljs"';
+    return `<div class="code"><div class="code-head"><span class="lang">${escHtml(file)}</span>` +
+      `<button type="button" data-copy-code>Copy</button><button type="button" data-download="${escHtml(file)}">Download</button></div>` +
+      `<pre><code${cls}>${highlight(t.content, lang, hljs)}</code></pre></div>\n`;
+  };
+  return md;
+}
+
+/** One click handler on `root` for every code block's Copy and Download buttons. */
+export function codeActions(root) {
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-copy-code],[data-download]");
+    if (!btn) return;
+    const code = btn.closest(".code")?.querySelector("pre code")?.textContent ?? "";
+    if (btn.hasAttribute("data-copy-code")) {
+      navigator.clipboard?.writeText(code);
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      return;
+    }
+    const name = btn.dataset.download || "code.txt";
+    const ext = name.split(".").pop().toLowerCase();
+    const url = URL.createObjectURL(new Blob([code], { type: (MIME[ext] || "text/plain") + ";charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}

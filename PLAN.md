@@ -1,89 +1,61 @@
-# PLAN: Dewdrop passkeys
+# PLAN: Dewdrop round 2
 
-Sign in to Dewdrop with Face ID, Touch ID or a phone (passkeys, chat/SPEC.md §10). Small steps:
-every task names one file and one or two functions; the steps are in that function's docstring or
-TODO comment (`grep -n "task Pxx" <file>`), or in the "Pxx details" below. Each task has its own test.
+Chat fixes and folders (chat/SPEC.md §11): the reading phase, every chunk on screen, a stop button,
+folders in the sidebar, coloured code you can download, and a page that keeps your place while you
+read. Small steps: every task names one file and one or two functions; the steps are in that
+function's docstring or TODO comment (`grep -n "task Rxx" <file>`). Each task has its own test.
 
 Rules for every task:
 - Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
 - Only change what the task names. Don't refactor, rename or move other code.
-- Never read a whole large file (`chat/coder/app.py` is ~600 lines): `grep -n`, then `sed -n 'a,bp'`.
-- Python: only the packages in `chat/requirements.txt` (the `webauthn` package does the crypto).
-- Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/`, `chat/coder/templates/`,
-  `Makefile`, `docs/`. The pages and browser code for passkeys are already written.
+- Never read a whole large file (`chat/coder/app.py` is ~800 lines, `chat/static/js/app.js` ~450):
+  `grep -n`, then `sed -n 'a,bp'`.
+- Python: only the packages in `chat/requirements.txt`.
+- Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/stream.js`, `chat/static/vendor/`,
+  `chat/coder/templates/`, `Makefile`, `docs/`. The look, the templates and stream.js are already done.
 
-- [x] P01: In chat/coder/db.py add the passkey tables and methods, and in chat/coder/config.py the settings RP_ID and ORIGIN (see "P01 details")
-  accept: make chat-test K="test_step_passkeys and test_db_and_settings"
-- [x] P02: In chat/coder/passkeys.py fill in `user_handle` and `registration_options` as their docstrings say
-  accept: make chat-test K="test_step_passkeys and test_registration_options"
-- [x] P03: In chat/coder/passkeys.py fill in `verify_registration` as its docstring says
-  accept: make chat-test K="test_step_passkeys and test_verify_registration"
-- [x] P04: In chat/coder/passkeys.py fill in `authentication_options` and `credential_id` as their docstrings say
-  accept: make chat-test K="test_step_passkeys and test_authentication_options"
-- [x] P05: In chat/coder/passkeys.py fill in `verify_authentication` as its docstring says
-  accept: make chat-test K="test_step_passkeys"
-- [x] P06: In chat/coder/app.py add the passkey registration, list and delete routes (see "P06 details")
-  accept: make chat-test K="TestPasskeyRegister"
-- [x] P07: In chat/coder/app.py add the passkey sign-in routes (see "P07 details")
-  accept: make chat-test K="TestPasskeyLogin and not account"
-- [x] P08: In chat/coder/app.py add the page GET /account (see "P08 details")
+- [x] R01: In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says
+  accept: make chat-test K="test_step_round2 and (folders_db or migration)"
+- [x] R02: In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`)
+  accept: make chat-test K="test_step_round2 and prompt_names_files"
+- [x] R03: In chat/coder/answer.py do `TODO (task R03)` in the `run_answer` docstring (reading phase, every chunk as a delta, title in done)
+  accept: make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"
+- [x] R04: In chat/coder/answer.py do `TODO (task R04)` in the `run_answer` docstring (the stop event)
+  accept: make chat-test K="test_step_answer or (test_step_round2 and stop_event)"
+- [x] R05: In chat/coder/answer.py do `TODO (task R05)` in the `run_answer` docstring (store the partial answer when the browser goes away)
+  accept: make chat-test K="test_step_answer or test_step_round2"
+- [x] R06: In chat/coder/app.py rewrite `api_update_chat` as its docstring says (`TODO (task R06)`)
+  accept: make chat-test K="TestFolders and move_chats or test_crud_and_isolation"
+- [x] R07: In chat/coder/app.py add the four folder routes (`TODO (task R07)`)
+  accept: make chat-test K="TestFolders"
+- [x] R08: In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`)
+  accept: make chat-test K="TestRound2Answer and (stop_endpoint or done_has_title)"
+- [x] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
   accept: make chat-test
-- [x] P09: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only the app code in chat/coder/
-  accept: make chat-test && make chat-browser-test
-- [x] P10: Add a "## Passkeys" section to chat/README.md (see "P10 details")
-  accept: grep -q "## Passkeys" chat/README.md && grep -q "RP_ID" chat/README.md && make chat-test
+- [x] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [x] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [x] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [x] R13: In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [x] R14: In chat/static/js/app.js fill in `setupSidebar` (`TODO (task R14)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [x] R15: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/static/js/app.js or chat/coder/ (see "R15 details")
+  accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
+- [x] R16: Add a "## Round 2" section to chat/README.md (see "R16 details")
+  accept: grep -q "## Round 2" chat/README.md && grep -q "folders" chat/README.md && make chat-test
 
-## P01 details
-In `chat/coder/db.py` follow the `TODO (task P01)` comment (`grep -n "task P01" chat/coder/db.py`).
-In `chat/coder/config.py` add two settings like the others (add them to `__slots__` too):
-`RP_ID` (default `"localhost"`) and `ORIGIN` (default `"http://localhost:8090"`).
+## R15 details
+`make chat-browser-test` drives a real headless Chromium against the app (chat/tests/browser/run.mjs,
+fake model in serve.py: a message with "long" gets a long answer, "html" gets a code file). It prints
+one `ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run again, repeat. The checks
+look at the hooks in chat/SPEC.md §11.5; the reference markup is in the TODO docstrings of app.js.
+Console errors on the page also fail a check: read them in the FAIL line.
 
-## P06 details
-Add inside `create_app` in `chat/coder/app.py`, next to the other `/api/` routes. Import
-`from . import passkeys` at the top (with the other `from . import` line) and use `hashlib`.
-Helper (inside `create_app`): `_wa_set(resp, key)` sets cookie `coder_wa` = key with `httponly=True,
-samesite="lax", path="/api/passkeys", max_age=300, secure=app.state.settings.SECURE_COOKIES`.
-Helper: `_wa_take(request, kind)`: `key = request.cookies.get("coder_wa")`; none -> `None`; else
-`return app.state.db.take_challenge(hashlib.sha256(key.encode()).hexdigest(), kind)`.
-1. `POST /api/passkeys/register/options`: session via `_require_session(request, app.state.db)`
-   (return it if it's a Response); `existing = [bytes(p["credential_id"]) for p in db.list_passkeys(username)]`;
-   `js, challenge = passkeys.registration_options(settings, username, existing)`;
-   `key = secrets.token_urlsafe(32)`; `db.put_challenge(sha256(key), "register", username, challenge)`;
-   return `Response(js, media_type="application/json")` with `_wa_set(resp, key)`.
-2. `POST /api/passkeys/register/verify`: session; body = request JSON (`{}` on error);
-   `got = _wa_take(request, "register")`; if not got, or `got[1] != username`, or
-   `body.get("credential")` is not a dict -> 400 `{"error": "That passkey could not be added. Try again."}`.
-   `cred_id, public_key, count = passkeys.verify_registration(settings, body["credential"], got[0])`
-   (PasskeyError -> the same 400). Name = `(str(body.get("name") or "").strip() or "Passkey")[:60]`.
-   `return JSONResponse(db.add_passkey(username, cred_id, public_key, count, name), status_code=201)`.
-3. `GET /api/passkeys`: session; `[{k: p[k] for k in ("id", "name", "created", "last_used")} for p in db.list_passkeys(username)]`.
-4. `DELETE /api/passkeys/{passkey_id}` (int): session; `db.delete_passkey(passkey_id, username)`
-   False -> 404 `{"error": "not found"}`; else `Response(status_code=204)`.
-
-## P07 details
-1. `POST /api/passkeys/login/options` (no session): `js, challenge = passkeys.authentication_options(settings)`;
-   new key; `db.put_challenge(sha256(key), "login", None, challenge)`; return the JSON with `_wa_set`.
-2. `POST /api/passkeys/login/verify` (no session), in this order:
-   - `ipkey = f"ip:{request.client.host if request.client else 'unknown'}"`;
-     `db.has_recent_failures(ipkey)` -> 429 `{"error": "Too many tries. Wait 15 minutes."}`
-   - body JSON (`{}` on error); `got = _wa_take(request, "login")`; `cred = body.get("credential")`
-   - in one `try`: no `got` or `cred` not a dict -> raise `passkeys.PasskeyError`;
-     `pk = db.get_passkey(passkeys.credential_id(cred))`, None -> raise PasskeyError;
-     `count = passkeys.verify_authentication(settings, cred, got[0], bytes(pk["public_key"]), pk["sign_count"])`
-   - `except passkeys.PasskeyError`: `db.record_login_failure(ipkey)` and return 401
-     `{"error": "That passkey did not work."}`
-   - `user = db.get_user(pk["username"])` (None -> the same 401); `db.touch_passkey(pk["id"], count)`;
-     `db.set_last_login(username)`; a new session exactly like `/api/login` does
-     (`secrets.token_urlsafe(32)`, `db.create_session`, the `coder_session` cookie with the same flags);
-     return `{"username", "rights": user["rights"]}`.
-
-## P08 details
-`GET /account` (HTML): no session -> `RedirectResponse("/login", status_code=303)`; else
-`templates.TemplateResponse(request, "account.html", {"me": {"username": username}})`
-(the template already exists).
-
-## P10 details
-Append to `chat/README.md` a section `## Passkeys` (4–6 lines): what they are (sign in with Face
-ID, Touch ID or a phone; the password stays as a backup), where you add one (`/account`, or right
-after accepting an invite), and that production needs the settings `RP_ID=dewdrop.cedricschippers.dev`
-and `ORIGIN=https://dewdrop.cedricschippers.dev` (passkeys only work on that exact domain).
+## R16 details
+Append to `chat/README.md` a section `## Round 2` (5–8 lines): the reading phase, the stop button
+(and that the partial answer is kept), folders (the ⋯ menu, drag a chat onto a folder), coloured
+code blocks with Copy and Download (the model puts the file name on the fence line), and that the
+page keeps your place when you scroll up while it writes ("↓ Latest" brings you back).
