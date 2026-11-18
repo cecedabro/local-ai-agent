@@ -475,6 +475,13 @@ class DB:
             conn.execute("UPDATE users SET last_login = ? WHERE username = ?", (_now_iso(), username))
             conn.commit()
 
+    # TODO (task S01):
+    #   - add_message_at(self, chat_id, role, content, created) -> int: like add_message, but with the
+    #     given `created` (ISO string) instead of now; tokens and tps NULL. Returns the new id.
+    #   - reset_chat_usage(self, chat_id) -> None: set last_prompt_tokens and last_completion_tokens
+    #     to NULL for that chat.
+    #   - in get_messages and get_messages_for_completion: ORDER BY m.created, m.id (not only created).
+
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
         with self._lock:

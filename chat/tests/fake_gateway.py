@@ -41,7 +41,8 @@ class FakeGateway:
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(n) or b"{}")
                 with gw._lock:
-                    gw.requests.append({"path": self.path, "headers": dict(self.headers), "body": body})
+                    gw.requests.append({"path": self.path, "body": body,
+                                         "headers": {k.title(): v for k, v in self.headers.items()}})
                     busy = gw.busy_left > 0
                     if busy:
                         gw.busy_left -= 1

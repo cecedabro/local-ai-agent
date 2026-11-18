@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Join · Coder{% endblock %}
+{% block body %}
+<body class="login">
+<div class="card">
+  <span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>
+  <h1>Welcome to Coder</h1>
+  <p class="muted small">Pick a username and a password (at least 10 characters).</p>
+  <form id="invite-form" autocomplete="on">
+    <input name="username" placeholder="Username (lowercase)" autocomplete="username" required>
+    <input name="password" type="password" placeholder="Password" autocomplete="new-password" minlength="10" required>
+    <button class="primary">Create my account</button>
+    <p id="invite-error" class="small bad" role="alert"></p>
+  </form>
+</div>
+<script src="/static/js/invite.js"></script>
+</body>
+{% endblock %}

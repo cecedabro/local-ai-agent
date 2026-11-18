@@ -11,46 +11,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
 
+from . import answer, context, gateway
 from .config import Settings
 from .db import DB
-
-_SCRIPT_RE = r'<script src="{static_prefix}js/{name}" defer></script>'
-
-TITLES: dict[str, str] = {
-    "": "chat",
-    "login": "Login",
-    "invites": "Invites",
-}
-
-
-def _html(title: str, extra: str = "", body_cls: str = "",
-          extra_head: str = "", extra_body: str = "") -> str:
-    page_title = f"Coder · {title}" if title else "Coder"
-    return f"""\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{page_title}</title>
-<link rel="stylesheet" href="{static_prefix}css/style.css">
-{extra_head}
-</head>
-<body class="{'app-dark' if os.getenv('THEME') == 'dark' else ''}{(' ' + body_cls) if body_cls else ''}">
-<main>
-{extra_body}
-</main>
-{extra}
-</body>
-</html>"""
-
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -73,9 +41,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
     """
     from .config import Settings
     settings_obj = Settings(settings)
-
-    global static_prefix
-    static_prefix = "/static/"
 
     app = FastAPI(title="Coder Chat", version="0.1.0", lifespan=_lifespan)
     app.state.settings = settings_obj
@@ -119,18 +84,24 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     #  Pages                                                              #
     # ------------------------------------------------------------------ #
+    templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if session:
-            username, user = session
-            chats = app.state.db.list_chats(username)
-            return HTMLResponse(_render_index(username, user, chats, str(static_prefix), app.state.settings))
-        return RedirectResponse("/login", status_code=303)
+    async def index(request: Request):
+        s = _session_from_cookie(request, app.state.db)
+        if not s:
+            return RedirectResponse("/login", status_code=303)
+        username, user = s
+        me = {"username": username, "rights": sorted(user.get("rights", []))}
+        return templates.TemplateResponse(request, "chat.html", {"me": me, "settings": app.state.settings})
 
     @app.get("/login", response_class=HTMLResponse)
-    async def login_page(request: Request) -> HTMLResponse:
-        return HTMLResponse(_render_login_page(str(static_prefix)))
+    async def login_page(request: Request):
+        return templates.TemplateResponse(request, "login.html", {})
+
+    @app.get("/invite", response_class=HTMLResponse)
+    async def invite_page(request: Request):
+        return templates.TemplateResponse(request, "invite.html", {})
 
     async def _handle_login(request: Request) -> Any:
         # Try JSON body first, fall back to form
@@ -166,23 +137,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
         app.state.db.create_session(username, session_id)
 
         return session_id, username, user
-
-    @app.post("/login")
-    async def login_submit(request: Request) -> Any:
-        result = await _handle_login(request)
-        if isinstance(result, Response):
-            return result
-        session_id, username, user = result
-        resp = RedirectResponse("/", status_code=303)
-        resp.set_cookie(
-            "coder_session", session_id,
-            httponly=True,
-            samesite="lax",
-            path="/",
-            max_age=30 * 24 * 3600,
-            secure=app.state.settings.SECURE_COOKIES,
-        )
-        return resp
 
     @app.post("/api/login")
     async def api_login(request: Request) -> JSONResponse:
@@ -246,78 +200,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
         invites = app.state.db.list_invites()
         return JSONResponse(invites)
 
-    @app.post("/logout")
-    async def logout(request: Request) -> Response:
-        session = _session_from_cookie(request, app.state.db)
-        if session:
-            _, username = session
-            app.state.db.delete_user_sessions(username)
-        resp = RedirectResponse("/login", status_code=303)
-        resp.delete_cookie("coder_session", path="/")
-        return resp
-
-    @app.get("/invites", response_class=HTMLResponse)
-    async def invites_page(request: Request) -> HTMLResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return RedirectResponse("/login")
-        username, user = session
-        if "admin" not in user.get("rights", []):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        invites = app.state.db.list_invites()
-        users = app.state.db.list_users()
-        return HTMLResponse(_render_invites(username, user, invites, users, str(static_prefix)))
-
-    @app.post("/invites/create")
-    async def create_invite(request: Request) -> Any:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return RedirectResponse("/login")
-        username, user = session
-        if "admin" not in user.get("rights", []):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        form = await request.form()
-        rights_str = (form.get("rights") or "chat").split(",")
-        note = (form.get("note") or "").strip() or None
-        invite = app.state.db.create_invite(rights_str, note)
-        return JSONResponse({"token": invite["token"], "rights": invite["rights"]})
-
-    @app.post("/invites/delete/{invite_id}")
-    async def delete_invite_route(request: Request, invite_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        username, user = session
-        if "admin" not in user.get("rights", []):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        app.state.db.delete_invite(invite_id)
-        return JSONResponse({"ok": True})
-
-    @app.post("/user/delete/{username}")
-    async def delete_user_route(request: Request, username: str) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        admin_user = session[0]
-        if admin_user == username:
-            return JSONResponse({"error": "cannot delete yourself"}, status_code=400)
-        app.state.db.delete_user(username)
-        return JSONResponse({"ok": True})
-
-    @app.post("/user/theme")
-    async def update_theme(request: Request) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        form = await request.form()
-        theme = (form.get("theme") or "auto").strip()
-        app.state.db.update_user_theme(username, theme)
-        return JSONResponse({"ok": True})
-
-    # ------------------------------------------------------------------ #
-    #  Chat CRUD API                                                      #
-    # ------------------------------------------------------------------ #
     @app.get("/api/chats")
     async def api_chats(request: Request) -> JSONResponse:
         r = _require_session_and_csrf(request, app.state.db)
@@ -395,34 +277,6 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     #  Messages API                                                       #
     # ------------------------------------------------------------------ #
-    @app.get("/api/chat/{chat_id}/messages")
-    async def api_messages(request: Request, chat_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        messages = app.state.db.get_messages(chat_id, username)
-        return JSONResponse(messages)
-
-    @app.post("/api/chat/{chat_id}/message")
-    async def api_add_message(request: Request, chat_id: int) -> JSONResponse:
-        session = _session_from_cookie(request, app.state.db)
-        if not session:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, _ = session
-        if not app.state.db.get_chat(chat_id, username):
-            return JSONResponse({"error": "not found"}, status_code=404)
-        form = await request.form()
-        role = (form.get("role") or "assistant").strip()
-        content = form.get("content") or ""
-        tokens = int(form["tokens"]) if form.get("tokens") else None
-        tps = float(form["tps"]) if form.get("tps") else None
-        msg_id = app.state.db.add_message(chat_id, role, content, tokens, tps)
-        return JSONResponse({"id": msg_id}, status_code=201)
-
-    # ------------------------------------------------------------------ #
-    #  File API                                                           #
-    # ------------------------------------------------------------------ #
     @app.post("/api/files")
     async def api_upload_file(request: Request) -> Response:
         session = _session_from_cookie(request, app.state.db)
@@ -473,124 +327,34 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ── POST /api/chats/{chat_id}/messages (streaming) ─────────────────────
 
     @app.post("/api/chats/{chat_id}/messages")
-    async def api_create_message(chat_id: str, request: Request) -> Response:
-        r = _require_session_and_csrf(request, app.state.db)
-        if isinstance(r, Response):
-            return r
-        session = r
-        username, user = session
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        content = body.get("content", "")
-        file_ids = body.get("files", [])
-        if not isinstance(file_ids, list):
-            file_ids = []
-        if not content and not file_ids:
-            return JSONResponse({"error": "prompt required"}, status_code=400)
-        chat = _get_chat_or_404(app.state.db, chat_id, username)
-        if not _validate_user(username, user):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        if file_ids:
-            file_ids = [int(fid) for fid in file_ids]
-            for fid in file_ids:
-                f = app.state.db.get_file(fid, username)
-                if f is None:
-                    return JSONResponse({"error": "file not found or not yours"}, status_code=400)
-                fc = app.state.db.get_file_content(fid)
-                if fc is not None:
-                    try:
-                        text = fc.decode("utf-8")
-                    except UnicodeDecodeError:
-                        text = ""
-                    content = content + f"\n\nFile {f['name']}:\n```\n{text}\n```"
-        if len(content) > 20000:
-            return JSONResponse({"error": "message too long"}, status_code=413)
-        try:
-            msg_id = app.state.db.add_message(chat_id, "user", content)
-        except Exception:
-            return JSONResponse({"error": "failed"}, status_code=500)
-        if file_ids:
-            app.state.db.add_message_files(msg_id, file_ids)
-        gateway_url = app.state.settings.GATEWAY_URL
-        gateway_key = app.state.settings.GATEWAY_KEY
-        messages = app.state.db.get_messages_for_completion(chat_id)
-        headers = {"Content-Type": "application/json"}
-        if gateway_key:
-            headers["Authorization"] = f"Bearer {gateway_key}"
-        stream_payload = {"model": "coder", "messages": messages, "stream": True}
-        try:
-            resp = requests.post(
-                f"{gateway_url}/chat/completions",
-                json=stream_payload, headers=headers, timeout=120, stream=True,
-            )
-            resp.raise_for_status()
-        except requests.RequestException:
-            app.state.db.add_message(chat_id, "assistant", "Sorry, I'm having trouble connecting right now.")
-            return JSONResponse({"error": "gateway error"}, status_code=502)
+    async def api_create_message(chat_id: int, request: Request) -> Response:
+        """Send a message and stream the answer (SPEC §5).
 
-        def event_stream():
-            usage_written = False
-            try:
-                for line in resp.iter_lines():
-                    if not line:
-                        continue
-                    text = line.decode("utf-8")
-                    if text.startswith("data: "):
-                        data_str = text[6:]
-                        if data_str.strip() == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            break
-                        try:
-                            chunk = json.loads(data_str)
-                            choice = chunk.get("choices", [{}])[0]
-                            delta = choice.get("delta", {})
-                            obj = {"object": "chat.completion.chunk", "choices": []}
-                            if delta:
-                                obj["choices"] = [{"index": 0, "delta": delta}]
-                            if chunk.get("usage"):
-                                obj["usage"] = chunk["usage"]
-                                usage_written = True
-                            yield "data: " + json.dumps(obj) + "\n\n"
-                        except ValueError:
-                            continue
-                if not usage_written:
-                    yield "data: " + json.dumps({"usage": {"prompt_tokens": 50, "completion_tokens": 2}}) + "\n\n"
-                    yield "data: [DONE]\n\n"
-            except Exception:
-                pass
-            finally:
-                try:
-                    full_text = _extract_ai_response(chat_id)
-                    app.state.db.update_context(chat_id, full_text)
-                    app.state.db.set_last_activity(chat_id)
-                except Exception:
-                    pass
-
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        TODO (task S12). In this order:
+          1. session: r = _require_session(request, db); if it is a Response, return it
+          2. chat = db.get_chat(chat_id, username); None -> 404 {"error": "Chat not found."}
+          3. body = await request.json() (on error: {}); content = str(body.get("content") or "");
+             file_ids = body.get("files") or []
+          4. not content.strip() and not file_ids -> 400 {"error": "Type a message first."}
+             len(content) > 20000 -> 413 {"error": "That message is too long."}
+          5. (task S13 adds the files here)
+          6. db.add_message(chat_id, "user", content)
+          7. return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
+                                      media_type="text/event-stream")
+        """
+        return JSONResponse({"error": "not built yet"}, status_code=501)
 
     # ── POST /api/chats/{chat_id}/compress ─────────────────────────────────
 
     @app.post("/api/chats/{chat_id}/compress")
-    async def api_compress(chat_id: str, request: Request) -> Response:
-        r = _require_session_and_csrf(request, app.state.db)
-        if isinstance(r, Response):
-            return r
-        session = r
-        username = session[0]
-        chat = _get_chat_or_404(app.state.db, chat_id, username)
-        if app.state.db.get_context(chat_id):
-            return JSONResponse({"ok": True})
-        messages = app.state.db.get_messages_for_completion(chat_id)
-        if len(messages) < 2:
-            return JSONResponse({"ok": True})
-        summary_content = "CONVERSATION SUMMARY: "
-        for msg in messages:
-            if msg["role"] in ("user", "assistant"):
-                summary_content += msg["role"] + ": " + (msg["content"][:200] if len(msg["content"]) > 200 else msg["content"]) + " "
-        app.state.db.add_context(chat_id, summary_content)
-        return JSONResponse({"ok": True})
+    async def api_compress(chat_id: int, request: Request) -> Response:
+        """Compress now (SPEC §6).
+
+        TODO (task S14). Session (like above), chat or 404, then
+        await context.compress(db, chat, settings, gateway.complete), reload the chat with db.get_chat,
+        and return {"context": context.info(db, chat, settings)}.
+        """
+        return JSONResponse({"error": "not built yet"}, status_code=501)
 
     # ── POST /api/invites ─────────────────────────────────────────────────
 
@@ -720,11 +484,11 @@ def create_app(settings: dict | None = None) -> FastAPI:
     async def admin_page(request: Request) -> HTMLResponse:
         session = _session_from_cookie(request, app.state.db)
         if not session:
-            return RedirectResponse("/login")
+            return RedirectResponse("/login", status_code=303)
         username, user = session
         if not _is_admin(user):
-            return HTMLResponse("<html><body><h1>403 Forbidden</h1></body></html>", status_code=403)
-        return HTMLResponse("<html><body><h1>Admin Panel</h1></body></html>")
+            return HTMLResponse("<h1>403 Forbidden</h1>", status_code=403)
+        return templates.TemplateResponse(request, "admin.html", {})
 
     return app
 
@@ -799,147 +563,3 @@ def _validate_user(username: str, user: dict):
     if user.get("username") != username:
         return JSONResponse({"error": "forbidden"}, status_code=403)
     return True
-
-
-def _render_index(username: str, user: dict, chats: list, static_prefix: str, settings) -> str:
-    model_label = settings.MODEL_LABEL if settings else "Qwen3.6 35B-A3B"
-    hw_label = settings.HARDWARE_LABEL if settings else "RTX 3080 Ti"
-    repo_url = settings.REPO_URL if settings else "https://github.com/cecedabro/local-ai-agent"
-    return f"""\
-<div class="flex">
-<aside class="side">
-  <div class="brand">Coder</div>
-  <div class="sidebar-user">{username}</div>
-  <form action="/logout" method="post" style="margin-top:8px;">
-    <button class="btn-small">Logout</button>
-  </form>
-  <hr>
-  <div class="sidebar-title">Chats</div>
-  <div id="chat-list">
-    { ''.join(f'<div class="chat-item" data-id="{c["id"]}">{c["title"]}</div>' for c in chats) }
-  </div>
-  <div style="margin-top:8px;">
-    <a href="/invites" class="btn-small">Invites</a>
-  </div>
-</aside>
-<div class="main">
-  <div id="chat-area" class="chat-area">
-    <div id="welcome" class="welcome">
-      <h1>Hello, {username}</h1>
-      <p>{_get_welcome_message()}</p>
-    </div>
-    <div id="messages"></div>
-    <div class="ctx"></div>
-    <div id="input-bar" class="composer">
-      <form id="chat-form">
-        <textarea id="prompt" placeholder="Message Coder..." rows="2"></textarea>
-        <div class="input-row">
-          <button type="submit" class="btn-primary">Send</button>
-          <label class="btn-secondary">
-            Attach
-            <input type="file" name="file" style="display:none;">
-          </label>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-<div class="orb"></div>
-<div class="footer">
-  <span>{model_label}</span> · <span>{hw_label}</span>
-  · <a href="{repo_url}" target="_blank">GitHub</a>
-</div>
-<link rel="stylesheet" href="{static_prefix}css/tokens.css">
-<script src="{static_prefix}js/theme.js" defer></script>
-<script src="{static_prefix}vendor/markdown-it.min.js" defer></script>
-<script src="{static_prefix}js/app.js" defer></script>
-</div>"""
-
-
-def _render_login_page(static_prefix: str) -> str:
-    return f"""\
-<div class="login-box">
-  <h1>Coder</h1>
-  <p>Sign in to chat</p>
-  <form action="/login" method="post">
-    <input type="text" name="username" placeholder="Username" required autofocus>
-    <input type="password" name="password" placeholder="Password" required>
-    <button type="submit" class="btn-primary">Sign in</button>
-  </form>
-</div>"""
-
-
-def _render_invites(username: str, user: dict, invites: list, users: list, static_prefix: str) -> str:
-    invite_rows = []
-    for i in invites:
-        rights = ",".join(i["rights"])
-        note = i["note"] or ""
-        used = i["used_by"] or ""
-        invite_rows.append(
-            '<tr><td>{id}</td><td>{rights}</td><td>{note}</td><td>{used}</td>'
-            '<td><button data-invite-id="{id}">Delete</button></td></tr>'.format(
-                id=i["id"], rights=rights, note=note, used=used))
-
-    user_rows = []
-    for u in users:
-        rights = ",".join(u["rights"])
-        if u["username"] == username:
-            action_btn = "-"
-        else:
-            action_btn = '<button data-user="' + u["username"] + '">Delete</button>'
-        user_rows.append(
-            '<tr><td>{user}</td><td>{rights}</td><td>{created}</td><td>{action}</td></tr>'.format(
-                user=u["username"], rights=rights, created=u["created"], action=action_btn))
-
-    return """\
-<div class="flex">
-<aside class="sidebar">
-  <div class="brand">Coder</div>
-  <div class="sidebar-user">{username}</div>
-  <form action="/logout" method="post" style="margin-top:8px;">
-    <button class="btn-small">Logout</button>
-  </form>
-  <a href="/" class="btn-small">Back to Chat</a>
-  <hr>
-</aside>
-<div class="main-area">
-  <h2>Invites</h2>
-  <details id="new-invite">
-    <summary>Create invite</summary>
-    <form id="invite-form">
-      <input type="text" name="rights" value="chat" placeholder="Rights (chat,admin)">
-      <input type="text" name="note" placeholder="Note">
-      <button type="submit" class="btn-primary">Create</button>
-    </form>
-  </details>
-  <table>
-    <thead><tr><th>Token</th><th>Rights</th><th>Note</th><th>Used by</th><th></th></tr></thead>
-    <tbody>
-      {invite_rows}
-    </tbody>
-  </table>
-  <h2>Users</h2>
-  <table>
-    <thead><tr><th>Username</th><th>Rights</th><th>Created</th><th></th></tr></thead>
-    <tbody>
-      {user_rows}
-    </tbody>
-  </table>
-</div>
-</div>""".format(username=username, invite_rows="".join(invite_rows), user_rows="".join(user_rows))
-
-
-def _get_welcome_message() -> str:
-    """Return a dynamic welcome message based on the hour."""
-    from datetime import datetime
-    hour = datetime.now().hour
-    if hour < 6:
-        return "You're up late. What can I help with?"
-    if hour < 12:
-        return "Good morning! Ready to get started?"
-    if hour < 18:
-        return "Good afternoon! How can I assist today?"
-    return "Good evening! What would you like to work on?"
-
-
-static_prefix = "/static/"

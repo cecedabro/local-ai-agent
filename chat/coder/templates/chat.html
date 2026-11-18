@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block body %}
+<body class="app" data-username="{{ me.username }}" data-rights="{{ me.rights | join(',') }}">
+<aside class="side">
+  <div class="brand"><span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span><b>Coder</b></div>
+  <button class="primary newchat" id="new-chat">+ New chat</button>
+  <input class="search" id="search" placeholder="Search chats" aria-label="Search chats">
+  <nav class="convs" id="convs" aria-label="Chats"></nav>
+  <div class="me">
+    <span class="avatar">{{ me.username[:1] | upper }}</span>
+    <div><b>{{ me.username }}</b><br><small>{{ me.rights | join(' · ') }}</small></div>
+    {% if 'admin' in me.rights %}<a class="iconbtn" href="/admin" title="People">⚙</a>{% endif %}
+    <button class="iconbtn" id="logout" title="Sign out">⎋</button>
+  </div>
+</aside>
+<div class="main">
+  <div class="top">
+    <button class="iconbtn menu" id="menu" title="Chats">☰</button>
+    <div class="title" id="chat-title">New chat</div>
+    <button class="profile gen" id="profile" data-profile="general"><span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span><span id="profile-name">General</span></button>
+    <span id="model" class="badge ok">model ready</span>
+    <div class="seg four icons theme" role="radiogroup" aria-label="Theme">
+      <input type="radio" name="theme" id="th-auto" value="auto"><label for="th-auto" title="Auto">◐</label>
+      <input type="radio" name="theme" id="th-light" value="light"><label for="th-light" title="Light">☀</label>
+      <input type="radio" name="theme" id="th-dark" value="dark"><label for="th-dark" title="Dark">☾</label>
+      <input type="radio" name="theme" id="th-blossom" value="blossom"><label for="th-blossom" title="Blossom">✿</label>
+      <span class="thumb"></span>
+    </div>
+  </div>
+  <div class="pmenu hidden" id="pmenu">
+    <button class="opt" data-profile="general"><b>General</b><small>Everyday questions, code, writing.</small></button>
+    {% if 'evidence' in me.rights or 'admin' in me.rights %}
+    <button class="opt" data-profile="evidence"><b>EvidenceHunt</b><small>Answers from medical evidence, with sources.</small></button>
+    {% endif %}
+  </div>
+  <div class="thread" id="thread"><div class="col" id="messages"></div></div>
+  <div class="dock">
+    <form class="composer" id="composer" autocomplete="off">
+      <div class="chips" id="file-chips"></div>
+      <textarea id="input" rows="1" placeholder="Message Coder…" aria-label="Message"></textarea>
+      <div class="cbar">
+        <label class="iconbtn" title="Attach a text file">📎<input type="file" id="file-input" hidden></label>
+        <div class="seg" role="radiogroup" aria-label="Answer mode">
+          <input type="radio" name="mode" id="mode-quick" value="quick" checked><label for="mode-quick">Quick</label>
+          <input type="radio" name="mode" id="mode-think" value="think"><label for="mode-think">Think</label>
+          <span class="thumb"></span>
+        </div>
+        <span class="spacer"></span>
+        <button class="primary send" id="send" title="Send">↑</button>
+      </div>
+    </form>
+    <div class="ctx"><span id="ctx-text">Context 0 / 0</span>
+      <div class="bar" title="At the line, older messages are summarised automatically"><i></i><span class="line"></span></div>
+      <button type="button" id="compress">Compress now</button></div>
+    <div class="hint">{{ settings.MODEL_LABEL }} {{ settings.HARDWARE_LABEL }} · <a href="{{ settings.REPO_URL }}" target="_blank" rel="noopener">how it works ↗</a></div>
+  </div>
+</div>
+<script src="/static/vendor/markdown-it.min.js"></script>
+<script type="module" src="/static/js/app.js"></script>
+</body>
+{% endblock %}

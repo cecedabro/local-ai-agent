@@ -1,0 +1,119 @@
+// The chat page (chat/coder/templates/chat.html). ES module. Hooks: chat/SPEC.md §9.
+// Each function below is one task (S19–S24). Fill in only the one your task names; keep the others.
+// Never set inline styles except the CSS variables named in SPEC §9 (style.setProperty("--x", v)).
+import { readEvents, Typewriter, groupChats, metaText } from "./stream.js";
+
+const $ = (sel) => document.querySelector(sel);
+const md = window.markdownit({ html: false, linkify: true, breaks: false });
+// links in answers open in a new tab
+const defaultLink = md.renderer.rules.link_open || ((t, i, o, e, s) => s.renderToken(t, i, o));
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet("target", "_blank");
+  tokens[idx].attrSet("rel", "noopener noreferrer");
+  return defaultLink(tokens, idx, options, env, self);
+};
+
+const state = { chats: [], chatId: null, profile: "general", files: [], busy: false };
+const ORB = '<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
+const EXAMPLES = {
+  general: ["Explain a bug in my code", "Plan my week", "Summarise a file"],
+  evidence: ["Helpt vitamine D tegen winterdepressie?", "Is ibuprofen veilig tijdens de zwangerschap?",
+             "Wat zegt het RIVM over griepprik bij 60-plussers?"],
+};
+
+/** fetch() for /api with the CSRF header; on 401 go to /login. Returns the Response. (done) */
+export async function api(path, opts = {}) {
+  const headers = { "X-Coder": "1", ...(opts.json !== undefined ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) };
+  const res = await fetch(path, { method: opts.method || "GET", headers,
+    body: opts.json !== undefined ? JSON.stringify(opts.json) : opts.body });
+  if (res.status === 401) { location.href = "/login"; throw new Error("signed out"); }
+  return res;
+}
+
+/** Escape text for innerHTML. (done) */
+export function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+/**
+ * TODO (task S19). Load GET /api/chats into state.chats and draw the sidebar #convs:
+ * for each group of groupChats(state.chats): an <h4> with the label, then per chat
+ * <div class="conv" data-id="ID"><span>TITLE (escaped)</span></div>, plus <em class="tag">EH</em>
+ * inside it when chat.profile === "evidence", and class "on" when chat.id === state.chatId.
+ * Filter by the #search input's value (case-insensitive substring of the title).
+ */
+async function loadChats() {}
+
+/**
+ * TODO (task S20). Open a chat: GET /api/chats/ID, set state.chatId and state.profile, set
+ * #chat-title to its title, and draw every message into #messages with drawMessage(m).
+ * With no messages draw the welcome screen: <div class="welcome">ORB<h2>Hi USERNAME, what's up?</h2>
+ * <div class="chips"> one <button> per EXAMPLES[profile] item </div></div> (USERNAME from
+ * document.body.dataset.username); clicking an example puts its text in #input and sends.
+ * Then call drawContext(chat.context) and loadChats() (to update the "on" marker).
+ */
+async function openChat(id) {}
+
+/**
+ * TODO (task S20). Return the element for one message and append it to #messages:
+ *   user:      <div class="u"> file chips (<span class="file">NAME</span>) + <div class="msg user">TEXT</div></div>
+ *              (TEXT = the content without the "\n\nFile NAME:\n```...```" blocks the server added;
+ *               cut the content at the first "\n\nFile " when the message has files)
+ *   assistant: <div class="ai"><div class="bub">md.render(content)</div>
+ *              <div class="meta2">ORB<span>metaText(tokens, tps)</span><button data-copy>Copy</button></div></div>
+ *   summary:   <div class="note summary">Earlier messages summarised</div>
+ * The Copy button copies the raw content with navigator.clipboard.writeText.
+ */
+function drawMessage(m) {}
+
+/**
+ * TODO (task S21). Send #input's text (and state.files ids) to POST /api/chats/ID/messages with
+ * {content, mode, files}. mode = the checked input[name=mode] value. If there is no open chat,
+ * first POST /api/chats {profile: state.profile} and use its id. Clear #input and the file chips.
+ * Draw the user message, then <div class="ai"><div class="phase">ORB<span class="phase-label"></span>
+ * </div><div class="bub"></div></div>. Read the response with readEvents(res, onEvent):
+ *   phase -> the phase orb's data-phase = data.phase, .phase-label text = data.label
+ *   delta -> typewriter.push(data.text); the Typewriter's onText renders md.render(shown) into .bub
+ *            and sets the orb's --fill to Math.min(0.95, shown.length / 1600)
+ *   done  -> await typewriter.finish(); remove the .phase element; append the .meta2 footer
+ *            (as drawMessage does); drawContext(data.context); loadChats()
+ *   error -> remove the .phase element; append <div class="note error">MESSAGE</div>
+ * Keep state.busy true while streaming (the send button is disabled meanwhile). Scroll #thread to
+ * the bottom as text arrives, unless the user scrolled up.
+ */
+async function send() {}
+
+/**
+ * TODO (task S22). Draw the context bar from {used, max, compress_at}: on ".ctx .bar > i" set
+ * --used = used / max (0..1), on ".ctx .line" set --at = compress_at / max, and #ctx-text =
+ * "Context 14.2k / 32k" (numbers >= 1000 as one decimal + "k", trailing ".0k" -> "k").
+ * #compress click: POST /api/chats/ID/compress, then openChat(ID) again.
+ */
+function drawContext(ctx) {}
+
+/**
+ * TODO (task S23). The file input #file-input: on change, POST each file as FormData field "file" to
+ * /api/files (use api() with body: formData and no json), push {id, name, size} to state.files and
+ * draw a chip <span class="file">NAME <button data-remove="ID">×</button></span> in #file-chips.
+ * 413 -> alert "File too big (max 200 KB)", 415 -> alert "Only text files". The × removes it again.
+ */
+function setupFiles() {}
+
+/**
+ * TODO (task S24). Wire everything once at start:
+ *   #composer submit and Enter (without Shift) in #input -> send(); Shift+Enter = new line
+ *   #new-chat -> state.chatId = null, clear #messages, draw the welcome screen (as openChat does)
+ *   #convs click on .conv -> openChat(id); double-click #chat-title -> prompt for a new title,
+ *     PATCH /api/chats/ID {title}, then loadChats(); #search input -> loadChats()
+ *   #profile click -> toggle #pmenu's "hidden" class; .opt click -> state.profile = its
+ *     data-profile, #profile-name text, start a new chat
+ *   the theme radios input[name=theme]: checked = the current document.documentElement.dataset.themePref,
+ *     change -> window.setTheme(value)
+ *   the mode radios: remember the choice in localStorage "coder-mode" and restore it
+ *   #logout -> POST /api/logout then location.href = "/login"
+ *   then setupFiles(), await loadChats(), and openChat(state.chats[0].id) if there is one,
+ *   else the welcome screen.
+ */
+async function start() {}
+
+start();

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}People · Coder{% endblock %}
+{% block body %}
+<body class="admin">
+<header><h1>People</h1><a href="/">← back to the chat</a></header>
+<main class="admin-main">
+  <section class="card">
+    <h2>New invite</h2>
+    <form id="invite-new">
+      <label class="chip"><input type="checkbox" name="rights" value="chat" checked> Chat</label>
+      <label class="chip"><input type="checkbox" name="rights" value="evidence"> EvidenceHunt</label>
+      <label class="chip"><input type="checkbox" name="rights" value="admin"> Admin</label>
+      <input name="note" placeholder="Who is it for?" maxlength="120">
+      <button class="primary">Create link</button>
+    </form>
+    <p id="invite-link" class="small"></p>
+  </section>
+  <section class="card"><h2>Invites</h2><ul id="invite-list" class="plain small"></ul></section>
+  <section class="card"><h2>Accounts</h2><ul id="user-list" class="plain small"></ul></section>
+</main>
+<script src="/static/js/admin.js"></script>
+</body>
+{% endblock %}
