@@ -86,6 +86,10 @@ def context_messages(db: Any, chat: dict) -> list[dict]:
     return out
 
 
+# TODO (task B11): build_messages uses the profile's own system prompt (SPEC §12.2):
+#   from . import profiles   (inside the function: profiles imports context)
+#   cfg = profiles.config(db, chat["username"], chat["profile"])
+#   return [{"role": "system", "content": profiles.system_prompt(cfg)}] + context_messages(db, chat)
 def build_messages(db: Any, chat: dict) -> list[dict]:
     """TODO (task S06). [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)."""
     return [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)

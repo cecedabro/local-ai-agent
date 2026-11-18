@@ -12,3 +12,5 @@ cbor2==6.3.0
 cryptography==50.0.2
 asn1crypto==1.5.1
 pyOpenSSL==26.4.0
+# documents for profiles (SPEC §12.1): text from PDFs, pure Python
+pypdf==5.1.0

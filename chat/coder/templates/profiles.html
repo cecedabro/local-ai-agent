@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Profiles · Dewdrop{% endblock %}
+{% block body %}
+<body class="admin profiles" data-username="{{ me.username }}">
+<header><h1>Profiles</h1><a href="/">← back to the chat</a></header>
+<main class="admin-main pf">
+  <div class="pf-tabs" role="tablist" aria-label="Profile">
+    {% for p in profiles %}<button type="button" role="tab" class="pf-tab" data-profile="{{ p.id }}">{{ p.name }}</button>{% endfor %}
+  </div>
+
+  <section class="card pf-budget" aria-live="polite">
+    <div class="pf-row"><h2>Context</h2><span id="budget-text" class="small muted"></span></div>
+    <div class="budget-bar" id="budget-bar"><span class="half" title="Keep the profile under this line"></span></div>
+    <ul class="budget-legend" id="budget-legend"></ul>
+    <p class="small muted" id="budget-hint"></p>
+  </section>
+
+  <section class="card">
+    <div class="pf-row"><h2>Instructions</h2><span id="pf-saved" class="small muted" role="status"></span></div>
+    <textarea id="pf-instructions" rows="4" maxlength="4000"
+      placeholder="How should this profile answer? For example: answer in Dutch, short, and always say how strong the evidence is."></textarea>
+    <label class="switch"><input type="checkbox" id="pf-web"><span class="track"></span>Search the web when it helps</label>
+  </section>
+
+  <section class="card">
+    <div class="pf-row"><h2>Sources</h2></div>
+    <p class="small muted">Where this profile looks things up. Each card has a note: tell the model how to use that source.</p>
+    <div id="pf-sources" class="pf-sources"></div>
+    <div class="pf-add">
+      <button type="button" id="add-pubmed">+ PubMed</button>
+      <button type="button" id="add-website">+ Website</button>
+      <label class="btn">+ Document<input type="file" id="add-doc" hidden accept=".pdf,.txt,.md,.html,.htm,.csv"></label>
+    </div>
+    <p id="pf-msg" class="small" role="status"></p>
+  </section>
+</main>
+<script type="module" src="/static/js/profiles.js"></script>
+</body>
+{% endblock %}

@@ -49,7 +49,7 @@ async def no_sleep(_):
 
 
 def stream_of(events, on_yield=None, closed=None):
-    async def stream(settings, messages, think):
+    async def stream(settings, messages, think, tools=None):
         try:
             for i, e in enumerate(events):
                 if on_yield:

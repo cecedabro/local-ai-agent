@@ -2,6 +2,7 @@
 // Protected (human-owned). Run: make chat-browser-test   (CHROME_BIN picks the browser)
 //   smoke:   sign in with the password, send a message, wait for the finished answer, no console errors
 //   round 2: phases, code blocks + download, scroll freeze + "Latest", stop, folders (chat/SPEC.md §11)
+//   round 3: the profiles page (notes, filters, a website, a document, the budget bar), sources under answers
 //   passkey: add a passkey on /account (Chromium's virtual authenticator), sign out, sign in with it
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -48,7 +49,8 @@ async function main() {
     if (j.method === "Runtime.exceptionThrown") errors.push(j.params.exceptionDetails.exception?.description || j.params.exceptionDetails.text);
     if (j.method === "Runtime.consoleAPICalled" && j.params.type === "error") errors.push(j.params.args.map((a) => a.value ?? a.description).join(" "));
     if (j.method === "Page.javascriptDialogOpening") {         // prompt() gets "Work", confirm() is accepted
-      ws.send(JSON.stringify({ id: ++id, method: "Page.handleJavaScriptDialog", params: { accept: true, promptText: "Work" } }));
+      const promptText = /Website/.test(j.params.message) ? "thuisarts.nl" : "Work";
+      ws.send(JSON.stringify({ id: ++id, method: "Page.handleJavaScriptDialog", params: { accept: true, promptText } }));
     }
   };
   const cmd = (method, params = {}) => new Promise((r) => { pend[++id] = r; ws.send(JSON.stringify({ id, method, params })); })
@@ -160,6 +162,40 @@ async function main() {
     await waitFor(() => ev(`!document.getElementById('cmenu').hidden`), 3000, "the ⋯ menu");
     await ev(`document.querySelector('#cmenu button[data-act=delete]').click()`);
     await waitFor(() => ev(`document.querySelectorAll('#convs .conv').length===${before - 1}`), 5000, "the chat deleted");
+  });
+
+  await check("round 3: profiles page: note, filter, website, document, budget", async () => {
+    await go("/profiles");
+    await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "two profile tabs");
+    await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
+    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===2`), 5000, "the seeded PubMed and rivm.nl cards");
+    if (!(await ev(`document.querySelector('.pf-tab[data-profile=evidence]').getAttribute('aria-selected')==='true'`))) throw new Error("the open tab is not aria-selected");
+    if (!(await ev(`document.querySelectorAll('#budget-bar i').length>=1 && /tokens/.test(document.getElementById('budget-text').textContent)`))) throw new Error("no budget bar");
+    await ev(`(()=>{const t=document.querySelector('.src-card[data-kind=pubmed] [data-note]');t.value='Alleen RCTs en reviews';t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await ev(`(()=>{const c=document.querySelector('.src-card[data-kind=pubmed] [data-type=review]');c.click()})()`);
+    await sleep(1500);
+    const p = await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`);
+    const pub = p.sources.find((s) => s.kind === "pubmed");
+    if (pub.note !== "Alleen RCTs en reviews") throw new Error("the note was not saved: " + JSON.stringify(pub.note));
+    if (!pub.filters.types.includes("review")) throw new Error("the filter was not saved: " + JSON.stringify(pub.filters));
+    await ev(`document.getElementById('add-website').click()`);
+    await waitFor(() => ev(`[...document.querySelectorAll('.src-card b')].some(b=>b.textContent==='thuisarts.nl')`), 5000, "the thuisarts.nl card");
+    const doc = join(data, "richtlijn.md");
+    (await import("node:fs")).writeFileSync(doc, "# Richtlijn\n" + "Vitamine D advies. ".repeat(300));
+    const node = await cmd("DOM.querySelector", { nodeId: (await cmd("DOM.getDocument")).root.nodeId, selector: "#add-doc" });
+    await cmd("DOM.setFileInputFiles", { nodeId: node.nodeId, files: [doc] });
+    await waitFor(() => ev(`!!document.querySelector('.src-card[data-kind=file]')`), 8000, "the document card");
+    await waitFor(() => ev(`/richtlijn\.md/.test(document.getElementById('budget-legend').textContent)`), 5000, "the document in the budget legend");
+  });
+
+  await check("round 3: a searched answer shows numbered sources and citation links", async () => {
+    await go("/");
+    await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "the chat page");
+    await ev(`document.getElementById('new-chat').click()`);
+    await sendText("search: do I need a flu shot?");
+    await idle();
+    if (!(await ev(`${last(".sources .src")}?.href==='https://www.rivm.nl/griepprik'`))) throw new Error("no source card under the answer");
+    if (!(await ev(`${last("a.cite")}?.textContent==='1'`))) throw new Error("[1] is not a citation link");
   });
 
   await check("passkey: add one on /account, sign out, sign in with it", async () => {

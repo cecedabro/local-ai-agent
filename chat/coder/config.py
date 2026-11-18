@@ -16,6 +16,7 @@ def _bool(v: object) -> bool:
     return s not in ("0", "", "false")
 
 
+# TODO (task B11): the setting SEARXNG_URL (default "", SPEC §12.3), like ORIGIN: in __slots__ and read in __init__.
 class Settings:
     __slots__ = (
         "DATA_DIR", "GATEWAY_URL", "GATEWAY_KEY", "STATUS_URL",

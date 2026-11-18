@@ -702,6 +702,32 @@ class DB:
     #         UPDATE chats SET folder_id = NULL WHERE folder_id = ? AND username = ?
     #      set_chat_folder(chat_id, username, folder_id or None) -> True if the chat is yours and changed
 
+    # TODO (task B06): profiles (chat/SPEC.md §12.1). Tests: test_step_profiles.py::test_profile_db
+    #   1. _SCHEMA gets two tables:
+    #      profile_settings(username TEXT NOT NULL, profile TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT '',
+    #        web INTEGER NOT NULL DEFAULT 1, seeded INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (username, profile))
+    #      sources(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, profile TEXT NOT NULL, kind TEXT NOT NULL,
+    #        title TEXT NOT NULL, domain TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+    #        filters TEXT NOT NULL DEFAULT '{}', content TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
+    #        created TEXT NOT NULL)
+    #   2. init_schema migration (like folder_id/stopped): messages gets
+    #      "sources TEXT NOT NULL DEFAULT '[]'" when missing.
+    #   3. add_message gets the keyword `sources: list | None = None`, stored as json.dumps(sources or []);
+    #      get_messages adds "sources": json.loads(r["sources"] or "[]") to every message.
+    #   4. delete_user also deletes the user's profile_settings and sources rows.
+    #   5. Methods:
+    #      get_profile_settings(username, profile) -> {"instructions", "web": bool, "seeded": bool};
+    #         no row -> {"instructions": "", "web": True, "seeded": False}
+    #      set_profile_settings(username, profile, **fields): merge the known fields (instructions, web, seeded) into the
+    #         current settings and INSERT OR REPLACE the row (web/seeded stored as 0/1)
+    #      add_source(username, profile, kind, title, domain="", note="", filters=None, content="") -> get_source(new id)
+    #      list_sources(username, profile) -> [source dicts] ORDER BY id
+    #      get_source(source_id, username) -> dict or None (someone else's -> None)
+    #      update_source(source_id, username, **fields) -> True if changed; fields among title, note, enabled (0/1),
+    #         filters (json.dumps); no known field -> False
+    #      delete_source(source_id, username) -> True if deleted
+    #      A source dict is the row with "filters" json-decoded and "enabled" as bool.
+
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
         with self._lock:

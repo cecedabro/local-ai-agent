@@ -41,6 +41,32 @@ def make_title(text: str) -> str:
     return title
 
 
+# TODO (task B10): tool rounds (chat/SPEC.md §12.3). Tests: test_step_profiles.py::test_tool_rounds and
+# ::test_tool_rounds_stop_at_max, then all of test_step_answer.py and test_step_round2.py again.
+#   - imports: httpx, and `from . import profiles, tools`; MAX_ROUNDS = 4 at module level
+#   - run_answer gets the keyword `run_tool: Callable = tools.run_tool`
+#   - after messages = context.build_messages(...): cfg = profiles.config(db, chat["username"], chat["profile"]);
+#     specs = tools.tool_specs(cfg); then the reading phase as now
+#   - sources = []; rounds = 0; client = httpx.AsyncClient() (closed with `await client.aclose()` in the finally)
+#   - wrap the "start the stream (busy loop) + read its events" part in `while True:`
+#       offer = specs if specs and rounds < MAX_ROUNDS else None
+#       agen = stream(settings, messages, think, tools=offer) if offer else stream(settings, messages, think)
+#       per round keep `calls = []` and `said = ""` (this round's content, also added to text as now);
+#       the event ("tool_calls", list) -> calls = list
+#       after the events: if stopped or not calls or not offer: break
+#       else rounds += 1; ids = [c["id"] or f"call_{rounds}_{i}" ...];
+#         messages = messages + [{"role": "assistant", "content": said, "tool_calls": [{"id": ids[i], "type": "function",
+#                                 "function": {"name": c["name"], "arguments": c["arguments"]}} ...]}]
+#         per call: ph, label = tools.describe(name, arguments); yield sse("phase", {"phase": ph, "label": label});
+#           result, found = await run_tool(name, arguments, cfg, client, settings.SEARXNG_URL)
+#           per found source: the same url already in `sources` keeps its number, else append {**src, "n": len(sources)+1};
+#           if any: result += "\n\nCite these as:\n" + "\n".join(f"[{n}] {url}" for each found source)
+#           messages.append({"role": "tool", "tool_call_id": ids[i], "content": result})
+#           stop set -> stopped = True, break (and leave the while too)
+#         if text was already written: yield phase("writing") again; continue
+#   - the stored answer and the partial answer get sources=sources; done gets "sources": sources
+#   - error events still `return` (the finally closes agen and the client)
+
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                      stream: Callable = gateway.stream_chat,
                      complete: Callable = gateway.complete,

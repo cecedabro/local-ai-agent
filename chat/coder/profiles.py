@@ -1,0 +1,127 @@
+"""Profiles: each user's settings per profile, the source cards, the system prompt and its budget
+(chat/SPEC.md §12.1–12.2)."""
+from __future__ import annotations
+
+import math
+from typing import Any
+from urllib.parse import urlsplit
+
+from . import context
+
+PROFILES = ("general", "evidence")
+NAMES = {"general": "General", "evidence": "EvidenceHunt"}
+RIGHT = {"general": "chat", "evidence": "evidence"}
+FILTER_TYPES = ("systematic_review", "meta_analysis", "rct", "guideline", "review")
+FILTER_LANGS = ("english", "dutch")
+# A new EvidenceHunt profile starts with these cards (the user can change or delete them).
+SEED = {
+    "evidence": [
+        {"kind": "pubmed", "title": "PubMed",
+         "note": "Prefer systematic reviews, meta-analyses, randomised trials and guidelines. Say how strong the evidence is.",
+         "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 10, "humans": True,
+                     "languages": []}},
+        {"kind": "website", "title": "rivm.nl", "domain": "rivm.nl",
+         "note": "The Dutch public health institute: use it for Dutch advice and guidelines."},
+    ],
+}
+CITE = ("When you use a search result or page, cite it with its number in square brackets, like [1], right after "
+        "the sentence it supports. Do not invent sources.")
+
+
+def tokens(text: str) -> int:
+    """TODO (task B07). The rough token count the app uses everywhere: ceil(len(text) / 4).
+    """
+    raise NotImplementedError
+
+
+def domain_of(url: str) -> str | None:
+    """TODO (task B07). 'https://www.rivm.nl/griep' -> 'rivm.nl'; 'rivm.nl' -> 'rivm.nl'; not usable -> None.
+    Add "https://" when there is no "://"; urlsplit; host = hostname lower-cased without a trailing dot;
+    None unless the scheme is http/https, the host has a "." and only letters, digits, "." and "-"; drop a leading "www.".
+    """
+    raise NotImplementedError
+
+
+def clean_filters(f: Any) -> dict:
+    """TODO (task B07). Keep only the known PubMed filter values (SPEC §12.1); `f` that is not a dict counts as {}:
+    {"types": [t for t in FILTER_TYPES if t in f types], "years": years when an int 1–50 else None,
+     "humans": bool(f humans), "languages": [x for x in FILTER_LANGS if x in f languages]}
+    """
+    raise NotImplementedError
+
+
+def config(db: Any, username: str, profile: str) -> dict:
+    """{"profile", "instructions", "web", "sources": [...]} for one user's profile; seeds the default cards once.
+
+    TODO (task B08). st = db.get_profile_settings(username, profile); if not st["seeded"]: for each card in
+    SEED.get(profile, []): db.add_source(username, profile, card kind, card title, domain=card.get("domain", ""),
+    note=card note, filters=card.get("filters")); then db.set_profile_settings(username, profile, seeded=True).
+    Return {"profile": profile, "instructions": st["instructions"], "web": st["web"], "sources": db.list_sources(...)}.
+    """
+    raise NotImplementedError
+
+
+def system_prompt(cfg: dict) -> str:
+    """The profile's system prompt (SPEC §12.2). Parts joined with "\n\n":
+
+    TODO (task B08).
+      1. context.SYSTEM_PROMPTS[cfg["profile"]]
+      2. if instructions.strip(): "Extra instructions from the user:\n" + instructions.strip()
+      3. lines, per enabled source that is not a file:
+           pubmed -> "- PubMed (tool search_pubmed)", website -> f"- the website {domain} (tool search_site)",
+           + f": {note.strip()}" when the note is not empty;
+         and when cfg["web"]: "- the web (tools web_search and open_page), when a question needs current or outside facts".
+         If there are lines: "Sources you can use:\n" + "\n".join(lines) + "\n" + CITE
+      4. per enabled file: f"Document {title}" + (f" ({note.strip()})" if note) + f":\n```\n{content}\n```"
+    """
+    raise NotImplementedError
+
+
+def budget(cfg: dict, settings: Any) -> dict:
+    """How much of the context the profile itself takes: {"used", "max", "parts": [{"label", "tokens"}]}.
+
+    TODO (task B08). docs = enabled file sources; total = tokens(system_prompt(cfg));
+    per doc: {"label": title, "tokens": tokens(system_prompt({**cfg, "sources": [doc], "web": False, "instructions": ""}))
+              - tokens(context.SYSTEM_PROMPTS[cfg["profile"]]) - 1};
+    parts = [{"label": "Instructions", "tokens": max(0, total - sum of the doc tokens)}] + the doc parts;
+    return {"used": total, "max": context.ctx_max(settings), "parts": parts}
+    """
+    raise NotImplementedError
+
+
+def public(cfg: dict, settings: Any) -> dict:
+    """The profile as the API returns it (SPEC §12.1).
+
+    TODO (task B08). sources: per source {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled",
+    "created")} + "tokens": tokens(content) for files, else 0 (never the content itself). Return {"profile", "name":
+    NAMES[profile], "instructions", "web", "sources", "budget": budget(cfg, settings)}.
+    """
+    raise NotImplementedError
+
+
+MAX_DOC_BYTES = 5_000_000
+MAX_DOC_CHARS = 200_000
+
+
+class DocumentError(Exception):
+    """The upload is not a document we can read; `status` is the HTTP status to answer (413 or 415)."""
+
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def document_text(name: str, data: bytes) -> str:
+    """The text of an uploaded document (SPEC §12.1).
+
+    TODO (task B09). Tests: test_step_profiles.py::test_document_text
+      1. len(data) > MAX_DOC_BYTES -> DocumentError(413, "That document is too big (max 5 MB).")
+      2. a name ending in .pdf, or data starting with b"%PDF-": import io, pypdf; reader = pypdf.PdfReader(io.BytesIO(data));
+         text = "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip();
+         any exception -> DocumentError(415, "That PDF could not be read."); empty text -> DocumentError(415,
+         "That PDF has no text (is it a scan?).")
+      3. else: data.decode("utf-8") (UnicodeDecodeError) or a "\x00" in it -> DocumentError(415, "Only PDF, text, Markdown
+         and HTML documents."); a name ending in .html/.htm -> text = tools.html_text(text)[1] (import tools inside)
+      4. len(text) > MAX_DOC_CHARS -> DocumentError(413, "That document is too long (max 200 000 characters).")
+    """
+    raise NotImplementedError

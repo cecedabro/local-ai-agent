@@ -141,6 +141,13 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
   }
 }
 
+/*
+ * TODO (task B15): sources under answers (SPEC §12.4). Import sourcesHtml and citeLinks from ./stream.js.
+ *   drawMessage, assistant: put sourcesHtml(m.sources) between the .bub and the .meta2 in its innerHTML, and after
+ *     appending call citeLinks(its .bub, m.sources).
+ *   send, on done: if data.sources is non-empty: bub.innerHTML = md.render(full); citeLinks(bub, data.sources);
+ *     bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources))  (before the stats line is drawn).
+ */
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
 function typedText(content) { return content.split("\n\nFile ")[0]; }
 
