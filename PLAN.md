@@ -29,7 +29,7 @@ Rules for every task:
   accept: make chat-test K="test_step_profiles and profile_db or test_step_round2"
 - [x] B07: In chat/coder/profiles.py fill in `tokens`, `domain_of` and `clean_filters` as their docstrings say
   accept: make chat-test K="test_step_profiles and helpers"
-- [ ] B08: In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say
+- [x] B08: In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say
   accept: make chat-test K="test_step_profiles and seed_prompt_budget"
 - [ ] B09: In chat/coder/profiles.py fill in `document_text` as its docstring says
   accept: make chat-test K="test_step_profiles and document_text"

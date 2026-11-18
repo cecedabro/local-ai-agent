@@ -78,7 +78,15 @@ def config(db: Any, username: str, profile: str) -> dict:
     note=card note, filters=card.get("filters")); then db.set_profile_settings(username, profile, seeded=True).
     Return {"profile": profile, "instructions": st["instructions"], "web": st["web"], "sources": db.list_sources(...)}.
     """
-    raise NotImplementedError
+    st = db.get_profile_settings(username, profile)
+    if not st["seeded"]:
+        for card in SEED.get(profile, []):
+            db.add_source(username, profile, card["kind"], card["title"],
+                          domain=card.get("domain", ""), note=card["note"],
+                          filters=card.get("filters"))
+        db.set_profile_settings(username, profile, seeded=True)
+    return {"profile": profile, "instructions": st["instructions"], "web": st["web"],
+            "sources": db.list_sources(username, profile)}
 
 
 def system_prompt(cfg: dict) -> str:
@@ -94,7 +102,48 @@ def system_prompt(cfg: dict) -> str:
          If there are lines: "Sources you can use:\n" + "\n".join(lines) + "\n" + CITE
       4. per enabled file: f"Document {title}" + (f" ({note.strip()})" if note) + f":\n```\n{content}\n```"
     """
-    raise NotImplementedError
+    prompt = context.SYSTEM_PROMPTS[cfg["profile"]]
+    instructions = cfg.get("instructions", "")
+    if instructions.strip():
+        prompt += "\n\nExtra instructions from the user:\n" + instructions.strip()
+
+    lines = []
+    for s in cfg.get("sources", []):
+        if not s.get("enabled", True):
+            continue
+        if s["kind"] == "file":
+            continue
+        if s["kind"] == "pubmed":
+            line = "- PubMed (tool search_pubmed)"
+        elif s["kind"] == "website":
+            line = f"- the website {s['domain']} (tool search_site)"
+        else:
+            line = f"- {s['title']}"
+        note = s.get("note", "")
+        if note and note.strip():
+            line += f": {note.strip()}"
+        lines.append(line)
+
+    if cfg.get("web"):
+        lines.append("- the web (tools web_search and open_page), when a question needs current or outside facts")
+
+    if lines:
+        prompt += "\n\nSources you can use:\n" + "\n".join(lines) + "\n" + CITE
+
+    for s in cfg.get("sources", []):
+        if not s.get("enabled", True):
+            continue
+        if s["kind"] == "file":
+            title = s["title"]
+            note = s.get("note", "")
+            content = s.get("content", "")
+            part = f"Document {title}"
+            if note and note.strip():
+                part += f" ({note.strip()})"
+            part += f":\n```\n{content}\n```"
+            prompt += "\n\n" + part
+
+    return prompt
 
 
 def budget(cfg: dict, settings: Any) -> dict:
@@ -106,7 +155,17 @@ def budget(cfg: dict, settings: Any) -> dict:
     parts = [{"label": "Instructions", "tokens": max(0, total - sum of the doc tokens)}] + the doc parts;
     return {"used": total, "max": context.ctx_max(settings), "parts": parts}
     """
-    raise NotImplementedError
+    docs = [s for s in cfg.get("sources", []) if s.get("enabled", True) and s["kind"] == "file"]
+    total = tokens(system_prompt(cfg))
+    base_tokens = tokens(context.SYSTEM_PROMPTS[cfg["profile"]])
+    doc_parts = []
+    for doc in docs:
+        prompt_with_doc = system_prompt({**cfg, "sources": [doc], "web": False, "instructions": ""})
+        doc_tokens = tokens(prompt_with_doc) - base_tokens - 1
+        doc_parts.append({"label": doc["title"], "tokens": max(0, doc_tokens)})
+    instruction_tokens = max(0, total - sum(dp["tokens"] for dp in doc_parts))
+    parts = [{"label": "Instructions", "tokens": instruction_tokens}] + doc_parts
+    return {"used": total, "max": context.ctx_max(settings), "parts": parts}
 
 
 def public(cfg: dict, settings: Any) -> dict:
@@ -116,7 +175,17 @@ def public(cfg: dict, settings: Any) -> dict:
     "created")} + "tokens": tokens(content) for files, else 0 (never the content itself). Return {"profile", "name":
     NAMES[profile], "instructions", "web", "sources", "budget": budget(cfg, settings)}.
     """
-    raise NotImplementedError
+    profile = cfg["profile"]
+    sources_out = []
+    for s in cfg.get("sources", []):
+        out = {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled", "created")}
+        if s["kind"] == "file":
+            out["tokens"] = tokens(s.get("content", ""))
+        else:
+            out["tokens"] = 0
+        sources_out.append(out)
+    return {"profile": profile, "name": NAMES[profile], "instructions": cfg["instructions"],
+            "web": cfg["web"], "sources": sources_out, "budget": budget(cfg, settings)}
 
 
 MAX_DOC_BYTES = 5_000_000

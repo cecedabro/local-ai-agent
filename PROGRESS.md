@@ -39,3 +39,10 @@
 - Implemented `domain_of(url)`: extracts the domain from a URL (adds `https://` prefix if needed), strips `www.`, validates scheme is http/https, host contains `.` and only valid characters, returns `None` otherwise.
 - Implemented `clean_filters(f)`: filters PubMed filter values to known types/languages, validates years is int 1–50, defaults non-dict input to empty dict.
 - All acceptance commands pass: `make chat-test K="test_step_profiles and helpers"` and `make check`.
+
+## Task B08 - profile config, system_prompt, budget, public (chat/coder/profiles.py)
+- Implemented `config(db, username, profile)`: seeds default source cards from `SEED` for the profile on first use, then returns profile config dict with profile name, instructions, web flag, and sources list.
+- Implemented `system_prompt(cfg)`: builds the system prompt by joining the base prompt, extra instructions, enabled sources with tool references, and file document blocks per SPEC §12.2.
+- Implemented `budget(cfg, settings)`: calculates token budget breakdown -- total prompt tokens, per-document token deltas, and instruction token remainder, with max from `context.ctx_max(settings)`.
+- Implemented `public(cfg, settings)`: serializes profile config for API response, stripping content fields from sources and adding token counts for file sources.
+- All acceptance commands pass: `make chat-test K="test_step_profiles and seed_prompt_budget"` and `make check`.
