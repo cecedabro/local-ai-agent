@@ -69,7 +69,17 @@ def verify_registration(settings: Any, credential: dict, challenge: bytes) -> tu
     require_user_verification=True). Return (v.credential_id, v.credential_public_key, v.sign_count).
     Any exception from the package -> raise PasskeyError(str(e)).
     """
-    raise NotImplementedError
+    try:
+        v = verify_registration_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=settings.RP_ID,
+            expected_origin=settings.ORIGIN,
+            require_user_verification=True,
+        )
+        return (v.credential_id, v.credential_public_key, v.sign_count)
+    except Exception as e:
+        raise PasskeyError(str(e))
 
 
 def authentication_options(settings: Any) -> tuple[str, bytes]:
