@@ -59,3 +59,9 @@
 - Updated `chat/coder/gateway.py`: `stream_chat()` now accepts `tools: list[dict] | None = None` and passes it to `request_body()`.
 - All 20 acceptance tests pass: `make chat-test K="test_step_profiles or test_step_answer or test_step_round2"`.
 - All project tests pass: `make check`.
+
+## Task B11 - profile system prompt and SEARXNG_URL setting (chat/coder/context.py, chat/coder/config.py)
+- Added `SEARXNG_URL` to `Settings.__slots__` and `__init__` in `config.py` (default "", per SPEC §12.3).
+- Updated `build_messages()` in `context.py` to use the profile's system prompt: imports `profiles` locally (to avoid circular import with profiles.py), calls `profiles.config(db, chat["username"], chat["profile"])` and `profiles.system_prompt(cfg)` instead of the static `SYSTEM_PROMPTS` dict.
+- All 18 acceptance tests pass: `make chat-test K="test_step_context or test_step_round2 or TestStream"`.
+- All project tests pass: `make check`.

@@ -35,7 +35,7 @@ Rules for every task:
   accept: make chat-test K="test_step_profiles and document_text"
 - [x] B10: In chat/coder/answer.py add tool rounds to `run_answer` (`TODO (task B10)`, above the function)
   accept: make chat-test K="test_step_profiles or test_step_answer or test_step_round2"
-- [ ] B11: In chat/coder/context.py use the profile's prompt (`TODO (task B11)`) and in chat/coder/config.py add SEARXNG_URL (`TODO (task B11)`)
+- [x] B11: In chat/coder/context.py use the profile's prompt (`TODO (task B11)`) and in chat/coder/config.py add SEARXNG_URL (`TODO (task B11)`)
   accept: make chat-test K="test_step_context or test_step_round2 or TestStream"
 - [ ] B12: In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`)
   accept: make chat-test K="TestProfileApi and (seeds or rights or settings or profiles_page)"

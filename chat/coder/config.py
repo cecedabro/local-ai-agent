@@ -22,6 +22,7 @@ class Settings:
         "DATA_DIR", "GATEWAY_URL", "GATEWAY_KEY", "STATUS_URL",
         "CTX_DEFAULT", "ADMIN_USER", "ADMIN_PASSWORD", "SECURE_COOKIES",
         "MODEL_LABEL", "HARDWARE_LABEL", "REPO_URL",         "WAIT_LIMIT", "RP_ID", "ORIGIN",
+        "SEARXNG_URL",
     )
 
     def __init__(self, settings: dict | None = None) -> None:
@@ -42,3 +43,4 @@ class Settings:
         self.WAIT_LIMIT = int(raw.get("WAIT_LIMIT", env.get("WAIT_LIMIT", "120")))
         self.RP_ID = str(raw.get("RP_ID", env.get("RP_ID", "localhost")))
         self.ORIGIN = str(raw.get("ORIGIN", env.get("ORIGIN", "http://localhost:8090")))
+        self.SEARXNG_URL = str(raw.get("SEARXNG_URL", env.get("SEARXNG_URL", "")))

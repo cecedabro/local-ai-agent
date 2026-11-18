@@ -91,8 +91,9 @@ def context_messages(db: Any, chat: dict) -> list[dict]:
 #   cfg = profiles.config(db, chat["username"], chat["profile"])
 #   return [{"role": "system", "content": profiles.system_prompt(cfg)}] + context_messages(db, chat)
 def build_messages(db: Any, chat: dict) -> list[dict]:
-    """TODO (task S06). [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)."""
-    return [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)
+    from . import profiles
+    cfg = profiles.config(db, chat["username"], chat["profile"])
+    return [{"role": "system", "content": profiles.system_prompt(cfg)}] + context_messages(db, chat)
 
 
 def used(db: Any, chat: dict) -> int:
