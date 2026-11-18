@@ -332,7 +332,28 @@ def tool_specs(cfg: dict) -> list[dict]:
       web or sites -> _spec("open_page", "Open a web page from the search results and read its text.",
                           {"url": {"type": "string"}}, ["url"])
     """
-    raise NotImplementedError
+    result: list[dict] = []
+    sites = [s["domain"] for s in cfg.get("sources", []) if s.get("enabled") and s["kind"] == "website"]
+    pubmed = any(s.get("enabled") and s["kind"] == "pubmed" for s in cfg.get("sources", []))
+    if cfg.get("web"):
+        result.append(_spec("web_search",
+                            "Search the web. Use it for recent or factual questions you are unsure about.",
+                            {"query": {"type": "string", "description": "what to search for"}}, ["query"]))
+    if sites:
+        result.append(_spec("search_site",
+                            "Search one of the trusted websites of this profile.",
+                            {"site": {"type": "string", "enum": sites}, "query": {"type": "string"}},
+                            ["site", "query"]))
+    if pubmed:
+        result.append(_spec("search_pubmed",
+                            "Search PubMed for medical studies (the profile's filters are added for you). "
+                            "Use English medical terms.",
+                            {"query": {"type": "string"}}, ["query"]))
+    if cfg.get("web") or sites:
+        result.append(_spec("open_page",
+                            "Open a web page from the search results and read its text.",
+                            {"url": {"type": "string"}}, ["url"]))
+    return result
 
 
 def _spec(name: str, desc: str, props: dict, required: list[str]) -> dict:
@@ -350,7 +371,27 @@ def describe(name: str, arguments: str) -> tuple[str, str]:
       open_page     -> ("reading", f"Reading {the url's hostname or 'a page'}…")
       anything else -> ("searching", "Looking things up…")
     """
-    raise NotImplementedError
+    try:
+        args = json.loads(arguments)
+        if not isinstance(args, dict):
+            args = {}
+    except (json.JSONDecodeError, TypeError):
+        args = {}
+    q = str(args.get("query") or "").strip()[:80]
+    if name == "search_pubmed":
+        return ("searching", f'Searching PubMed for "{q}"…')
+    elif name == "search_site":
+        return ("searching", f'Searching {args.get("site") or "the site"} for "{q}"…')
+    elif name == "web_search":
+        return ("searching", f'Searching the web for "{q}"…')
+    elif name == "open_page":
+        url = str(args.get("url") or "")
+        try:
+            hostname = urlsplit(url).hostname or "a page"
+        except Exception:
+            hostname = "a page"
+        return ("reading", f"Reading {hostname}…")
+    return ("searching", "Looking things up…")
 
 
 async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClient, searxng_url: str,
