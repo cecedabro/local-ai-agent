@@ -18,6 +18,7 @@ LABELS = {
     "compressing": "Compressing older messages…",
     "thinking": "Thinking…",
     "writing": "Writing the answer…",
+    "reading": "Reading your message…",
 }
 
 
@@ -90,6 +91,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
     # Step 2
     messages = context.build_messages(db, chat)
+    yield phase("reading")
 
     # Step 3: Start the stream, retrying while busy
     start = clock()
@@ -114,39 +116,34 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
             first = None
         break
 
-    # Step 4: Handle first and remaining events
+    # Step 4: Handle first and remaining events in ONE loop
     text = ""
     count = 0
     t0 = None
     usage = None
     content_started = False
+    thinking_sent = False
 
-    if first:
-        tag, val = first
-        if tag == "reasoning":
-            yield phase("thinking")
-        elif tag == "content":
-            content_started = True
-            yield phase("writing")
-            t0 = clock()
-            text = val
-            count += 1
-        elif tag == "usage":
-            usage = val
+    async def events():
+        if first is not None:
+            yield first
+        async for ev in agen:
+            yield ev
 
     try:
-        async for event in agen:
-            tag, val = event
+        async for tag, val in events():
             if tag == "reasoning":
-                yield phase("thinking")
+                if not thinking_sent:
+                    yield phase("thinking")
+                    thinking_sent = True
             elif tag == "content":
                 if not content_started:
                     content_started = True
                     yield phase("writing")
                     t0 = clock()
-                yield sse("delta", {"text": val})
                 text += val
                 count += 1
+                yield sse("delta", {"text": val})
             elif tag == "usage":
                 usage = val
     except gateway.GatewayError as e:
@@ -171,7 +168,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     # Step 7
     chat = db.get_chat(chat["id"], chat["username"])
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
-                        "context": context.info(db, chat, settings)})
+                        "context": context.info(db, chat, settings),
+                        "title": chat["title"], "stopped": False})
 
 
 def _unused() -> None:
