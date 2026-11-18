@@ -60,7 +60,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: node --check chat/static/js/app.js && grep -q -- "--used" chat/static/js/app.js && grep -q -- "--at" chat/static/js/app.js
 - [x] S23: In chat/static/js/app.js fill in `setupFiles` as its comment says
   accept: node --check chat/static/js/app.js && grep -q "/api/files" chat/static/js/app.js
-- [ ] S24: In chat/static/js/app.js fill in `start` as its comment says
+- [x] S24: In chat/static/js/app.js fill in `start` as its comment says
   accept: node --check chat/static/js/app.js && grep -q "coder-mode" chat/static/js/app.js && grep -q "setTheme" chat/static/js/app.js
 - [ ] S25: Write chat/static/js/admin.js: see "S25 details" below
   accept: node --check chat/static/js/admin.js && grep -q "/api/invites" chat/static/js/admin.js && grep -q "/api/users" chat/static/js/admin.js

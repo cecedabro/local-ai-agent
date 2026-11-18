@@ -81,23 +81,29 @@ async function openChat(id) {
   const $messages = $("#messages");
   $messages.innerHTML = "";
   if (chat.messages.length === 0) {
-    const username = document.body.dataset.username;
-    const chips = EXAMPLES[state.profile].map((ex) =>
-      `<button data-example="${esc(ex)}">${esc(ex)}</button>`
-    ).join("");
-    $messages.innerHTML =
-      `<div class="welcome">${MARBLE}<h2>Hi ${username}, what's up?</h2><div class="chips">${chips}</div></div>`;
-    $messages.querySelectorAll("button[data-example]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        $("#input").value = btn.dataset.example;
-        send();
-      });
-    });
+    drawWelcome();
   } else {
     chat.messages.forEach((m) => drawMessage(m));
   }
   drawContext(chat.context);
   await loadChats();
+}
+
+function drawWelcome() {
+  const $messages = $("#messages");
+  $messages.innerHTML = "";
+  const username = document.body.dataset.username;
+  const chips = EXAMPLES[state.profile].map((ex) =>
+    `<button data-example="${esc(ex)}">${esc(ex)}</button>`
+  ).join("");
+  $messages.innerHTML =
+    `<div class="welcome">${MARBLE}<h2>Hi ${username}, what's up?</h2><div class="chips">${chips}</div></div>`;
+  $messages.querySelectorAll("button[data-example]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("#input").value = btn.dataset.example;
+      send();
+    });
+  });
 }
 
 /**
@@ -346,6 +352,75 @@ function setupFiles() {
  *   then setupFiles(), await loadChats(), and openChat(state.chats[0].id) if there is one,
  *   else the welcome screen.
  */
-async function start() {}
+async function start() {
+  $("#composer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    send();
+  });
+  $("#input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+  $("#new-chat").addEventListener("click", () => {
+    state.chatId = null;
+    $("#messages").innerHTML = "";
+    drawWelcome();
+  });
+  $("#convs").addEventListener("click", (e) => {
+    const conv = e.target.closest(".conv");
+    if (!conv) return;
+    openChat(Number(conv.dataset.id));
+  });
+  $("#chat-title").addEventListener("dblclick", async () => {
+    const newTitle = prompt("Rename chat:");
+    if (!newTitle || !state.chatId) return;
+    await api(`/api/chats/${encodeURIComponent(state.chatId)}`, { method: "PATCH", json: { title: newTitle } });
+    await loadChats();
+  });
+  $("#search").addEventListener("input", () => loadChats());
+  $("#profile").addEventListener("click", () => {
+    $("#pmenu").classList.toggle("hidden");
+  });
+  $("#pmenu").querySelectorAll(".opt").forEach((opt) => {
+    opt.addEventListener("click", () => {
+      state.profile = opt.dataset.profile;
+      $("#profile-name").textContent = opt.querySelector("b").textContent;
+      $("#profile").dataset.profile = state.profile;
+      state.chatId = null;
+      $("#messages").innerHTML = "";
+      drawWelcome();
+    });
+  });
+  document.querySelectorAll('input[name="theme"]').forEach((radio) => {
+    if (radio.value === document.documentElement.dataset.themePref) {
+      radio.checked = true;
+    }
+    radio.addEventListener("input", () => window.setTheme(radio.value));
+  });
+  const savedMode = localStorage.getItem("coder-mode");
+  if (savedMode) {
+    const el = document.querySelector(`input[name="mode"][value="${savedMode}"]`);
+    if (el) el.checked = true;
+  }
+  document.querySelectorAll('input[name="mode"]').forEach((radio) => {
+    radio.addEventListener("input", () => {
+      localStorage.setItem("coder-mode", radio.value);
+      if (!state.chatId) drawWelcome();
+    });
+  });
+  $("#logout").addEventListener("click", async () => {
+    await api("/api/logout", { method: "POST" });
+    location.href = "/login";
+  });
+  setupFiles();
+  await loadChats();
+  if (state.chats.length > 0) {
+    await openChat(state.chats[0].id);
+  } else {
+    drawWelcome();
+  }
+}
 
 start();
