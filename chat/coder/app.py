@@ -342,7 +342,28 @@ def create_app(settings: dict | None = None) -> FastAPI:
           7. return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
                                       media_type="text/event-stream")
         """
-        return JSONResponse({"error": "not built yet"}, status_code=501)
+        db = app.state.db
+        settings = app.state.settings
+        r = _require_session(request, db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = db.get_chat(chat_id, username)
+        if chat is None:
+            return JSONResponse({"error": "Chat not found."}, status_code=404)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        content = str(body.get("content") or "")
+        file_ids = body.get("files") or []
+        if not content.strip() and not file_ids:
+            return JSONResponse({"error": "Type a message first."}, status_code=400)
+        if len(content) > 20000:
+            return JSONResponse({"error": "That message is too long."}, status_code=413)
+        db.add_message(chat_id, "user", content)
+        return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
+                                 media_type="text/event-stream")
 
     # ── POST /api/chats/{chat_id}/compress ─────────────────────────────────
 

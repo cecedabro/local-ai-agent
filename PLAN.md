@@ -36,7 +36,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: make chat-test K="test_step_answer and (test_stream_events_and_store or test_count_without_usage or test_busy or test_gateway_errors)"
 - [x] S11: In chat/coder/answer.py add steps 1, 6 and 7 of the `run_answer` docstring
   accept: make chat-test K="test_step_answer"
-- [ ] S12: In chat/coder/app.py fill in the route `api_create_message` as its docstring says (steps 1–4, 6, 7)
+- [x] S12: In chat/coder/app.py fill in the route `api_create_message` as its docstring says (steps 1–4, 6, 7)
   accept: make chat-test K="TestStream"
 - [ ] S13: In chat/coder/app.py add step 5 (files) to `api_create_message`: see "S13 details" below
   accept: make chat-test K="TestFiles or TestStream"
