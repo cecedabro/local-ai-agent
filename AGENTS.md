@@ -36,6 +36,12 @@ changing architecture. Decisions below are settled unless the user says otherwis
 - Your own tests: `status/tests/test_unit_*.py` (`make check` runs them).
 - Paths in `.agent-protected` are human-owned; changes there reject the attempt.
 
+## chat/ (the public chat app, "Coder")
+- Spec: `chat/SPEC.md`. FastAPI + Jinja2 + httpx, packages only from `chat/requirements.txt`.
+- Tests: `make chat-test` (all) or `make chat-test K="<pytest -k expr>"`; JS: `node --test chat/tests/js/stream.test.mjs`.
+- Work from the `TODO (task Sxx)` docstrings: they list the exact steps. Change only the named function.
+- Human-owned (see `.agent-protected`): tests, templates, `chat/static/css/`, the vendored files.
+
 ## Agent runs (agent-loop)
 - Runs are non-interactive: nobody answers questions. Never end with a question or a plan; make the
   edits, run the task's accept command, fix what fails, then stop.

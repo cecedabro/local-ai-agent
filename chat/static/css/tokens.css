@@ -1,0 +1,67 @@
+/* Coder chat: colour tokens per theme. <html data-theme=light|dark|blossom>. Human-owned (chat/SPEC.md §9).
+   Everything else in chat/static/css/ uses only these variables. */
+:root{color-scheme:light;
+--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--bg:#dff2ff;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),
+  linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.7),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.46);--tile-top:rgba(255,255,255,.75);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.7);--chip:rgba(255,255,255,.65);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(244,250,255,.85) 48%,rgba(222,238,250,.8) 52%,rgba(240,248,255,.9) 100%);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%);
+--shadow:0 10px 30px rgba(30,90,140,.13),0 1px 2px rgba(30,90,140,.08);
+--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);--glow:rgba(10,132,255,.35);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--bar-top:#5ad1ff;--bar-bottom:#0a84ff;
+--title-a:#0a4e7c;--title-b:#0d86c6;--gloss:1;--panel:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.3));
+--num:linear-gradient(90deg,#0a84ff,#22c3ee 50%,#2fb36b);
+--t1:rgba(90,190,255,.30);--t2:rgba(110,225,140,.30);--t3:rgba(255,200,90,.30);
+--t4:rgba(170,140,255,.28);--t5:rgba(70,220,200,.30);--t6:rgba(255,130,170,.26)}
+:root[data-theme=dark]{color-scheme:dark;
+--ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
+--ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
+--bg:#06121f;
+--scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),
+  linear-gradient(160deg,#071624,#06131d 55%,#07170f);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(120,200,255,.12),transparent 70%);
+--bar:rgba(10,22,36,.55);--glass:rgba(22,36,54,.45);--tile-top:rgba(255,255,255,.06);--bubble:rgba(255,255,255,.08);
+--field:rgba(0,0,0,.25);--chip:rgba(255,255,255,.08);
+--btn:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 52%,rgba(255,255,255,.08) 100%);
+--stroke:rgba(255,255,255,.14);--stroke-soft:rgba(255,255,255,.09);--hi:rgba(255,255,255,.18);--hi-soft:rgba(255,255,255,.07);
+--line:rgba(255,255,255,.08);--track:rgba(255,255,255,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%);
+--shadow:0 12px 34px rgba(0,0,0,.35);
+--primary:linear-gradient(180deg,#7fd3ff 0%,#2a9ff0 48%,#0b78d6 52%,#2aa4f2 100%);--glow:rgba(76,194,255,.35);
+--fill:linear-gradient(90deg,#2ee59d,#22c3ee 55%,#3b9cff);--bar-top:#7fe3ff;--bar-bottom:#2a7fe0;
+--title-a:#ffffff;--title-b:#8fd8ff;--gloss:.3;--panel:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));
+--num:linear-gradient(90deg,#6cc4ff,#5ee0f0 50%,#5fe0a0);
+--t1:rgba(90,190,255,.16);--t2:rgba(110,225,140,.14);--t3:rgba(255,200,90,.13);
+--t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}
+
+
+/* ---------------------------------------------------------------- Blossom (pink) theme */
+:root[data-theme=blossom]{color-scheme:light;
+--ink:#3a1028;--muted:#8a5a74;--link:#d0367f;--accent:#ec4899;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#a08090;
+--bg:#ffeef6;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#ffb3d9 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#ffd6c2 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#ffe3f1 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#e3c8ff 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#ffc1d6 0,transparent 70%),
+  linear-gradient(160deg,#fff0f7,#fff6f2 55%,#f6edff);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.75),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.5);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.72);--chip:rgba(255,255,255,.68);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(255,246,251,.88) 48%,rgba(252,228,240,.82) 52%,rgba(255,244,250,.92) 100%);
+--stroke:rgba(255,255,255,.88);--stroke-soft:rgba(255,255,255,.72);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(58,16,40,.09);--track:rgba(58,16,40,.08);
+--shadow:0 10px 30px rgba(170,50,110,.13),0 1px 2px rgba(170,50,110,.08);
+--primary:linear-gradient(180deg,#ffb8dc 0%,#f472b6 48%,#e1468f 52%,#f580be 100%);--glow:rgba(236,72,153,.35);
+--fill:linear-gradient(90deg,#f9a8d4,#ec4899 55%,#a855f7);
+--title-a:#8d1d55;--title-b:#e1468f}
+

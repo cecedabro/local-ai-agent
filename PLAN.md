@@ -1,48 +1,95 @@
-# PLAN: history import, repo dropdown, context size, pause
+# PLAN: Chat app foundation
 
-Read `status/SPEC.md` §8 ("Repo list" bullet + the page paragraph after it), §11 (`n_ctx`), §12 and
-§13 before you start. The judges are `status/tests/test_accept_history.py` and
-`status/tests/test_accept_pause.py`: protected, change the code, never the tests. Run the task's
-`accept:` command yourself before you finish and read the first failing assertion.
+Small steps. Every task names ONE file and ONE or two functions; the steps are in that function's
+docstring or comment (marked `TODO (task Sxx)`). Find it with `grep -n "task Sxx" <file>` and read
+only that function. Each task has its own small test.
 
 Rules for every task:
-- This run is non-interactive: nobody reads your questions. Never end with a question or a plan;
-  make the edits, run the accept command, fix what fails, then stop.
-- Never read a large file whole (`status/app.py` is ~1700 lines). Use `grep -n` and read only the
-  lines you need (`sed -n '120,180p' status/app.py`).
-- Python 3.11, standard library only. `status/app.py` stays one file (it is ~1500 lines: use
-  `grep -n` to find the function named in the task instead of reading it all).
-  `status/backfill.py` is a separate new script.
-- Keep the old tests green: `make check` and `python3 -m unittest -q status/tests/test_contract.py`.
-- No f-string with a backslash inside `{...}` (breaks Python 3.11).
-- Do not touch `harness/`, `status/static/`, `Makefile`, `status/SPEC.md` or any test file
-  except your own `status/tests/test_unit_*.py`.
+- Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
+- Only change the function(s) the task names. Don't refactor, rename or move other code.
+- Never read a whole large file: `grep -n`, then `sed -n 'a,bp' <file>` for the lines you need.
+- Python: only the packages in `chat/requirements.txt` (httpx, not requests). JS: no packages.
+- Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/coder/templates/`, `Makefile`, `docs/`.
 
-- [x] T01: POST /api/import, events only (SPEC §12.1). In status/app.py: (1) SCHEMA: add `create table if not exists imported(key text primary key);`. (2) do_POST checks `n > MAX_BODY` before routing: compute `path` first and use a limit of `IMPORT_MAX = 8 * 1024 * 1024` when path is `/api/import`, else MAX_BODY. (3) Split the tally/daily part of `App.add_event` into a helper `App._count(body, t)` that takes the event time `t` (epoch seconds): it uses `day_of(t)` for the daily row, sets tally `last` to `max(coalesce(last, 0), t)`, and sets meta `since` when it is None or later than `t`; `add_event` calls it with `self.clock()`. (4) New `App.import_history(body) -> tuple[int, dict]`: validate everything first with a helper `import_error(body) -> str | None` (events must be a list ≤ 5000 of dicts; `key` non-empty str ≤ 200, `repo` non-empty str, `kind` in run_started/task_done/task_skipped/run_finished, `ts` parsed by `dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))` with a non-None tzinfo; error text like "events[3]: bad ts"); then under `self.lock`, for each event `insert or ignore into imported(key)`: if a row was inserted (`cursor.rowcount == 1`) call `_count(event, t)` and count it as added, else as skipped; commit once. Imported events are NOT inserted into the events table. Answer 200 `{"events_added", "events_skipped", "token_days": 0, "token_days_ignored": 0}`. Route `/api/import` in do_POST to it. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k test_events_count_once -k test_daily_uses_event_day -k test_since_keeps_earliest -k test_keys_survive_restart
-- [x] T02: The "tokens" list of POST /api/import (SPEC §12.1). (1) SCHEMA: `create table if not exists imported_tokens(day text, source text, gen int, prompt int, primary key(day, source));`. (2) In `App.sample_metrics`, when it stores a sample and `self.meta("first_sample_day")` is None, `self.set_meta("first_sample_day", day)`. (3) Extend `import_error`: tokens must be a list ≤ 5000 of dicts with `day` matching `^\d{4}-\d{2}-\d{2}$` that `dt.date.fromisoformat` accepts, `source` non-empty str ≤ 50, `generated` and `prompt` ints ≥ 0 (reject bool and float). (4) In `import_history`: rows with `day >= first_sample_day` (string compare) count as `token_days_ignored`; the others `insert or replace` into imported_tokens and count as `token_days`. (5) In `App.tokens()`: `generated_total` and `prompt_total` add `sum(gen)` / `sum(prompt)` of imported_tokens; leave every tok/s value, `generated_24h` and `hourly` live-only. (6) Where `/api/status` builds `daily`, add the imported `gen` of each day to that day's `generated`. — (done by hand in review)
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k ImportTest -k ImportWithLiveTokensTest
-- [x] T03: Repo list for the dropdown (SPEC §8). (1) Helper `clean_repos(value, owners) -> list[str]`: keep strings matching the same owner/name pattern `add_job` uses (find it with `grep -n "owner/name" status/app.py`), drop other owners when `owners` (= `self.job_owners`) is non-empty, de-duplicate, at most 500. (2) `App.ping` and `App.claim` both rebuild `self.workers[worker]` today and would lose the list: keep the old entry's `"repos"` unless the cleaned new list is non-empty. (3) In `App.status()` where `"workers"` is built, add `"repos"`: sorted with `key=str.lower`, de-duplicated union of the repos of the workers listed in `workers` and the `repo` of every job row in the jobs table, owner-filtered the same way. (4) `render_page`: take the repos from `st["jobs"]["repos"]` (in do_GET, stop computing `repos` from the job lists); keep the field as the first child of `<div class="fields">` in the add-job form; when the list is non-empty render `<select name="repo" required aria-label="Repository">` with `<option value="X">X</option>` per repo (escape X), else `<input name="repo" placeholder="owner/repo" required aria-label="Repository">` without the datalist. The page script reads `f.repo.value`, which works for both.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Repos
-- [x] T04: `gateway.n_ctx` (SPEC §11). In `App.__init__` add `self.n_ctx = None` and `self.props_t = None`. New method `App.context_size() -> int | None` modelled on `App.model()`: returns `self.n_ctx` when known; otherwise, when `self.root` is set and (`self.props_t` is None or `self.clock() - self.props_t >= self.probe_interval`), set `props_t` and GET `self.root + "/props"` with `Authorization: Bearer <llama_key>` (when set) and a 2 s timeout; take `default_generation_settings.n_ctx`, else a top-level `n_ctx`; any error leaves it None. Call it in `App.status()` next to `self.model()` (outside the lock) and put the value in the gateway dict as `"n_ctx"` (null when the gateway is off; check what the gateway dict looks like then).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k Nctx
-- [x] T05: Create status/backfill.py (stdlib only, module docstring with the usage line from SPEC §12.2) with `git_events(repo_dir: Path, name: str, gh=None) -> list[dict]`. Run `git -C <repo_dir> log --all --format=%x1e%H%x1f%an%x1f%aI%x1f%s --shortstat` and split records on `\x1e`; each record's first line is sha/author/date/subject (split on `\x1f`), the rest may hold the shortstat line (`3 files changed, 10 insertions(+), 2 deletions(-)`; parse insertions/deletions with regexes, 0 when missing). Only author `local-agent`. Subject `^(T\d+): (.*)` → task_done (key `name:sha`, title cut to 200, commit `sha[:7]`, ts = author date converted to UTC with `.astimezone(dt.timezone.utc).isoformat(timespec="seconds")`). attempts = highest N over `repo_dir.glob(".agent/logs/<id>-a*.log")` and `repo_dir.glob(".agent/logs-*/<id>-a*.log")` (regex `-a(\d+)\.log$`), 1 if none. Subject exactly `agent run report` → run_started with key `name:run:sha`. PRs: `gh(["pr", "list", "--state", "all", "--limit", "500", "--json", "number,headRefName,createdAt,url"], repo_dir)`; default gh runs the `gh` CLI with subprocess (cwd=repo_dir, timeout 60) and returns `"[]"` on any failure; parse JSON (not a list → none); `headRefName` starting with `agent/` → run_finished with key `name:pr:<number>`, `pr` = url, ts = createdAt as `+00:00`. Return sorted by (ts, key).
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillGitTest
-- [x] T06: Add `opencode_tokens(db_path: Path) -> list[dict]` to status/backfill.py (SPEC §12.2): `sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)`, `select data from message`, skip rows whose data is not valid JSON or has no dict `tokens` or whose `role` is not `assistant`; day = UTC date of `time.created / 1000`; generated = output + reasoning, prompt = input (missing → 0). Return `[{"day", "source": "opencode", "generated", "prompt"}]` sorted by day. Close the connection.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py -k BackfillOpencodeTest
-- [x] T08: Pause API (SPEC §13). (1) Add "paused" and "resumed" to `KINDS`. (2) SCHEMA: `create table if not exists run_control(run_id text primary key, pause int);`. (3) In do_POST, before the final 404, match `re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)` and decode the id with `urllib.parse.unquote` (add `import urllib.parse`). (4) New `App.run_control(run_id, act) -> tuple[int, dict]`: control → 200 `{"pause": bool}` from the table (unknown → false); pause/resume → 404 when no event has that run_id, 409 when the run has a `run_finished` event, else upsert the row (pause 1/0) and answer 200 `{"run_id", "pause"}`. (5) In `App.add_event`, a `run_finished` event deletes the run's run_control row.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest.test_errors -k test_url_encoded_run_id
-- [x] T09: Paused state on runs (SPEC §13). Where `App.status()` builds each run (grep `STALE_AFTER`): remember the kind of the latest `paused`/`resumed` event of the run; `state` = "finished" if it has run_finished, else "paused" if that latest kind is "paused", else the old running/stale rule. Add `"pause": bool` to each run from run_control (one query for all runs before the loop).
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py -k PauseApiTest
-- [x] T10: Pause buttons on the page (SPEC §13). In `render_live`, the Now card's run is the first run with state "running", else the first with state "paused"; for a paused run say "paused" instead of "running <duration>" in the header. The progress bar `<div class="progress live" ...>` must use class `progress paused` instead of `progress live` for a paused run (the stylesheet already has both). Under the header add the controls exactly as SPEC §13 shows (class `ctl` on the buttons; `html.escape` the run_id in the attributes). In the page `SCRIPT` (grep `button[data-job]`), add a click handler for `button[data-run]` that posts `{}` to `'/api/runs/'+encodeURIComponent(b.dataset.run)+'/'+b.dataset.act` with the existing `post()` helper and then calls `refresh()`.
-  accept: python3 -m unittest -q status/tests/test_accept_pause.py
+Done earlier (T01–T04, T07): settings, database, login, sessions, invites, users, chats, files.
+The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is done and human-owned: use it, don't edit it.
 
-## Follow-up (after review)
+- [x] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
+  accept: make chat-test K="test_step_context and test_db_helpers"
+- [x] S02: In chat/coder/gateway.py fill in `request_body` and `parse_line` as their docstrings say
+  accept: make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"
+- [x] S03: In chat/coder/gateway.py fill in `stream_chat` as its docstring says
+  accept: make chat-test K="test_step_gateway and (test_stream_chat or test_no_key_no_header)"
+- [x] S04: In chat/coder/gateway.py fill in `complete` as its docstring says
+  accept: make chat-test K="test_step_gateway"
+- [x] S05: In chat/coder/context.py fill in `ctx_max` and `window` as their docstrings say
+  accept: make chat-test K="test_step_context and test_ctx_max_and_cache"
+- [x] S06: In chat/coder/context.py fill in `context_messages` and `build_messages` as their docstrings say
+  accept: make chat-test K="test_step_context and test_context_and_build_messages"
+- [x] S07: In chat/coder/context.py fill in `used` and `info` as their docstrings say
+  accept: make chat-test K="test_step_context and test_used_and_info"
+- [x] S08: In chat/coder/context.py fill in `just_before` and `compress` as their docstrings say
+  accept: make chat-test K="test_step_context"
+- [x] S09: In chat/coder/answer.py fill in `sse`, `phase` and `make_title` as their docstrings say
+  accept: make chat-test K="test_step_answer and test_helpers"
+- [x] S10: In chat/coder/answer.py fill in `run_answer` steps 2–5 of its docstring (skip steps 1, 6, 7 for now; yield a done event)
+  accept: make chat-test K="test_step_answer and (test_stream_events_and_store or test_count_without_usage or test_busy or test_gateway_errors)"
+- [x] S11: In chat/coder/answer.py add steps 1, 6 and 7 of the `run_answer` docstring
+  accept: make chat-test K="test_step_answer"
+- [x] S12: In chat/coder/app.py fill in the route `api_create_message` as its docstring says (steps 1–4, 6, 7)
+  accept: make chat-test K="TestStream"
+- [x] S13: In chat/coder/app.py add step 5 (files) to `api_create_message`: see "S13 details" below
+  accept: make chat-test K="TestFiles or TestStream"
+- [x] S14: In chat/coder/app.py fill in `api_compress`, and make `api_get_chat` return `context.info(...)` as "context"
+  accept: make chat-test K="TestContext"
+- [x] S15: Make the whole chat suite green (run it, fix only what fails, in the app code)
+  accept: make chat-test
+- [x] S16: stream.js: splitEvents and readEvents (done by hand: the writing engine)
+  accept: node --test chat/tests/js/stream.test.mjs
+- [x] S17: stream.js: Typewriter (done by hand: the writing engine)
+  accept: node --test chat/tests/js/stream.test.mjs
+- [x] S18: stream.js: groupChats and metaText (done by hand: the writing engine)
+  accept: node --test chat/tests/js/stream.test.mjs
+- [x] S19: In chat/static/js/app.js fill in `loadChats` as its comment says
+  accept: node --check chat/static/js/app.js && grep -q "groupChats(state.chats" chat/static/js/app.js
+- [x] S20: In chat/static/js/app.js fill in `openChat` and `drawMessage` as their comments say
+  accept: node --check chat/static/js/app.js && grep -q "md.render(" chat/static/js/app.js && grep -q "welcome" chat/static/js/app.js
+- [x] S21: In chat/static/js/app.js fill in `send` as its comment says
+  accept: node --check chat/static/js/app.js && grep -q "readEvents(" chat/static/js/app.js && grep -q "new Typewriter(" chat/static/js/app.js && grep -q "renderFade(" chat/static/js/app.js && grep -q "placeTail(" chat/static/js/app.js
+- [x] S22: In chat/static/js/app.js fill in `drawContext` as its comment says
+  accept: node --check chat/static/js/app.js && grep -q -- "--used" chat/static/js/app.js && grep -q -- "--at" chat/static/js/app.js
+- [x] S23: In chat/static/js/app.js fill in `setupFiles` as its comment says
+  accept: node --check chat/static/js/app.js && grep -q "/api/files" chat/static/js/app.js
+- [x] S24: In chat/static/js/app.js fill in `start` as its comment says
+  accept: node --check chat/static/js/app.js && grep -q "coder-mode" chat/static/js/app.js && grep -q "setTheme" chat/static/js/app.js
+- [x] S25: Write chat/static/js/admin.js: see "S25 details" below
+  accept: node --check chat/static/js/admin.js && grep -q "/api/invites" chat/static/js/admin.js && grep -q "/api/users" chat/static/js/admin.js
+- [x] S26: Write chat/README.md: see "S26 details" below
+  accept: grep -q "## Running locally" chat/README.md && grep -q "## How it fits together" chat/README.md
 
-T01 and T02 (`POST /api/import`) are done; `status/backfill.py` already has `git_events`,
-`opencode_tokens`, `send` and `main`. Two small things are left.
+## S13 details
+In `api_create_message`, at step 5: for each id in `file_ids`: `f = db.get_file(int(id), username)`;
+a non-number or None -> return 400 `{"error": "Unknown file."}`. Then for each file add to the text
+sent to the model: `content += f"\n\nFile {f['name']}:\n```\n{db.get_file_content(f['id']).decode('utf-8')}\n```"`.
+After `db.add_message(...)` (it returns the message id) call `db.add_message_files(msg_id, [ids])`
+when there were files. The 413 check stays on the typed text only (before adding files).
 
-- [x] T07: Fix `send()` and the end of `main()` in status/backfill.py (find them with `grep -n "^def send\|^def main\|if all_events" status/backfill.py`; the file is ~300 lines, read only those parts). (1) `send()` posts to `url` itself: it must post to `url.rstrip("/") + "/api/import"`. (2) `send()` makes no request when `events` is empty: build the batches as `batches = [events[i:i + 1000] for i in range(0, len(events), 1000)] or [[]]` and send one request per batch, with `"tokens": tokens` only in the first request's body. (3) Use `urllib.request.urlopen(req, timeout=60)`; keep raising on HTTP errors. (4) In `main()`, call `send()` when there are events OR tokens (now it only checks events) and print per answer `"import: {events_added} added, {events_skipped} skipped, {token_days} token days"`. Do not touch any other function.
-  accept: python3 -m unittest -q status/tests/test_accept_history.py
-- [x] T11: Append to status/README.md (do not rewrite what is there). (1) A section `## History import` with three short paragraphs: what `status/backfill.py` reads (the agent's commits in every repo under `~/repos` via git, PRs via `gh`, token counts from OpenCode's database `~/.local/share/opencode/opencode.db`); how to run it on the devbox, as a fenced bash block with `python3 status/backfill.py --dry-run` and then `python3 status/backfill.py` (STATUS_URL and STATUS_TOKEN are already set there); and that running it twice is safe (events are keyed, token days are replaced). (2) A section `## Pause` with two sentences: Pause on the Now card makes the loop stop after its current task and free the model and the PC; Resume continues it (needs the devbox image with the new agent-loop). (3) In the existing endpoints code block (grep `/api/jobs/3/cancel`), add one curl line for `POST /api/import` with body `{"events":[],"tokens":[]}` and one for `POST /api/runs/<run_id>/pause` with body `{}`, in the same style as the lines around them.
-  accept: make status-test && grep -q "## History import" status/README.md && grep -q backfill.py status/README.md && grep -q /api/import status/README.md && grep -q /api/runs/ status/README.md
+## S25 details
+`chat/coder/templates/admin.html` has `#invite-new` (checkboxes `name=rights`, input `note`),
+`#invite-link`, `#invite-list`, `#user-list`. Every request sends header `X-Coder: 1` (and
+`Content-Type: application/json` with a JSON body). On load: GET /api/invites and GET /api/users and
+draw them as `<li>` rows (invites: rights, note, expires, "used by X" or a Delete button that calls
+DELETE /api/invites/ID; users: username, rights, last login, and a Delete button (DELETE
+/api/users/NAME, after confirm()) except for yourself). Submit of `#invite-new`: POST /api/invites
+{rights: checked values, note}; show `location.origin + result.url` in `#invite-link` with a Copy
+button (navigator.clipboard.writeText), then reload the lists. Escape all text you put in HTML.
+
+## S26 details
+`chat/README.md` with: `## What it is` (two sentences: the public chat for the local model; it talks
+to the model only through the status service's gateway). `## Running locally` (a bash block:
+`make chat-test`, then `cd chat && DATA_DIR=./data SECURE_COOKIES=0 ADMIN_USER=me
+ADMIN_PASSWORD=change-me-please GATEWAY_URL=http://localhost:8080/v1 .venv/bin/uvicorn --factory
+coder.app:create_app --port 8090`). `## How it fits together`: one line each for
+`coder/app.py`, `config.py`, `db.py`, `auth.py`, `gateway.py`, `context.py`, `answer.py`,
+`templates/`, `static/js/theme.js`, `stream.js`, `app.js`, `login.js`, `invite.js`, `admin.js`,
+`static/css/`, and the path browser → chat → status gateway (`/v1`) → llama-server.

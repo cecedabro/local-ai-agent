@@ -1,0 +1,89 @@
+name: chat-image
+on:
+  push:
+    branches: [main]
+    paths: [chat/**, Makefile, .github/workflows/chat-image.yml]
+  pull_request:
+    paths: [chat/**, Makefile, .github/workflows/chat-image.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  # Not on agent/* branch pushes: the contract suite is built up task by task, so it only has
+  # to be fully green on a PR and on main.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      # Until the agent has written chat/coder/app.py there is nothing to test or build.
+      - run: |
+          if [ ! -f chat/coder/app.py ]; then echo "chat/coder not written yet; skipping"; exit 0; fi
+          make chat-test
+  # Every chat change on main that passes the tests is a release: image tags X.Y.Z (patch
+  # bumped from the newest `chat-vX.Y.Z` git tag, first 0.1.0) and sha-<short>. Flux image
+  # automation in the homelab repo follows X.Y.Z (ImagePolicy coder-chat, to be added). The devbox image
+  # has no version tags on purpose: it is bumped by hand when no loop runs.
+  build:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: chat-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: app
+        run: echo "exists=$([ -f chat/coder/app.py ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: version
+        if: steps.app.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          git fetch -q --tags origin
+          last=$(git tag --list 'chat-v*' | sed 's/^chat-v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -z "$last" ]; then next=0.1.0; else
+            IFS=. read -r major minor patch <<< "$last"; next="$major.$minor.$((patch + 1))"; fi
+          { echo "number=$next"; echo "short=$(git rev-parse --short=7 HEAD)"; } >> "$GITHUB_OUTPUT"
+          echo "Releasing coder-chat $next"
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v4
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.app.outputs.exists == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: chat/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-chat:${{ steps.version.outputs.number }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-chat:sha-${{ steps.version.outputs.short }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-chat:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-chat:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Tag the release
+        if: steps.app.outputs.exists == 'true'
+        env:
+          TAG: chat-v${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "coder-chat $TAG"
+          git push origin "$TAG"
