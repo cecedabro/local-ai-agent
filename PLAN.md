@@ -24,7 +24,7 @@ Rules for every task:
   accept: make chat-test K="test_step_answer or (test_step_round2 and stop_event)"
 - [x] R05: In chat/coder/answer.py do `TODO (task R05)` in the `run_answer` docstring (store the partial answer when the browser goes away)
   accept: make chat-test K="test_step_answer or test_step_round2"
-- [ ] R06: In chat/coder/app.py rewrite `api_update_chat` as its docstring says (`TODO (task R06)`)
+- [x] R06: In chat/coder/app.py rewrite `api_update_chat` as its docstring says (`TODO (task R06)`)
   accept: make chat-test K="TestFolders and move_chats or test_crud_and_isolation"
 - [ ] R07: In chat/coder/app.py add the four folder routes (`TODO (task R07)`)
   accept: make chat-test K="TestFolders"

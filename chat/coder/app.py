@@ -254,51 +254,101 @@ def create_app(settings: dict | None = None) -> FastAPI:
         return JSONResponse(chat)
 
     @app.patch("/api/chats/{chat_id}")
-    async def api_update_chat(chat_id: str, request: Request) -> JSONResponse:
-        """Rename a chat and/or move it to a folder (SPEC §4, §11.3).
-
-        TODO (task R06): rewrite this route (keep its decorator; change the parameter to `chat_id: int`):
-          1. session via _require_session(request, app.state.db) (return it if it is a Response)
-          2. body = await request.json() (on error None); not a dict, or neither "title" nor "folder_id"
-             in it -> 400 {"error": "Nothing to change."}
-          3. chat = db.get_chat(chat_id, username); None -> 404 {"error": "not found"}
-          4. if "title" in body: title = str(body.get("title") or "").strip(); empty or > 120 chars -> 400
-             {"error": "A title needs 1 to 120 characters."}
-          5. if "folder_id" in body: fid = body["folder_id"]; fid is not None and (not an int, or
-             db.get_folder(fid, username) is None) -> 400 {"error": "That folder does not exist."}
-          6. only now change things: db.update_chat_title(...) if "title" in body;
-             db.set_chat_folder(chat_id, username, fid) if "folder_id" in body
-          7. c = db.get_chat(chat_id, username); return JSONResponse({k: c[k] for k in
-             ("id", "title", "profile", "updated", "folder_id")})
-        """
-        r = _require_session_and_csrf(request, app.state.db)
+    async def api_update_chat(chat_id: int, request: Request) -> JSONResponse:
+        """Rename a chat and/or move it to a folder (SPEC §4, §11.3)."""
+        r = _require_session(request, app.state.db)
         if isinstance(r, Response):
             return r
         username, _ = r
         try:
             body = await request.json()
         except Exception:
-            return JSONResponse({"error": "invalid json"}, status_code=400)
-        title = body.get("title", "")
-        if not title or not title.strip():
-            return JSONResponse({"error": "title is required and must not be empty"}, status_code=400)
-        chat = _get_chat_or_404(app.state.db, chat_id, username)
+            body = None
+        if not isinstance(body, dict) or ("title" not in body and "folder_id" not in body):
+            return JSONResponse({"error": "Nothing to change."}, status_code=400)
+        chat = app.state.db.get_chat(chat_id, username)
         if chat is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        app.state.db.update_chat_title(chat_id, username, title.strip())
-        return JSONResponse({"ok": True, "id": chat_id, "title": title.strip()})
+        if "title" in body:
+            title = str(body.get("title") or "").strip()
+            if not title or len(title) > 120:
+                return JSONResponse({"error": "A title needs 1 to 120 characters."}, status_code=400)
+            app.state.db.update_chat_title(chat_id, username, title)
+        if "folder_id" in body:
+            fid = body["folder_id"]
+            if fid is not None and (isinstance(fid, bool) or not isinstance(fid, int) or
+                                    app.state.db.get_folder(fid, username) is None):
+                return JSONResponse({"error": "That folder does not exist."}, status_code=400)
+            app.state.db.set_chat_folder(chat_id, username, fid)
+        c = app.state.db.get_chat(chat_id, username)
+        return JSONResponse({k: c[k] for k in ("id", "title", "profile", "updated", "folder_id")})
 
-    # TODO (task R07): the folder routes (SPEC §11.3), here, each starting with
-    #   r = _require_session(request, app.state.db); if isinstance(r, Response): return r; username = r[0]
-    # A helper `async def _folder_name(request) -> str | None`: the JSON body's "name", str(), stripped;
-    #   None when the body is not JSON / not a dict / the name is not 1–60 characters.
-    #   GET    /api/folders              -> JSONResponse(db.list_folders(username))
-    #   POST   /api/folders  (status_code=201) -> name None: 400 {"error": "A folder name needs 1 to 60 characters."};
-    #                                       else JSONResponse(db.create_folder(username, name), status_code=201)
-    #   PATCH  /api/folders/{folder_id:int} -> db.get_folder None: 404 {"error": "not found"}; bad name: the 400;
-    #                                       else db.rename_folder(...) and return db.get_folder(...)
-    #   DELETE /api/folders/{folder_id:int} -> db.delete_folder False: 404 {"error": "not found"}; else Response(status_code=204)
-    #
+    async def _folder_name(request: Request) -> str | None:
+        """Return stripped folder name or None if invalid."""
+        try:
+            body = await request.json()
+        except Exception:
+            return None
+        if not isinstance(body, dict):
+            return None
+        name = str(body.get("name") or "").strip()
+        if not name or len(name) > 60:
+            return None
+        return name
+
+    @app.get("/api/folders")
+    async def api_list_folders(request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        return JSONResponse(app.state.db.list_folders(username))
+
+    @app.post("/api/folders", status_code=201)
+    async def api_create_folder(request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        name = await _folder_name(request)
+        if name is None:
+            return JSONResponse({"error": "A folder name needs 1 to 60 characters."}, status_code=400)
+        return JSONResponse(app.state.db.create_folder(username, name), status_code=201)
+
+    @app.patch("/api/folders/{folder_id:int}")
+    async def api_update_folder(folder_id: int, request: Request) -> JSONResponse:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        if app.state.db.get_folder(folder_id, username) is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        name = await _folder_name(request)
+        if name is None:
+            return JSONResponse({"error": "A folder name needs 1 to 60 characters."}, status_code=400)
+        app.state.db.rename_folder(folder_id, username, name)
+        return JSONResponse(app.state.db.get_folder(folder_id, username))
+
+    @app.delete("/api/folders/{folder_id:int}")
+    async def api_delete_folder(folder_id: int, request: Request) -> Response:
+        r = _require_session_and_csrf(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        if not app.state.db.delete_folder(folder_id, username):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return Response(status_code=204)
+
+    @app.post("/api/chats/{chat_id:int}/stop")
+    async def api_stop_chat(chat_id: int, request: Request) -> Response:
+        r = _require_session(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = app.state.db.get_chat(chat_id, username)
+        if chat is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return Response(status_code=204)
     # TODO (task R08): stop (SPEC §11.2).
     #   In create_app, next to `app.state.settings = ...`: app.state.running = {}   (chat id -> asyncio.Event)
     #   POST /api/chats/{chat_id:int}/stop: session; db.get_chat(chat_id, username) None -> 404 {"error": "not found"};
