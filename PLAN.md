@@ -50,7 +50,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: node --test chat/tests/js/stream.test.mjs
 - [x] S18: stream.js: groupChats and metaText (done by hand: the writing engine)
   accept: node --test chat/tests/js/stream.test.mjs
-- [ ] S19: In chat/static/js/app.js fill in `loadChats` as its comment says
+- [x] S19: In chat/static/js/app.js fill in `loadChats` as its comment says
   accept: node --check chat/static/js/app.js && grep -q "groupChats(state.chats" chat/static/js/app.js
 - [ ] S20: In chat/static/js/app.js fill in `openChat` and `drawMessage` as their comments say
   accept: node --check chat/static/js/app.js && grep -q "md.render(" chat/static/js/app.js && grep -q "welcome" chat/static/js/app.js

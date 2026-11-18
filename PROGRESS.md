@@ -38,3 +38,5 @@
 - [S14] `chat/coder/app.py`: Filled in `api_compress` — session check via `_require_session`, chat lookup with 404, calls `await context.compress(db, chat, settings, gateway.complete)`, reloads chat, returns `{"context": context.info(db, chat, settings)}`. Changed `api_get_chat` to return real context via `context.info(app.state.db, chat, app.state.settings)` instead of hardcoded values. `make chat-test K="TestContext"` + `make check` both pass.
 
 - [S15] Verified `make chat-test` (50 passed) and `make check` (32 passed) — both already green, no code changes needed.
+
+- [S19] `chat/static/js/app.js`: Implemented `loadChats` — fetches GET /api/chats, stores in state.chats, filters by #search value (case-insensitive title substring), groups via groupChats(), renders sidebar with <h4> group labels, <div class="conv" data-id> items with escaped titles, <em class="tag">EH</em> for evidence profile, and "on" class for the active chat. `node --check` + `grep` validation + `make check` all pass.

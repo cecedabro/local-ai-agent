@@ -44,7 +44,25 @@ export function esc(s) {
  * inside it when chat.profile === "evidence", and class "on" when chat.id === state.chatId.
  * Filter by the #search input's value (case-insensitive substring of the title).
  */
-async function loadChats() {}
+async function loadChats() {
+  const res = await api("/api/chats");
+  state.chats = await res.json();
+  const query = ($("#search").value || "").toLowerCase();
+  const groups = groupChats(state.chats).map((g) => ({
+    label: g.label,
+    chats: g.chats.filter((c) => !query || c.title.toLowerCase().includes(query)),
+  })).filter((g) => g.chats.length);
+  const sidebar = $("#convs");
+  sidebar.innerHTML = groups.map((g) =>
+    `<h4>${esc(g.label)}</h4>` +
+    g.chats.map((c) =>
+      `<div class="conv${c.id === state.chatId ? " on" : ""}" data-id="${c.id}">` +
+      `<span>${esc(c.title)}</span>` +
+      (c.profile === "evidence" ? `<em class="tag">EH</em>` : "") +
+      `</div>`
+    ).join("")
+  ).join(""));
+}
 
 /**
  * TODO (task S20). Open a chat: GET /api/chats/ID, set state.chatId and state.profile, set
