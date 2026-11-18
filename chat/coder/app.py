@@ -255,6 +255,22 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     @app.patch("/api/chats/{chat_id}")
     async def api_update_chat(chat_id: str, request: Request) -> JSONResponse:
+        """Rename a chat and/or move it to a folder (SPEC §4, §11.3).
+
+        TODO (task R06): rewrite this route (keep its decorator; change the parameter to `chat_id: int`):
+          1. session via _require_session(request, app.state.db) (return it if it is a Response)
+          2. body = await request.json() (on error None); not a dict, or neither "title" nor "folder_id"
+             in it -> 400 {"error": "Nothing to change."}
+          3. chat = db.get_chat(chat_id, username); None -> 404 {"error": "not found"}
+          4. if "title" in body: title = str(body.get("title") or "").strip(); empty or > 120 chars -> 400
+             {"error": "A title needs 1 to 120 characters."}
+          5. if "folder_id" in body: fid = body["folder_id"]; fid is not None and (not an int, or
+             db.get_folder(fid, username) is None) -> 400 {"error": "That folder does not exist."}
+          6. only now change things: db.update_chat_title(...) if "title" in body;
+             db.set_chat_folder(chat_id, username, fid) if "folder_id" in body
+          7. c = db.get_chat(chat_id, username); return JSONResponse({k: c[k] for k in
+             ("id", "title", "profile", "updated", "folder_id")})
+        """
         r = _require_session_and_csrf(request, app.state.db)
         if isinstance(r, Response):
             return r
@@ -271,6 +287,32 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "not found"}, status_code=404)
         app.state.db.update_chat_title(chat_id, username, title.strip())
         return JSONResponse({"ok": True, "id": chat_id, "title": title.strip()})
+
+    # TODO (task R07): the folder routes (SPEC §11.3), here, each starting with
+    #   r = _require_session(request, app.state.db); if isinstance(r, Response): return r; username = r[0]
+    # A helper `async def _folder_name(request) -> str | None`: the JSON body's "name", str(), stripped;
+    #   None when the body is not JSON / not a dict / the name is not 1–60 characters.
+    #   GET    /api/folders              -> JSONResponse(db.list_folders(username))
+    #   POST   /api/folders  (status_code=201) -> name None: 400 {"error": "A folder name needs 1 to 60 characters."};
+    #                                       else JSONResponse(db.create_folder(username, name), status_code=201)
+    #   PATCH  /api/folders/{folder_id:int} -> db.get_folder None: 404 {"error": "not found"}; bad name: the 400;
+    #                                       else db.rename_folder(...) and return db.get_folder(...)
+    #   DELETE /api/folders/{folder_id:int} -> db.delete_folder False: 404 {"error": "not found"}; else Response(status_code=204)
+    #
+    # TODO (task R08): stop (SPEC §11.2).
+    #   In create_app, next to `app.state.settings = ...`: app.state.running = {}   (chat id -> asyncio.Event)
+    #   POST /api/chats/{chat_id:int}/stop: session; db.get_chat(chat_id, username) None -> 404 {"error": "not found"};
+    #     ev = app.state.running.get(chat_id); if ev is not None: ev.set(); return Response(status_code=204)
+    #   In api_create_message replace the final `return StreamingResponse(...)` with:
+    #     stop = asyncio.Event(); app.state.running[chat_id] = stop
+    #     async def events():
+    #         try:
+    #             async for chunk in answer.run_answer(db, settings, chat, body.get("mode") == "think", stop=stop):
+    #                 yield chunk
+    #         finally:
+    #             if app.state.running.get(chat_id) is stop: del app.state.running[chat_id]
+    #     return StreamingResponse(events(), media_type="text/event-stream")
+    #   (`import asyncio` at the top.)
 
     @app.delete("/api/chats/{chat_id}")
     async def api_delete_chat(chat_id: str, request: Request) -> Response:
@@ -377,6 +419,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
         for fid in file_ids:
             if not db.get_file(fid, username):
                 return JSONResponse({"error": "One or more files not found."}, status_code=400)
+        # TODO (task R09): the file block must be exactly "\n\nFile <name>:\n```\n<content>\n```" (SPEC §5, §11.1):
+        #   today the blank line before "File" and the newline before the closing ``` are missing.
         if file_ids:
             for fid in file_ids:
                 f = db.get_file(fid, username)

@@ -249,3 +249,63 @@ Endpoints (JSON; the CSRF header rule of §2 applies to every POST/DELETE):
 Pages: the sign-in page has "Sign in with a passkey"; the invite page offers "Use Face ID / Touch
 ID next time" right after the account is made; `GET /account` (session) lists your passkeys with
 "Add a passkey" and "Remove". The browser side is `chat/static/js/webauthn.js` (human-owned).
+
+## 11. Round 2: phases, stop, folders, code blocks
+
+### 11.1 Phases and events (changes §5)
+- Order: `compressing` (if auto-compress runs) → `reading` → `waiting` (if busy) → `thinking`
+  (first reasoning chunk) → `writing` (first content chunk). Each at most once per answer.
+  `reading` = `{"phase": "reading", "label": "Reading your message…"}`, sent right before the
+  first gateway call, so the orb clouds over and the label shimmers at once.
+- Every non-empty content chunk becomes a `delta`, the very first one too.
+- `done` = `{"message_id", "tokens", "tps", "context", "title", "stopped"}`: `title` is the
+  chat's title after this answer (the page shows it at the top), `stopped` true when §11.2 cut
+  the answer short.
+- A message in `GET /api/chats/<id>` also has `"stopped": true|false`.
+- Attached files are added to the user text exactly as §5 says (`\n\nFile <name>:\n```\n<content>\n````),
+  so the page can cut the typed text off at the first `\n\nFile `.
+
+### 11.2 Stop
+- `POST /api/chats/<id>/stop` → **204**; not your chat → **404**. If an answer for that chat is
+  being written, it stops after the chunk it is handling: the gateway stream is closed (the model
+  stops), the text so far is stored as the assistant message with `stopped` true (nothing is
+  stored when no text came yet; then `message_id` is null), and `done` follows with
+  `"stopped": true`. Without a running answer the call does nothing (no flag stays behind).
+- If the client disconnects mid-answer, the same happens without the `done` event.
+
+### 11.3 Folders
+A user's chats can live in folders (one level, no nesting of folders).
+- `GET /api/folders` → **200** `[{"id", "name", "created"}]`, sorted by name (case-insensitive).
+- `POST /api/folders` `{"name"}` (1–60 characters after trimming, else **400**) → **201**
+  `{"id", "name", "created"}`.
+- `PATCH /api/folders/<id>` `{"name"}` → **200** the folder; bad name **400**; not yours **404**.
+- `DELETE /api/folders/<id>` → **204**; its chats are kept, now without a folder; not yours **404**.
+- `GET /api/chats` items gain `"folder_id"` (int or null).
+- `PATCH /api/chats/<id>` takes `{"title"?, "folder_id"?}` (at least one, else **400**):
+  `folder_id` null takes it out of its folder; a folder id that isn't yours → **400**. Returns
+  **200** `{"id", "title", "profile", "updated", "folder_id"}`.
+- Deleting a user (§3) deletes their folders too.
+
+### 11.4 Code files
+- The General system prompt also says: "When you write a complete file, put its file name after
+  the language on the opening fence line, for example ```html index.html".
+- In the page every fenced code block is coloured (highlight.js 11.11.1, vendored at
+  `chat/static/vendor/highlight.min.js`) and has a head with the file name, Copy and Download
+  (stream.js `codeBlocks`, `codeActions`). Download saves the block as that file.
+
+### 11.5 Page behaviour (app.js; hooks in §9 and below)
+- After sending, the thread scrolls to the bottom at once. While an answer is written the page
+  follows it, until the reader scrolls up; then it stays exactly where they are reading and the
+  `#jump` button ("↓ Latest") shows; clicking it (or scrolling back down) follows again
+  (stream.js `Follow`).
+- While an answer is on its way `#send` gets class `stop` (title "Stop"); clicking it calls §11.2.
+  A stopped answer shows `<div class="note stopped">Stopped</div>` under its stats line.
+- The tiny writing drop fills like the big one (`data-phase="writing"` and `--fill` on it too).
+- The sidebar shows folders first (`<details class="folder" open data-folder="ID"><summary>
+  <span>NAME</span><small>COUNT</small><button class="more" data-folder-menu="ID">⋯</button>
+  </summary> …its .conv items… </details>`), then the date groups for chats without a folder.
+  Each `.conv` has `<button class="more" data-chat-menu="ID">⋯</button>` and is `draggable`;
+  dropping it on a folder (or on `#convs` outside folders) moves it. `#new-folder` asks for a name.
+- The menu `#cmenu` (positioned with the CSS variables `--x`/`--y`): for a chat: Rename, "Move
+  to" + one button per folder + "No folder" + "New folder…", Delete (confirm first); for a
+  folder: Rename, Delete (confirm; its chats are kept).

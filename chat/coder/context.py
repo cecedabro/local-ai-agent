@@ -11,6 +11,9 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable
 
+# TODO (task R02): append to the "general" prompt, after "Use Markdown.", exactly this sentence (SPEC §11.4):
+#   " When you write a complete file, put its file name after the language on the opening fence line,
+#    for example ```html index.html"
 SYSTEM_PROMPTS = {
     "general": ("You are Dewdrop, a helpful assistant running locally on Cédric's PC. "
                 "Answer in the user's language. Use Markdown."),

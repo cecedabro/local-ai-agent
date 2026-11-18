@@ -1,7 +1,7 @@
 // Judge for chat/static/js/stream.js. Protected. Run: node --test chat/tests/js/stream.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitEvents, readEvents, Typewriter, FADE_MS, groupChats, metaText } from "../../static/js/stream.js";
+import { splitEvents, readEvents, Typewriter, FADE_MS, groupChats, metaText, Follow, codeInfo, highlight, codeBlocks } from "../../static/js/stream.js";
 
 test("splitEvents", () => {
   const r = splitEvents('event: delta\ndata: {"text":"Hi"}\n\nevent: phase\ndata: {"phase":"writing"}\n\nevent: do');
@@ -60,4 +60,51 @@ test("groupChats", () => {
 test("metaText", () => {
   assert.equal(metaText(412, 41), "Dewdrop · 412 tokens · 41 tok/s");
   assert.equal(metaText(3, null), "Dewdrop · 3 tokens");
+});
+
+test("codeInfo: language, file name, safe names", () => {
+  assert.deepEqual(codeInfo("html index.html"), { lang: "html", file: "index.html" });
+  assert.deepEqual(codeInfo("index.html"), { lang: "html", file: "index.html" });
+  assert.deepEqual(codeInfo("python"), { lang: "python", file: "code.py" });
+  assert.deepEqual(codeInfo(""), { lang: "", file: "code.txt" });
+  assert.deepEqual(codeInfo("JavaScript app.js"), { lang: "javascript", file: "app.js" });
+  assert.equal(codeInfo("dockerfile").file, "Dockerfile");
+  assert.equal(codeInfo("sh ../../etc/x.sh").file.includes("/"), false);
+});
+
+test("highlight: known language via hljs, else escaped text", () => {
+  const fake = { getLanguage: (n) => n === "xml", highlight: (c, o) => ({ value: `<span class="hljs-tag">${o.language}</span>` }) };
+  assert.equal(highlight("<p>", "html", fake), '<span class="hljs-tag">xml</span>');
+  assert.equal(highlight("<p>&", "klingon", fake), "&lt;p&gt;&amp;");
+  assert.equal(highlight("a<b", "", undefined), "a&lt;b");
+});
+
+test("codeBlocks: fence with head, Copy and Download", () => {
+  const md = { renderer: { rules: {} } };
+  codeBlocks(md, { getLanguage: () => false });
+  const html = md.renderer.rules.fence([{ info: "html page.html", content: "<b>hi</b>\n" }], 0);
+  assert.match(html, /^<div class="code"><div class="code-head"><span class="lang">page\.html<\/span>/);
+  assert.match(html, /data-copy-code/);
+  assert.match(html, /data-download="page\.html"/);
+  assert.match(html, /<pre><code class="hljs language-html">&lt;b&gt;hi&lt;\/b&gt;\n<\/code><\/pre><\/div>/);
+});
+
+test("Follow: stops on scroll up, follows again at the bottom", () => {
+  const el = new EventTarget();
+  Object.assign(el, { scrollTop: 600, scrollHeight: 1000, clientHeight: 400 });
+  const seen = [];
+  const f = new Follow(el, (on) => seen.push(on));
+  el.scrollHeight = 1200; f.stick();
+  assert.equal(el.scrollTop, 1200);                         // following: pinned to the bottom
+  el.dispatchEvent(Object.assign(new Event("wheel"), { deltaY: -40 }));
+  assert.equal(f.on, false);
+  el.scrollHeight = 1500; el.scrollTop = 700; f.stick();
+  assert.equal(el.scrollTop, 700);                          // the reader's place is kept
+  el.scrollTop = 1100; el.dispatchEvent(new Event("scroll"));
+  assert.equal(f.on, true);                                 // back at the bottom
+  el.scrollTop = 500; el.dispatchEvent(new Event("scroll"));
+  assert.equal(f.on, false);                                // scrollbar dragged up
+  f.bottom();
+  assert.equal(f.on, true); assert.equal(el.scrollTop, 1500);
+  assert.deepEqual(seen, [false, true, false, true]);
 });

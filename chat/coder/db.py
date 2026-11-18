@@ -602,7 +602,24 @@ class DB:
             username = d["username"] or ""
             return (d["challenge"], username)  # type: ignore[return-value]
 
-    # TODO (task P02–P05): passkey registration, login endpoints in passkeys.py
+    # TODO (task R01): folders and stopped answers (chat/SPEC.md §11). Tests: test_step_round2.py
+    #   1. Add to _SCHEMA:  folders(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
+    #      name TEXT NOT NULL, created TEXT NOT NULL)
+    #   2. In init_schema, after executescript (existing databases have the old tables!):
+    #        cols = {r["name"] for r in conn.execute("PRAGMA table_info(chats)")}
+    #        if "folder_id" not in cols: ALTER TABLE chats ADD COLUMN folder_id INTEGER DEFAULT NULL
+    #      and the same for messages: "stopped" -> ALTER TABLE messages ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0
+    #   3. list_chats also selects folder_id. add_message gets a keyword `stopped: bool = False` and stores 1/0.
+    #      get_messages puts "stopped": bool(r["stopped"]) in every message dict.
+    #   4. delete_user also deletes the user's folders.
+    #   5. New methods (each with self._lock and self._connect(), like the others):
+    #      create_folder(username, name) -> {"id", "name", "created"}
+    #      list_folders(username) -> [{"id", "name", "created"}] ORDER BY name COLLATE NOCASE, id
+    #      get_folder(folder_id, username) -> that dict or None (None for someone else's folder)
+    #      rename_folder(folder_id, username, name) -> True if a row changed
+    #      delete_folder(folder_id, username) -> True if deleted; then also
+    #         UPDATE chats SET folder_id = NULL WHERE folder_id = ? AND username = ?
+    #      set_chat_folder(chat_id, username, folder_id or None) -> True if the chat is yours and changed
 
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()

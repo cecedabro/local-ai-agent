@@ -62,10 +62,10 @@
 .orb[data-phase=waiting]{filter:grayscale(1);animation:orb-sleep 4s ease-in-out infinite}
 @keyframes orb-sleep{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:.8;transform:scale(1)}}
 
-/* the welcome screen: the cloud marble, drifting slowly */
-.orb.marble{background:radial-gradient(circle,rgba(255,255,255,.55),rgba(225,242,255,.6))}
-.orb.marble i:nth-child(1){opacity:.9;animation:orb-cloud 14s ease-in-out infinite}
-.orb.marble i:nth-child(4){display:none}
-:root[data-theme=dark] .orb.marble{background:radial-gradient(circle,rgba(255,255,255,.1),rgba(120,180,240,.16))}
+/* the welcome screen: the dewdrop itself, clouds drifting slowly inside it, breathing */
+.orb.marble{animation:orb-breath 6s cubic-bezier(.45,0,.55,1) infinite}
+.orb.marble i:nth-child(1){opacity:.8;animation:orb-cloud 12s ease-in-out infinite}
+/* the tiny writing drop fills too (JS sets data-phase="writing" and --fill on it) */
+.orb.tiny i:nth-child(2)::before,.orb.tiny i:nth-child(2)::after{height:16%}
 
 @media (prefers-reduced-motion:reduce){.orb,.orb *,.orb i::before,.orb i::after{animation:none!important}}

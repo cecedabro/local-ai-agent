@@ -20,11 +20,30 @@ ANSWER = ("Go a bit lower than for search: around **150–200 ms**.\n\n```javasc
           "For the full results page keep **300 ms**.")
 
 
+LONG = "\n\n".join(f"Paragraph {i}: " + "the quick brown fox jumps over the lazy dog " * 4 for i in range(1, 15))
+CODE = "Here it is:\n\n```html page.html\n<!doctype html>\n<title>Hi</title>\n<p class=\"x\">Hello</p>\n```\n"
+
+
+class Script(dict):
+    """The fake's answer depends on the last message: "long" -> 14 paragraphs, "html" -> a file."""
+    def __init__(self, gw):
+        super().__init__(usage={"prompt_tokens": 500, "completion_tokens": 40})
+        self.gw = gw
+
+    def get(self, key, default=None):
+        if key == "content":
+            last = self.gw.requests[-1]["body"]["messages"][-1]["content"]
+            text = LONG if "long" in last else CODE if "html" in last else ANSWER
+            return [w + " " for w in text.split(" ")]
+        if key == "reasoning":
+            return ["hmm"]
+        return super().get(key, default)
+
+
 def main() -> None:
     port, data = int(sys.argv[1]), sys.argv[2]
     gw = FakeGateway()
-    gw.script = {"reasoning": ["hmm"], "content": [w + " " for w in ANSWER.split(" ")],
-                 "usage": {"prompt_tokens": 500, "completion_tokens": 40}}
+    gw.script = Script(gw)
     handler = gw.server.RequestHandlerClass
     post = handler.do_POST
 
@@ -32,11 +51,16 @@ def main() -> None:
         write = self.wfile.write
 
         def slow(b: bytes):
+            if b.startswith(b"data: ") and b'"reasoning_content"' in b:
+                time.sleep(0.9)                   # the model reads the prompt first
             if b.startswith(b"data: ") and b'"content"' in b:
                 time.sleep(0.04)
             return write(b)
         self.wfile.write = slow
-        return post(self)
+        try:
+            return post(self)
+        except (BrokenPipeError, ConnectionResetError):
+            return None                           # the app closed the stream (stop)
     handler.do_POST = slow_post
     gw.start()
     app = create_app({"DATA_DIR": data, "GATEWAY_URL": gw.url + "/v1", "GATEWAY_KEY": "k", "STATUS_URL": gw.url,
