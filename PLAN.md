@@ -16,7 +16,7 @@ Rules for every task:
 
 - [x] R01: In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says
   accept: make chat-test K="test_step_round2 and (folders_db or migration)"
-- [ ] R02: In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`)
+- [x] R02: In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`)
   accept: make chat-test K="test_step_round2 and prompt_names_files"
 - [ ] R03: In chat/coder/answer.py do `TODO (task R03)` in the `run_answer` docstring (reading phase, every chunk as a delta, title in done)
   accept: make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"
