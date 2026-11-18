@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator
 
+import httpx
+
 
 class Busy(Exception):
     """The gateway answered 503 or 429: the model is busy, try again later."""
@@ -101,8 +103,27 @@ async def stream_chat(settings: Any, messages: list[dict], think: bool) -> Async
       httpx.ConnectError / httpx.TimeoutException -> raise GatewayError(502).
     Busy and GatewayError are raised on the first `async for` step, before anything is yielded.
     """
-    raise NotImplementedError
-    yield  # pragma: no cover  (keeps this an async generator)
+    headers: dict[str, str] | None = None
+    if settings.GATEWAY_KEY:
+        headers = {"Authorization": f"Bearer {settings.GATEWAY_KEY}"}
+
+    url = settings.GATEWAY_URL.rstrip("/") + "/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=600) as client:
+            async with client.stream("POST", url, json=request_body(messages, think), headers=headers) as resp:
+                if resp.status_code in (503, 429):
+                    raise Busy()
+                if resp.status_code != 200:
+                    raise GatewayError(resp.status_code)
+
+                async for line in resp.aiter_lines():
+                    for event in parse_line(line):
+                        if event[0] == "done":
+                            return
+                        yield event
+    except (httpx.ConnectError, httpx.TimeoutException):
+        raise GatewayError(502)
 
 
 async def complete(settings: Any, messages: list[dict]) -> str:
