@@ -26,7 +26,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: make chat-test K="test_step_context and test_ctx_max_and_cache"
 - [x] S06: In chat/coder/context.py fill in `context_messages` and `build_messages` as their docstrings say
   accept: make chat-test K="test_step_context and test_context_and_build_messages"
-- [ ] S07: In chat/coder/context.py fill in `used` and `info` as their docstrings say
+- [x] S07: In chat/coder/context.py fill in `used` and `info` as their docstrings say
   accept: make chat-test K="test_step_context and test_used_and_info"
 - [ ] S08: In chat/coder/context.py fill in `just_before` and `compress` as their docstrings say
   accept: make chat-test K="test_step_context"

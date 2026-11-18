@@ -94,12 +94,16 @@ def used(db: Any, chat: dict) -> int:
     (last_completion_tokens or 0). Else math.ceil(total characters of every "content" in
     build_messages(db, chat) / 4).
     """
-    raise NotImplementedError
+    if chat["last_prompt_tokens"] is not None:
+        return chat["last_prompt_tokens"] + (chat["last_completion_tokens"] or 0)
+    total_chars = sum(len(m["content"]) for m in build_messages(db, chat))
+    return math.ceil(total_chars / 4)
 
 
 def info(db: Any, chat: dict, settings: Any) -> dict:
     """TODO (task S07). {"used": used(db, chat), "max": ..., "compress_at": ...} (merge window(settings))."""
-    raise NotImplementedError
+    w = window(settings)
+    return {"used": used(db, chat), "max": w["max"], "compress_at": w["compress_at"]}
 
 
 def just_before(iso: str) -> str:
