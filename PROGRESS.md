@@ -36,3 +36,5 @@
 - [S13] `chat/coder/app.py`: Filled in `api_create_message` step 5 (files) — validates each file_id belongs to the current user via `db.get_file()` (returns 400 if not found); step 6 — appends file content blocks (`\nFile <name>:\n```\n<content>\n``` `) to the user message content, stores the enriched message via `db.add_message`, and calls `db.add_message_files(msg_id, file_ids)` to persist associations. `make chat-test K="TestFiles or TestStream"` + `make check` both pass.
 
 - [S14] `chat/coder/app.py`: Filled in `api_compress` — session check via `_require_session`, chat lookup with 404, calls `await context.compress(db, chat, settings, gateway.complete)`, reloads chat, returns `{"context": context.info(db, chat, settings)}`. Changed `api_get_chat` to return real context via `context.info(app.state.db, chat, app.state.settings)` instead of hardcoded values. `make chat-test K="TestContext"` + `make check` both pass.
+
+- [S15] Verified `make chat-test` (50 passed) and `make check` (32 passed) — both already green, no code changes needed.
