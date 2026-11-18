@@ -152,6 +152,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
             if stop is not None and stop.is_set():
                 stopped = True
                 break
+        msg_stored = True
     except gateway.GatewayError as e:
         yield sse("error", {"error": "The model could not answer.", "status": e.status})
         return

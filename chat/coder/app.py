@@ -5,6 +5,7 @@ both uvicorn and the test client.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -46,6 +47,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     app = FastAPI(title="Coder Chat", version="0.1.0", lifespan=_lifespan)
     app.state.settings = settings_obj
+    app.state.running: dict[int, asyncio.Event] = {}
 
     # ------------------------------------------------------------------ #
     #  Security middleware (CSRF + headers)                               #
@@ -349,21 +351,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
         chat = app.state.db.get_chat(chat_id, username)
         if chat is None:
             return JSONResponse({"error": "not found"}, status_code=404)
+        ev = app.state.running.get(chat_id)
+        if ev is not None:
+            ev.set()
         return Response(status_code=204)
-    # TODO (task R08): stop (SPEC §11.2).
-    #   In create_app, next to `app.state.settings = ...`: app.state.running = {}   (chat id -> asyncio.Event)
-    #   POST /api/chats/{chat_id:int}/stop: session; db.get_chat(chat_id, username) None -> 404 {"error": "not found"};
-    #     ev = app.state.running.get(chat_id); if ev is not None: ev.set(); return Response(status_code=204)
-    #   In api_create_message replace the final `return StreamingResponse(...)` with:
-    #     stop = asyncio.Event(); app.state.running[chat_id] = stop
-    #     async def events():
-    #         try:
-    #             async for chunk in answer.run_answer(db, settings, chat, body.get("mode") == "think", stop=stop):
-    #                 yield chunk
-    #         finally:
-    #             if app.state.running.get(chat_id) is stop: del app.state.running[chat_id]
-    #     return StreamingResponse(events(), media_type="text/event-stream")
-    #   (`import asyncio` at the top.)
 
     @app.delete("/api/chats/{chat_id}")
     async def api_delete_chat(chat_id: str, request: Request) -> Response:
@@ -471,17 +462,24 @@ def create_app(settings: dict | None = None) -> FastAPI:
             if not db.get_file(fid, username):
                 return JSONResponse({"error": "One or more files not found."}, status_code=400)
         # TODO (task R09): the file block must be exactly "\n\nFile <name>:\n```\n<content>\n```" (SPEC §5, §11.1):
-        #   today the blank line before "File" and the newline before the closing ``` are missing.
         if file_ids:
             for fid in file_ids:
                 f = db.get_file(fid, username)
                 fc = db.get_file_content(fid)
-                content += f'\nFile {f["name"]}:\n```\n{fc.decode()}```'
+                content += f'\n\nFile {f["name"]}:\n```\n{fc.decode()}\n```'
         msg_id = db.add_message(chat_id, "user", content)
         if file_ids:
             db.add_message_files(msg_id, file_ids)
-        return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
-                                 media_type="text/event-stream")
+        stop = asyncio.Event()
+        app.state.running[chat_id] = stop
+        async def events():
+            try:
+                async for chunk in answer.run_answer(db, settings, chat, body.get("mode") == "think", stop=stop):
+                    yield chunk
+            finally:
+                if app.state.running.get(chat_id) is stop:
+                    del app.state.running[chat_id]
+        return StreamingResponse(events(), media_type="text/event-stream")
 
     # ── POST /api/chats/{chat_id}/compress ─────────────────────────────────
 

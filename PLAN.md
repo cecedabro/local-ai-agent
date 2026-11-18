@@ -28,7 +28,7 @@ Rules for every task:
   accept: make chat-test K="TestFolders and move_chats or test_crud_and_isolation"
 - [x] R07: In chat/coder/app.py add the four folder routes (`TODO (task R07)`)
   accept: make chat-test K="TestFolders"
-- [ ] R08: In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`)
+- [x] R08: In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`)
   accept: make chat-test K="TestRound2Answer and (stop_endpoint or done_has_title)"
 - [ ] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
   accept: make chat-test
