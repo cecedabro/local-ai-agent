@@ -310,7 +310,7 @@ class DB:
                    LEFT JOIN message_files mf ON m.id = mf.message_id
                    LEFT JOIN files f ON mf.file_id = f.id
                    WHERE m.chat_id = ?
-                   ORDER BY m.created""",
+                   ORDER BY m.created, m.id""",
                 (chat_id,),
             ).fetchall()
             # Group by message id
@@ -342,8 +342,8 @@ class DB:
                 """SELECT m.role, m.content
                    FROM messages m
                    WHERE m.chat_id = ?
-                   ORDER BY m.created""",
-                (chat_id,),
+                    ORDER BY m.created, m.id""",
+                 (chat_id,),
             ).fetchall()
             return [{"role": r["role"], "content": r["content"]} for r in rows]
 
@@ -475,12 +475,24 @@ class DB:
             conn.execute("UPDATE users SET last_login = ? WHERE username = ?", (_now_iso(), username))
             conn.commit()
 
-    # TODO (task S01):
-    #   - add_message_at(self, chat_id, role, content, created) -> int: like add_message, but with the
-    #     given `created` (ISO string) instead of now; tokens and tps NULL. Returns the new id.
-    #   - reset_chat_usage(self, chat_id) -> None: set last_prompt_tokens and last_completion_tokens
-    #     to NULL for that chat.
-    #   - in get_messages and get_messages_for_completion: ORDER BY m.created, m.id (not only created).
+    def add_message_at(self, chat_id: int, role: str, content: str, created: str) -> int:
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "INSERT INTO messages (chat_id, role, content, created, tokens, tps) VALUES (?, ?, ?, ?, NULL, NULL)",
+                (chat_id, role, content, created),
+            )
+            conn.commit()
+            return cur.lastrowid
+
+    def reset_chat_usage(self, chat_id: int) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "UPDATE chats SET last_prompt_tokens = NULL, last_completion_tokens = NULL WHERE id = ?",
+                (chat_id,),
+            )
+            conn.commit()
 
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()

@@ -14,7 +14,7 @@ Rules for every task:
 Done earlier (T01–T04, T07): settings, database, login, sessions, invites, users, chats, files.
 The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is done and human-owned: use it, don't edit it.
 
-- [ ] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
+- [x] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
   accept: make chat-test K="test_step_context and test_db_helpers"
 - [ ] S02: In chat/coder/gateway.py fill in `request_body` and `parse_line` as their docstrings say
   accept: make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"
