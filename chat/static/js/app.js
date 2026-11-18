@@ -275,13 +275,30 @@ async function send() {
   }
 }
 
-/**
- * TODO (task S22). Draw the context bar from {used, max, compress_at}: on ".ctx .bar > i" set
- * --used = used / max (0..1), on ".ctx .line" set --at = compress_at / max, and #ctx-text =
- * "Context 14.2k / 32k" (numbers >= 1000 as one decimal + "k", trailing ".0k" -> "k").
- * #compress click: POST /api/chats/ID/compress, then openChat(ID) again.
- */
-function drawContext(ctx) {}
+function fmt(n) {
+  if (n < 1000) return String(n);
+  const s = (n / 1000).toFixed(1);
+  return s.endsWith(".0") ? s.slice(0, -2) + "k" : s + "k";
+}
+
+function drawContext(ctx) {
+  const { used, max, compress_at } = ctx;
+  const barI = document.querySelector(".ctx .bar > i");
+  const line = document.querySelector(".ctx .line");
+  if (barI) barI.style.setProperty("--used", (used / max).toFixed(4));
+  if (line) line.style.setProperty("--at", (compress_at / max).toFixed(4));
+  const ctxText = $("#ctx-text");
+  if (ctxText) ctxText.textContent = `Context ${fmt(used)} / ${fmt(max)}`;
+  const compressBtn = $("#compress");
+  if (compressBtn) {
+    compressBtn.onclick = async () => {
+      const id = state.chatId;
+      if (!id) return;
+      await api(`/api/chats/${id}/compress`, { method: "POST" });
+      openChat(id);
+    };
+  }
+}
 
 /**
  * TODO (task S23). The file input #file-input: on change, POST each file as FormData field "file" to
