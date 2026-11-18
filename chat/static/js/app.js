@@ -306,7 +306,30 @@ function drawContext(ctx) {
  * draw a chip <span class="file">NAME <button data-remove="ID">×</button></span> in #file-chips.
  * 413 -> alert "File too big (max 200 KB)", 415 -> alert "Only text files". The × removes it again.
  */
-function setupFiles() {}
+function setupFiles() {
+  $("#file-input").addEventListener("change", async () => {
+    for (const file of $("#file-input").files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api("/api/files", { method: "POST", body: formData });
+      if (res.status === 413) { alert("File too big (max 200 KB)"); continue; }
+      if (res.status === 415) { alert("Only text files"); continue; }
+      const f = await res.json();
+      state.files.push(f);
+      $("#file-chips").insertAdjacentHTML("beforeend",
+        `<span class="file">${esc(f.name)} <button data-remove="${f.id}">×</button></span>`
+      );
+    }
+    $("#file-chips").onclick = (e) => {
+      const btn = e.target.closest("button[data-remove]");
+      if (!btn) return;
+      const id = Number(btn.dataset.remove);
+      state.files = state.files.filter((ff) => ff.id !== id);
+      btn.closest("span.file").remove();
+    };
+    $("#file-input").value = "";
+  });
+}
 
 /**
  * TODO (task S24). Wire everything once at start:
