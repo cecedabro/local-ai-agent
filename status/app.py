@@ -125,6 +125,7 @@ class App:
         self.db.commit()
         self.holder: dict | None = None
         self.waiters: list[dict] = []
+        self.devbox = {"pending": False, "target": "", "since": None, "seen": None}   # SPEC §15
         self.probe = {"t": None, "state": "unknown"}
         self.metrics_error: str | None = None
         self.n_ctx: int | None = None
@@ -378,11 +379,37 @@ class App:
             self.seen_worker(worker, bool(body.get("paused")), body.get("repos"))
         return {"ok": True}
 
+    DEVBOX_TTL = 900                                    # a pending update expires without a refresh
+
+    def devbox_pending(self) -> bool:
+        d = self.devbox
+        return bool(d["pending"]) and d["seen"] is not None and self.clock() - d["seen"] < self.DEVBOX_TTL
+
+    def devbox_report(self, body: dict) -> tuple[int, dict]:
+        """The homelab rollout CronJob: is a devbox update waiting, and is it safe to restart now? (§15)"""
+        if not isinstance(body.get("pending"), bool):
+            return 400, {"error": "need pending (true or false)"}
+        with self.lock:
+            now, d = self.clock(), self.devbox
+            if body["pending"] and not self.devbox_pending():
+                d["since"] = now
+            d.update(pending=body["pending"], target=str(body.get("target") or "")[:100], seen=now)
+            if not body["pending"]:
+                d["since"] = None
+            self.expire_lease()
+            self.expire_jobs()
+            running = self.db.execute("select 1 from jobs where state='running'").fetchone()
+            self.db.commit()
+            return 200, {"idle": running is None and self.holder is None}
+
     def claim(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
             self.seen_worker(worker, False, body.get("repos"))
             self.expire_jobs()
+            if self.devbox_pending():
+                self.db.commit()
+                return {"job": None, "hold": "devbox update pending"}
             if self.db.execute("select 1 from jobs where state='running'").fetchone():
                 self.db.commit()
                 return {"job": None}                      # one GPU: one job at a time
@@ -729,7 +756,10 @@ class App:
         }
         events = [{**json.loads(b), "received": iso(r)} for r, b in ev_rows]
         gateway = self.gateway.snapshot(now) if self.gateway else None
+        dbx = {"pending": self.devbox_pending(), "target": self.devbox["target"] if self.devbox_pending() else "",
+               "since": iso(self.devbox["since"]) if self.devbox_pending() else None}
         return {"now": iso(now), "model": model, "lease": {"holder": holder, "queue": queue}, "gateway": gateway,
+                "devbox": dbx,
                 "jobs": job_out, "runs": out_runs, "events": events, "stats": stats, "totals": totals,
                 "tokens": tokens, "daily": daily}
 
@@ -1142,6 +1172,10 @@ def render_live(st: dict) -> str:
         pill = '<span class="pill warn">paused</span>' if w["paused"] else '<span class="pill ok">worker</span>'
         parts.append(f'<p class="small">{pill} {e(w["name"])} <span class="muted">seen {e(ago(w["seen"], now))}'
                      f'{" · rm ~/.agent-queue-STOP to resume" if w["paused"] else ""}</span></p>')
+    dbx = st.get("devbox") or {}
+    if dbx.get("pending"):
+        parts.append(f'<p class="small"><span class="pill warn">devbox update</span> <span class="muted">Waiting to install '
+                     f'{e(dbx.get("target") or "a new devbox image")}: applies when idle (no new jobs start until then).</span></p>')
     lease = st["lease"]
     if lease["holder"] or lease["queue"]:
         parts.append('<h3>Model lease</h3><ul class="plain small">')
@@ -1698,6 +1732,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 return self.send(*app.job_action(int(m.group(1)), m.group(2), body))
             if path == "/api/import":
                 return self.send(*app.import_history(body))
+            if path == "/api/devbox":
+                return self.send(*app.devbox_report(body))
             m = re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)
             if m:
                 return self.send(*app.run_control(urllib.parse.unquote(m.group(1)), m.group(2)))

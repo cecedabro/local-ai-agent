@@ -17,13 +17,33 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: pip install pyyaml
       - run: make lint test
-  # Only push an image when lint + self-test pass. The cluster pins the sha tag (homelab repo,
-  # apps/ai-agent/devbox.yaml), so a new build never restarts a running agent by itself.
+  # Only push an image when lint + self-test pass. Every build is a release: image tags X.Y.Z
+  # (patch bumped from the newest `devbox-vX.Y.Z` git tag, first 0.1.0), sha-<short>, the full sha
+  # and latest. Flux (ImagePolicy agent-devbox, homelab repo) writes X.Y.Z into the devbox
+  # StatefulSet, which uses updateStrategy OnDelete: the running pod is only replaced by the
+  # devbox-rollout CronJob once the status service says it is idle (status/SPEC.md §15).
   build:
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: devbox-release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          set -euo pipefail
+          git fetch -q --tags origin
+          last=$(git tag --list 'devbox-v*' | sed 's/^devbox-v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -z "$last" ]; then next=0.1.0; else
+            IFS=. read -r major minor patch <<< "$last"; next="$major.$minor.$((patch + 1))"; fi
+          { echo "number=$next"; echo "short=$(git rev-parse --short=7 HEAD)"; } >> "$GITHUB_OUTPUT"
+          echo "Releasing devbox $next"
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -36,7 +56,21 @@ jobs:
           file: devbox/Dockerfile
           push: true
           tags: |
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-devbox:${{ steps.version.outputs.number }}
+            ghcr.io/${{ github.repository_owner }}/local-ai-agent-devbox:sha-${{ steps.version.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/local-ai-agent-devbox:latest
             ghcr.io/${{ github.repository_owner }}/local-ai-agent-devbox:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Tag the release
+        env:
+          TAG: devbox-v${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "devbox $TAG"
+          git push origin "$TAG"

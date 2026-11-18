@@ -469,3 +469,23 @@ Page (§6): the **Now** card shows the newest run whose state is `running` or `p
   and a `Resume` button (`data-act="resume"`, which cancels the request);
 - state `paused`: `<span class="pill warn">paused</span>` and the `Resume` button.
 The page script posts `data-act` to `/api/runs/<encodeURIComponent(run_id)>/<act>` and refreshes.
+
+## 15. Devbox updates when idle
+
+The devbox image updates itself without interrupting a loop. CI tags every devbox build `X.Y.Z`;
+Flux writes the new tag into the devbox StatefulSet (`updateStrategy: OnDelete`, so nothing
+restarts); a homelab CronJob (`devbox-rollout`, every 5 minutes) asks this service whether it may
+restart the pod.
+
+- `POST /api/devbox` (token) `{"pending": bool, "target"?: "X.Y.Z"}` → **200** `{"idle": bool}`;
+  `pending` not a bool → **400**. The CronJob sends `pending: true` while the StatefulSet's update
+  revision differs from the running one, and deletes `devbox-0` only when the answer is
+  `idle: true`. `idle` = no job is `running` and nobody holds the model lease (checked under the
+  same lock as claims).
+- While an update is pending, `POST /api/jobs/claim` hands out no job (`{"job": null, "hold":
+  "devbox update pending"}`), so a queued job starts on the new image a few minutes later instead of
+  racing the restart. A pending report expires after 15 minutes without a refresh (a broken CronJob
+  never blocks the queue for long); `pending: false` clears it at once.
+- `/api/status` → `devbox`: `{"pending", "target", "since"}`. The Queue card shows "devbox update:
+  waiting to install X.Y.Z, applies when idle".
+

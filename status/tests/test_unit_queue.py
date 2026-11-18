@@ -102,6 +102,26 @@ class JobsTest(Base):
         self.act(a["id"], "heartbeat")
         self.assertEqual([w["name"] for w in self.status()["jobs"]["workers"]], ["devbox-0"])
 
+    def test_devbox_update_when_idle(self) -> None:
+        self.assertEqual(self.req("POST", "/api/devbox", {"pending": True}, token=None)[0], 401)
+        self.assertEqual(self.req("POST", "/api/devbox", {"pending": "yes"})[0], 400)
+        a = self.add()
+        self.claim()
+        code, _, raw = self.req("POST", "/api/devbox", {"pending": True, "target": "0.3.0"})
+        self.assertEqual((code, json.loads(raw)), (200, {"idle": False}), "a job is running")
+        b = self.add()
+        self.act(a["id"], "finish", {"state": "done"})
+        self.assertIsNone(self.claim(), "no new job while an update is pending")
+        st = self.status()["devbox"]
+        self.assertEqual((st["pending"], st["target"]), (True, "0.3.0"))
+        self.assertIn("devbox update", self.req("GET", "/", token=None)[2].decode())
+        self.assertEqual(json.loads(self.req("POST", "/api/devbox", {"pending": True, "target": "0.3.0"})[2]), {"idle": True})
+        self.clock.t += 901                               # the CronJob stopped refreshing: the hold expires
+        self.assertFalse(self.status()["devbox"]["pending"])
+        self.assertEqual(self.claim()["id"], b["id"])
+        self.req("POST", "/api/devbox", {"pending": False})
+        self.assertFalse(self.status()["devbox"]["pending"])
+
     def test_lost_worker_frees_the_queue(self) -> None:
         a, b = self.add(), self.add()
         self.claim()
