@@ -17,7 +17,7 @@ Rules for every task:
 
 - [x] B01: In chat/coder/tools.py fill in `web_search` as its docstring says
   accept: make chat-test K="test_step_tools and web_search"
-- [ ] B02: In chat/coder/tools.py fill in `pubmed_term` and `pubmed_search` as their docstrings say
+- [x] B02: In chat/coder/tools.py fill in `pubmed_term` and `pubmed_search` as their docstrings say
   accept: make chat-test K="test_step_tools and pubmed"
 - [ ] B03: In chat/coder/tools.py fill in `tool_specs` and `describe` as their docstrings say
   accept: make chat-test K="test_step_tools and tool_specs"

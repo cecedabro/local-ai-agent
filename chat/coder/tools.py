@@ -198,7 +198,24 @@ def pubmed_term(query: str, filters: dict | None) -> str:
       languages -> "(" + " OR ".join(LANGS[x] for each known x) + ")"
     Return " AND ".join(parts). Unknown types/languages are skipped.
     """
-    raise NotImplementedError
+    parts = [f"({query.strip()})"]
+    if filters:
+        types = filters.get("types")
+        if types:
+            known = [PUB_TYPES[t] for t in types if t in PUB_TYPES]
+            if known:
+                parts.append("(" + " OR ".join(known) + ")")
+        years = filters.get("years")
+        if years and years > 0:
+            parts.append(f'"last {years} years"[dp]')
+        if filters.get("humans"):
+            parts.append("humans[mh]")
+        languages = filters.get("languages")
+        if languages:
+            known_langs = [LANGS[x] for x in languages if x in LANGS]
+            if known_langs:
+                parts.append("(" + " OR ".join(known_langs) + ")")
+    return " AND ".join(parts)
 
 
 async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | None = None, n: int = 5) -> list[dict]:
@@ -217,7 +234,87 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
          types = the PublicationType texts (max 4); url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
       4. sort the results in the order of `ids` (PubMed's ranking), return them.
     """
-    raise NotImplementedError
+    try:
+        r = await client.get(
+            PUBMED + "/esearch.fcgi",
+            params={"db": "pubmed", "term": pubmed_term(query, filters), "retmode": "json",
+                    "retmax": n, "sort": "relevance"},
+            headers={"User-Agent": UA}, timeout=20)
+    except httpx.HTTPError as e:
+        raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    if r.status_code != 200:
+        raise ToolError(f"PubMed answered {r.status_code}")
+    try:
+        ids = r.json()["esearchresult"]["idlist"]
+    except (ValueError, KeyError) as e:
+        raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    if not ids:
+        return []
+    try:
+        r2 = await client.get(
+            PUBMED + "/efetch.fcgi",
+            params={"db": "pubmed", "id": ",".join(ids), "retmode": "xml"},
+            timeout=30)
+    except httpx.HTTPError as e:
+        raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    if r2.status_code != 200:
+        raise ToolError(f"PubMed answered {r2.status_code}")
+    try:
+        root = ET.fromstring(r2.content)
+    except ET.ParseError as e:
+        raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    results: list[tuple[str, dict]] = []
+    for article in root.iter("PubmedArticle"):
+        try:
+            pmid_el = article.findtext(".//PMID")
+            if pmid_el is None:
+                raise KeyError("PMID")
+            article_title = article.find(".//ArticleTitle")
+            raw = " ".join(title for title in article_title.itertext()) if article_title is not None else ""
+            title = re.sub(r"\s+", " ", raw).strip()
+            abstract_el = article.find(".//Abstract")
+            abstract = ""
+            if abstract_el is not None:
+                abstract = " ".join(
+                    t for t in (elem.text for elem in abstract_el.iter("AbstractText"))
+                    if t
+                )
+            abstract = re.sub(r"\s+", " ", abstract).strip()
+            abstract = abstract[:ABSTRACT_CHARS]
+            pubdate = article.find(".//PubDate")
+            year_el = pubdate.find("Year") if pubdate is not None else None
+            medline_el = pubdate.find("MedlineDate") if pubdate is not None else None
+            if year_el is not None and year_el.text:
+                year = year_el.text
+            elif medline_el is not None and medline_el.text:
+                year = medline_el.text[:4]
+            else:
+                year = ""
+            journal_el = article.find(".//Journal/Title")
+            journal = journal_el.text if journal_el is not None and journal_el.text else ""
+            type_list = []
+            pt_el = article.find(".//PublicationTypeList")
+            if pt_el is not None:
+                for pt in pt_el.iter("PublicationType"):
+                    if pt.text:
+                        type_list.append(pt.text)
+                    if len(type_list) >= 4:
+                        break
+            url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid_el}/"
+            results.append((pmid_el, {
+                "pmid": pmid_el,
+                "title": title,
+                "journal": journal,
+                "year": year,
+                "types": type_list,
+                "abstract": abstract,
+                "url": url,
+            }))
+        except (KeyError, ValueError, AttributeError) as e:
+            raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    order = {pid: i for i, pid in enumerate(ids)}
+    results.sort(key=lambda x: order.get(x[0], 999999))
+    return [r[1] for r in results]
 
 
 # ------------------------------------------------------------------ the tools offered to the model
