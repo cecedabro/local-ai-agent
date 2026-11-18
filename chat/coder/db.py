@@ -105,6 +105,13 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
     challenge BLOB NOT NULL,
     expires   REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS folders (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL REFERENCES users(username),
+    name     TEXT NOT NULL,
+    created  TEXT NOT NULL
+);
 """
 
 
@@ -146,6 +153,12 @@ class DB:
         with self._lock:
             conn = self._connect()
             conn.executescript(_SCHEMA)
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(chats)")}
+            if "folder_id" not in cols:
+                conn.execute("ALTER TABLE chats ADD COLUMN folder_id INTEGER DEFAULT NULL")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "stopped" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0")
             conn.commit()
 
     def create_user(self, username: str, pw_hash: str, rights: list[str]) -> None:
@@ -278,7 +291,7 @@ class DB:
         with self._lock:
             conn = self._connect()
             rows = conn.execute(
-                "SELECT id, title, profile, updated FROM chats WHERE username = ? ORDER BY updated DESC",
+                "SELECT id, title, profile, updated, folder_id FROM chats WHERE username = ? ORDER BY updated DESC",
                 (username,),
             ).fetchall()
             return [dict(r) for r in rows]
@@ -304,13 +317,14 @@ class DB:
             conn.commit()
 
     def add_message(self, chat_id: int, role: str, content: str,
-                    tokens: int | None = None, tps: float | None = None) -> int:
+                    tokens: int | None = None, tps: float | None = None,
+                    stopped: bool = False) -> int:
         now = _now_iso()
         with self._lock:
             conn = self._connect()
             cur = conn.execute(
-                "INSERT INTO messages (chat_id, role, content, created, tokens, tps) VALUES (?, ?, ?, ?, ?, ?)",
-                (chat_id, role, content, now, tokens, tps),
+                "INSERT INTO messages (chat_id, role, content, created, tokens, tps, stopped) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, role, content, now, tokens, tps, 1 if stopped else 0),
             )
             conn.commit()
             return cur.lastrowid
@@ -345,6 +359,7 @@ class DB:
                         "created": r["created"],
                         "tokens": r["tokens"],
                         "tps": r["tps"],
+                        "stopped": bool(r["stopped"]),
                         "files": [],
                     }
                 if r["file_id"] is not None:
@@ -481,6 +496,7 @@ class DB:
             conn.execute("DELETE FROM chats WHERE username = ?", (username,))
             conn.execute("DELETE FROM files WHERE username = ?", (username,))
             conn.execute("DELETE FROM passkeys WHERE username = ?", (username,))
+            conn.execute("DELETE FROM folders WHERE username = ?", (username,))
             conn.execute("DELETE FROM users WHERE username = ?", (username,))
             conn.commit()
 
@@ -601,6 +617,71 @@ class DB:
                 return None
             username = d["username"] or ""
             return (d["challenge"], username)  # type: ignore[return-value]
+
+    def create_folder(self, username: str, name: str) -> dict[str, Any]:
+        now = _now_iso()
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "INSERT INTO folders (username, name, created) VALUES (?, ?, ?)",
+                (username, name, now),
+            )
+            conn.commit()
+            return {"id": cur.lastrowid, "name": name, "created": now}
+
+    def list_folders(self, username: str) -> list[dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            rows = conn.execute(
+                "SELECT id, name, created FROM folders WHERE username = ? ORDER BY name COLLATE NOCASE, id",
+                (username,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_folder(self, folder_id: int, username: str) -> dict[str, Any] | None:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM folders WHERE id = ? AND username = ?",
+                (folder_id, username),
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+    def rename_folder(self, folder_id: int, username: str, name: str) -> bool:
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "UPDATE folders SET name = ? WHERE id = ? AND username = ?",
+                (name, folder_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def delete_folder(self, folder_id: int, username: str) -> bool:
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "UPDATE chats SET folder_id = NULL WHERE folder_id = ? AND username = ?",
+                (folder_id, username),
+            )
+            cur = conn.execute(
+                "DELETE FROM folders WHERE id = ? AND username = ?",
+                (folder_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def set_chat_folder(self, chat_id: int, username: str, folder_id: int | None) -> bool:
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "UPDATE chats SET folder_id = ? WHERE id = ? AND username = ?",
+                (folder_id, chat_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     # TODO (task R01): folders and stopped answers (chat/SPEC.md §11). Tests: test_step_round2.py
     #   1. Add to _SCHEMA:  folders(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,

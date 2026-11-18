@@ -14,7 +14,7 @@ Rules for every task:
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/stream.js`, `chat/static/vendor/`,
   `chat/coder/templates/`, `Makefile`, `docs/`. The look, the templates and stream.js are already done.
 
-- [ ] R01: In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says
+- [x] R01: In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says
   accept: make chat-test K="test_step_round2 and (folders_db or migration)"
 - [ ] R02: In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`)
   accept: make chat-test K="test_step_round2 and prompt_names_files"
