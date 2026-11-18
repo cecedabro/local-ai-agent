@@ -67,12 +67,24 @@ def context_messages(db: Any, chat: dict) -> list[dict]:
       3. out = []; if found: out.append({"role": "system", "content": SUMMARY_PREFIX + that content})
       4. append {"role": m["role"], "content": m["content"]} for every user/assistant message after it
     """
-    raise NotImplementedError
+    msgs = db.get_messages(chat["id"], chat["username"])
+    last_summary_idx = -1
+    for i in range(len(msgs) - 1, -1, -1):
+        if msgs[i]["role"] == "summary":
+            last_summary_idx = i
+            break
+    out = []
+    if last_summary_idx >= 0:
+        out.append({"role": "system", "content": SUMMARY_PREFIX + msgs[last_summary_idx]["content"]})
+    for m in msgs[last_summary_idx + 1:]:
+        if m["role"] in ("user", "assistant"):
+            out.append({"role": m["role"], "content": m["content"]})
+    return out
 
 
 def build_messages(db: Any, chat: dict) -> list[dict]:
     """TODO (task S06). [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)."""
-    raise NotImplementedError
+    return [{"role": "system", "content": SYSTEM_PROMPTS[chat["profile"]]}] + context_messages(db, chat)
 
 
 def used(db: Any, chat: dict) -> int:
