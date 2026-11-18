@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat loading options</title>
+<style>
+:root{color-scheme:light;--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;--ok:#16a34a;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+ radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--glass:rgba(255,255,255,.46);--bubble:rgba(255,255,255,.8);--field:rgba(255,255,255,.7);--chip:rgba(255,255,255,.65);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);--shadow:0 10px 30px rgba(30,90,140,.13);
+--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);--glow:rgba(10,132,255,.35);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(244,250,255,.85) 48%,rgba(222,238,250,.8) 52%,rgba(240,248,255,.9) 100%);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%)}
+:root[data-theme=dark]{color-scheme:dark;--ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;--ok:#3ee08f;
+--scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
+ radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),linear-gradient(160deg,#071624,#06131d 55%,#07170f);
+--glass:rgba(22,36,54,.45);--bubble:rgba(255,255,255,.08);--field:rgba(0,0,0,.25);--chip:rgba(255,255,255,.08);
+--stroke:rgba(255,255,255,.14);--stroke-soft:rgba(255,255,255,.09);--hi:rgba(255,255,255,.18);--hi-soft:rgba(255,255,255,.07);
+--line:rgba(255,255,255,.08);--track:rgba(255,255,255,.08);--shadow:0 12px 34px rgba(0,0,0,.35);
+--btn:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 52%,rgba(255,255,255,.08) 100%);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%)}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable","Segoe UI",Roboto,system-ui,sans-serif;min-height:100vh}
+body::before{content:"";position:fixed;inset:-10vmax;z-index:-2;background:var(--scene)}
+.wrap{max-width:1000px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.top{display:flex;align-items:center;gap:12px}.top h1{margin:0 auto 0 0;font-size:19px}
+.card{position:relative;isolation:isolate;background:var(--glass);border:1px solid var(--stroke);border-radius:24px;padding:16px 18px;
+ backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);box-shadow:var(--shadow),inset 0 1px 0 var(--hi)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;background:var(--sheen)}
+h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 4px;font-weight:650}
+h2::before{content:"";display:inline-block;width:9px;height:9px;margin-right:8px;border-radius:50%;vertical-align:1px;
+ background:radial-gradient(circle at 35% 30%,#fff 0 18%,#5fd0ff 40%,#0a84ff 100%);box-shadow:0 0 8px rgba(10,132,255,.5)}
+p.note{color:var(--muted);font-size:13px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.msg{padding:10px 14px;border-radius:20px;max-width:100%}
+.msg.user{margin-left:auto;width:fit-content;color:#fff;background:var(--primary);border-bottom-right-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 14px var(--glow);margin-bottom:10px}
+.msg.assistant{background:var(--bubble);border:1px solid var(--stroke-soft);border-bottom-left-radius:6px;box-shadow:inset 0 1px 0 var(--hi-soft);min-height:48px}
+.state{font-size:12px;color:var(--muted);margin:6px 0 0 6px;min-height:1.2em}
+button{font:inherit;font-weight:600;cursor:pointer;color:var(--ink);border-radius:999px;padding:7px 16px;background:var(--btn);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.08)}
+.primary{color:#fff;border-color:transparent;background:var(--primary);text-shadow:0 1px 1px rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px var(--glow)}
+
+/* A: glossy bubbles */
+.dots{display:flex;gap:7px;padding:6px 2px}
+.dots i{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 16%,#7fe0ff 38%,#0a84ff 100%);
+ box-shadow:0 2px 6px rgba(10,132,255,.4);animation:hop 1.2s ease-in-out infinite}
+.dots i:nth-child(2){animation-delay:.15s;background:radial-gradient(circle at 35% 30%,#fff 0 16%,#8ff0c8 38%,#14b88a 100%)}
+.dots i:nth-child(3){animation-delay:.3s;background:radial-gradient(circle at 35% 30%,#fff 0 16%,#c6f59a 38%,#4cbf2f 100%)}
+@keyframes hop{0%,60%,100%{transform:translateY(0) scale(1)}30%{transform:translateY(-8px) scale(1.08)}}
+
+/* B: liquid shimmer */
+.shim{display:grid;gap:8px;padding:4px 0}
+.shim b{display:block;height:10px;border-radius:99px;background:linear-gradient(100deg,var(--track) 30%,rgba(120,210,255,.55) 45%,rgba(140,240,190,.55) 55%,var(--track) 70%);
+ background-size:250% 100%;animation:sweep 1.6s linear infinite}
+.shim b:nth-child(2){width:82%;animation-delay:.12s}.shim b:nth-child(3){width:58%;animation-delay:.24s}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
+.label{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
+ -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+
+/* C: aero orb */
+.orbrow{display:flex;align-items:center;gap:12px;padding:2px 0}
+.orb{position:relative;width:30px;height:30px;border-radius:50%;flex:none;
+ background:conic-gradient(from 0deg,#22c3ee,#34d399,#a6ec7e,#5fc2ff,#8f7bff,#22c3ee);animation:spin 2.4s linear infinite,breathe 1.8s ease-in-out infinite;
+ box-shadow:0 0 16px rgba(34,195,238,.55)}
+.orb::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
+.orb.fast{animation-duration:.9s,1.8s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes breathe{0%,100%{scale:1}50%{scale:1.12}}
+.orb::before{content:"";position:absolute;inset:3px;border-radius:50%;background:inherit;filter:blur(3px);opacity:.6}
+
+/* composer */
+.composer textarea{width:100%;font:inherit;color:inherit;background:var(--field);border:1px solid var(--stroke-soft);border-radius:18px;padding:10px 14px;min-height:52px;resize:vertical}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.icon{width:38px;height:38px;padding:0;display:grid;place-items:center}
+.icon svg{width:18px;height:18px}
+.seg{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:999px;background:var(--chip);border:1px solid var(--stroke-soft);box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{position:relative;z-index:1;display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer;transition:color .2s}
+.seg label svg{width:15px;height:15px}
+.seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--primary);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 10px var(--glow);transition:transform .28s cubic-bezier(.3,1.4,.5,1)}
+.seg input:nth-of-type(2):checked~.thumb{transform:translateX(100%)}
+.seg input:nth-of-type(1):checked+label,.seg input:nth-of-type(2):checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
+.spacer{flex:1}
+.ctx{margin-top:12px}
+.ctx .track{position:relative;height:10px;border-radius:99px;background:var(--track);box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
+.ctx .track i{position:absolute;left:0;top:0;bottom:0;width:31%;border-radius:99px;background:var(--fill);box-shadow:0 0 10px var(--glow)}
+.ctx .track i::after{content:"";position:absolute;left:4px;right:4px;top:1px;height:45%;border-radius:99px;background:linear-gradient(rgba(255,255,255,.75),rgba(255,255,255,.1))}
+.ctx .mark{position:absolute;left:75%;top:-4px;bottom:-4px;width:2px;border-radius:2px;background:var(--ink);opacity:.5}
+.ctx .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:5px}
+.ctx .row a{color:var(--link);text-decoration:none;font-weight:600}
+.files{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.file{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--stroke-soft)}
+</style></head><body>
+<div class="wrap">
+  <div class="top"><h1>Chat: loading options</h1><button id="theme">Dark mode</button><button class="primary" id="replay">Replay</button></div>
+
+  <div class="card"><h2>What the bubble shows</h2>
+    <p class="note">Each option shows the same states: waiting in line or for the PC to wake, reading your message (prompt), thinking (Think mode only), then the answer streams in and the animation goes away.</p>
+    <div class="grid">
+      <div><div class="msg user">Why is my CI red?</div><div class="msg assistant" id="a"><div class="dots"><i></i><i></i><i></i></div></div><div class="state" id="sa"></div>
+        <p class="note"><b>A · Glossy bubbles</b>: three aqua/green/lime marbles hop like a typing indicator. Familiar and calm.</p></div>
+      <div><div class="msg user">Why is my CI red?</div><div class="msg assistant" id="b"><div class="shim"><b></b><b></b><b></b></div></div><div class="state" id="sb"></div>
+        <p class="note"><b>B · Liquid shimmer</b>: placeholder lines with a light sweeping across; the status text shimmers too.</p></div>
+      <div><div class="msg user">Why is my CI red?</div><div class="msg assistant" id="c"><div class="orbrow"><span class="orb"></span><span class="label" id="lc">Thinking…</span></div></div><div class="state" id="sc"></div>
+        <p class="note"><b>C · Aero orb</b>: a glossy colour orb that breathes, and spins faster while it's thinking. The most "Aero".</p></div>
+    </div>
+  </div>
+
+  <div class="card composer"><h2>Composer: think switch, files, context bar</h2>
+    <p class="note">"think" becomes a <b>Quick / Think</b> switch. The paperclip adds files, which show as chips. The bar underneath shows how full the context is; the line marks where it compresses automatically.</p>
+    <div class="files"><span class="file">📄 ci.log · 14 KB</span><span class="file">📄 app.py · 31 KB</span></div>
+    <textarea placeholder="Message the local model"></textarea>
+    <div class="bar">
+      <button class="icon" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg></button>
+      <div class="seg" role="radiogroup" aria-label="Answer mode">
+        <input type="radio" name="mode" id="m-quick" checked><label for="m-quick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Quick</label>
+        <input type="radio" name="mode" id="m-think"><label for="m-think"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8zM19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9zM5 15l.7 1.6L7.3 17l-1.6.7L5 19.3l-.7-1.6L2.7 17l1.6-.4z"/></svg>Think</label>
+        <span class="thumb"></span>
+      </div>
+      <span class="spacer"></span>
+      <button class="primary">Send</button>
+    </div>
+    <div class="ctx"><div class="track"><i></i><span class="mark" title="auto-compress at 75%"></span></div>
+      <div class="row"><span>14.9k of 48k tokens · 31%</span><span>auto-compress at 75% · <a href="#">compress now</a></span></div></div>
+  </div>
+</div>
+<script>
+const steps=[['waiting for the model…',1400],['reading 3.2k tokens…',1500],['thinking…',2600],['writing',0]];
+const answer='The test job fails at <b>test_metrics</b>: the fake clock never moves, so the sample counts as zero. Moving the clock 60 s fixes it.';
+function run(){
+  const ids=['a','b','c'];
+  const keep={a:document.getElementById('a').innerHTML,b:document.getElementById('b').innerHTML,c:document.getElementById('c').innerHTML};
+  let t=0;
+  steps.forEach(([label,dur],i)=>{setTimeout(()=>{
+    ids.forEach(id=>{const s=document.getElementById('s'+id);
+      if(label==='writing'){document.getElementById(id).innerHTML=answer;s.textContent='42 tokens · 39.6 tok/s'}
+      else{if(i===0)document.getElementById(id).innerHTML=keep[id];s.textContent=label}});
+    const lc=document.getElementById('lc');if(lc)lc.textContent=label[0].toUpperCase()+label.slice(1);
+    const orb=document.querySelector('.orb');if(orb)orb.classList.toggle('fast',label==='thinking…');
+  },t);t+=dur});
+  setTimeout(()=>{ids.forEach(id=>{document.getElementById(id).innerHTML=keep[id]});run()},t+3500);
+}
+run();
+document.getElementById('replay').onclick=()=>location.reload();
+document.getElementById('theme').onclick=e=>{const d=document.documentElement;const dark=d.dataset.theme!=='dark';d.dataset.theme=dark?'dark':'light';e.target.textContent=dark?'Light mode':'Dark mode'};
+</script>
+</body></html>

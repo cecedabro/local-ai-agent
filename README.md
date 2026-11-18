@@ -9,6 +9,9 @@ and lets it sleep again afterwards.
 reading), the devbox runs the loop, and the loop has already built a real project (the weather
 station website: 13 of 15 tasks passed unattended in 4.9 h). Open items are at the end of this file.
 
+How all the parts tie together (and where to look when something breaks): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Every design round of the status page and the chat: [docs/design/](docs/design/README.md).
+
 Full plan with rationale and sources: [docs/PLAN.md](docs/PLAN.md) and the
 [plan doc](https://claude.ai/artifact/VtJfAgPfNyxZrbmQnLrLMp).
 
