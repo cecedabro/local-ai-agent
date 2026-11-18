@@ -153,33 +153,46 @@ body.login{min-height:100dvh;display:grid;place-items:center;padding:16px}
 }
 
 /* ---------------------------------------------------------------- contract hooks (SPEC §9) */
-/* Assistant reply: R1b, a bubble that matches the user's, with the orb in a footer under it. */
-.ai{align-self:flex-start;max-width:86%;min-width:0}
-.ai .bub{padding:10px 16px;border-radius:20px;border-bottom-left-radius:6px;overflow-wrap:anywhere;
-  background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(246,251,255,.75));border:1px solid rgba(255,255,255,.9);
-  box-shadow:inset 0 1px 0 #fff,0 4px 14px rgba(20,90,150,.10)}
-:root[data-theme=dark] .ai .bub{background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));border-color:rgba(255,255,255,.16);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 6px 16px rgba(0,0,0,.25)}
-:root[data-theme=blossom] .ai .bub{box-shadow:inset 0 1px 0 #fff,0 4px 14px rgba(170,50,110,.10)}
+/* Layout "open page": a reading column; your messages in frosted aqua (sea glass in dark, pink in
+   Blossom); answers as text on the page with the dewdrop beside them; stats always underneath. */
+.thread .col{max-width:720px;gap:22px}
+.u{align-self:flex-end;max-width:80%;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.u .msg.user{max-width:100%;padding:10px 16px;border-radius:22px;border-bottom-right-radius:8px;font-size:15px;line-height:1.55;
+  background:linear-gradient(180deg,rgba(170,230,255,.55),rgba(110,200,245,.28));border:1px solid rgba(255,255,255,.85);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(20,120,200,.10)}
+:root[data-theme=blossom] .u .msg.user{background:linear-gradient(180deg,rgba(255,200,228,.6),rgba(244,140,190,.25));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 14px rgba(200,80,140,.10)}
+:root[data-theme=dark] .u .msg.user{color:#fff;text-shadow:0 1px 1px rgba(0,50,60,.2);
+  background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a);
+  border-color:rgba(255,255,255,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px rgba(20,150,150,.25)}
+
+.ai{display:grid;grid-template-columns:28px minmax(0,1fr);gap:14px;align-self:stretch;min-width:0}
+.ai>.orb{--s:28px;margin-top:1px}
+.ai .content{min-width:0}
+.ai .bub{font-size:15px;line-height:1.65;overflow-wrap:anywhere}
 .ai .bub>:first-child{margin-top:0}.ai .bub>:last-child{margin-bottom:0}
-.ai .bub p{margin:0 0 10px}.ai .bub ul,.ai .bub ol{margin:0 0 10px;padding-left:22px}.ai .bub li{margin:3px 0}
-.ai .bub h1,.ai .bub h2,.ai .bub h3{font-size:15px;color:var(--ink);margin:14px 0 6px;text-transform:none;letter-spacing:0}
+.ai .bub p{margin:0 0 10px}.ai .bub ul,.ai .bub ol{margin:2px 0 10px;padding-left:22px}.ai .bub li{margin:3px 0}
+.ai .bub h1,.ai .bub h2,.ai .bub h3{font-size:16px;color:var(--ink);margin:16px 0 6px;text-transform:none;letter-spacing:0}
 .ai .bub h1::before,.ai .bub h2::before{content:none}
 .ai .bub table{margin:6px 0 10px;font-size:13.5px}
 .ai .bub pre{margin:8px 0 12px;padding:12px 14px;border-radius:14px;overflow-x:auto;background:#0d1b2a;color:#d8ecff;
   font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
 .ai .bub pre code{background:none;padding:0;color:inherit}
 .ai .bub blockquote{margin:6px 0;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)}
-.ai .bub .tok{animation:tokin .3s ease-out both}
-@keyframes tokin{from{opacity:0}to{opacity:1}}
-.meta2{display:flex;align-items:center;gap:6px;margin:5px 0 0 6px;font-size:11.5px;color:var(--muted)}
-.meta2 .orb{--s:16px}
-.meta2 button{padding:0 4px;font-size:11.5px;font-weight:600;background:none;border:0;box-shadow:none;color:var(--link)}
-.phase{display:flex;align-items:center;gap:10px;padding:4px 2px}
-.phase .orb{--s:30px}
-.phase-label{font-size:13.5px;font-weight:600;color:var(--muted)}
+/* new letters fade in (renderFade in stream.js gives each recent piece its own span) */
+.ai .bub .nw{animation:nw .22s linear both}
+@keyframes nw{from{opacity:0}to{opacity:1}}
+/* the tiny drop at the end of the text while writing; it moves into the stats line when done */
+.orb.tiny{--s:13px;margin-left:4px;vertical-align:-1px;animation:bob 1.2s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes bob{50%{transform:translate3d(0,-2px,0) scale(.9)}}
+.meta2{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meta2 .orb{--s:14px;animation:settle .6s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes settle{0%{transform:translate3d(0,-6px,0) scale(.8);opacity:0}100%{transform:none;opacity:1}}
+.meta2 .live{color:var(--accent)}
+.meta2 button{padding:0 4px;font-size:12px;font-weight:600;background:none;border:0;box-shadow:none;color:var(--link)}
+.phase-label{font-size:13px;font-weight:600;color:var(--muted)}
 .note.summary{align-self:center;font-size:12.5px;color:var(--muted);padding:6px 12px;border-radius:99px;background:var(--chip);border:1px solid var(--stroke-soft)}
-.note.error{align-self:flex-start;font-size:13px;color:var(--bad)}
+.note.error{font-size:13.5px;color:var(--bad)}
 /* context bar: --used and --at are set by JS (0–1) */
 .ctx .bar>i{width:100%;transform-origin:left center;transform:scaleX(var(--used,0));transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .ctx .bar>.line{left:calc(var(--at,.75)*100%)}
@@ -188,8 +201,22 @@ body.login{min-height:100dvh;display:grid;place-items:center;padding:16px}
   border:1px solid currentColor;opacity:0;animation:halo 3s cubic-bezier(.22,.61,.36,1) infinite}
 @keyframes halo{0%{transform:scale(1);opacity:.55}75%,100%{transform:scale(2.4);opacity:0}}
 .brand .orb{--s:28px}
-.welcome{margin:auto;text-align:center;padding:40px 0}.welcome .orb{--s:64px;margin:0 auto}
+/* welcome screen of an empty chat: the cloud marble (orb.css), drifting slowly */
+.welcome{margin:auto;text-align:center;padding:40px 0}.welcome .orb{--s:72px;margin:0 auto}
 .welcome h2{font-size:22px;text-transform:none;letter-spacing:0;color:var(--ink);margin:14px 0 6px}.welcome h2::before{content:none}
 .welcome .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
 .welcome .chips button{font-weight:500;font-size:13px}
-@media (prefers-reduced-motion:reduce){.badge.ok::after,.ai .bub .tok{animation:none}}
+/* login, invite, admin pages */
+body.login{min-height:100dvh;display:grid;place-items:center;padding:16px}
+.login .card{width:min(380px,100%);padding:28px 26px;text-align:center}
+.login .card .orb{--s:64px}
+.login form{display:grid;gap:10px;margin-top:18px;text-align:left}
+.login input{width:100%;padding:10px 14px}.login button{padding:10px}
+.bad{color:var(--bad)}
+body.admin header a{margin-left:auto}
+.admin-main{display:grid;gap:16px;padding:16px;max-width:900px;margin:0 auto}
+.admin-main form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pmenu .opt{display:block;width:100%;text-align:left;border:0;background:none;box-shadow:none;padding:9px 10px;border-radius:14px;font-weight:400}
+.pmenu .opt:hover{background:var(--chip)}
+.chips .file button{padding:0 4px;border:0;background:none;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.badge.ok::after,.ai .bub .nw,.orb.tiny,.meta2 .orb{animation:none}}

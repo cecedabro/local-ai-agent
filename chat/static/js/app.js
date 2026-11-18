@@ -1,7 +1,7 @@
 // The chat page (chat/coder/templates/chat.html). ES module. Hooks: chat/SPEC.md §9.
 // Each function below is one task (S19–S24). Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in SPEC §9 (style.setProperty("--x", v)).
-import { readEvents, Typewriter, groupChats, metaText } from "./stream.js";
+import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -15,6 +15,8 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 
 const state = { chats: [], chatId: null, profile: "general", files: [], busy: false };
 const ORB = '<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
+const MARBLE = '<span class="orb marble" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
+const TINY = '<span class="orb tiny" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
 const EXAMPLES = {
   general: ["Explain a bug in my code", "Plan my week", "Summarise a file"],
   evidence: ["Helpt vitamine D tegen winterdepressie?", "Is ibuprofen veilig tijdens de zwangerschap?",
@@ -47,7 +49,7 @@ async function loadChats() {}
 /**
  * TODO (task S20). Open a chat: GET /api/chats/ID, set state.chatId and state.profile, set
  * #chat-title to its title, and draw every message into #messages with drawMessage(m).
- * With no messages draw the welcome screen: <div class="welcome">ORB<h2>Hi USERNAME, what's up?</h2>
+ * With no messages draw the welcome screen: <div class="welcome">MARBLE<h2>Hi USERNAME, what's up?</h2>
  * <div class="chips"> one <button> per EXAMPLES[profile] item </div></div> (USERNAME from
  * document.body.dataset.username); clicking an example puts its text in #input and sends.
  * Then call drawContext(chat.context) and loadChats() (to update the "on" marker).
@@ -59,8 +61,10 @@ async function openChat(id) {}
  *   user:      <div class="u"> file chips (<span class="file">NAME</span>) + <div class="msg user">TEXT</div></div>
  *              (TEXT = the content without the "\n\nFile NAME:\n```...```" blocks the server added;
  *               cut the content at the first "\n\nFile " when the message has files)
- *   assistant: <div class="ai"><div class="bub">md.render(content)</div>
- *              <div class="meta2">ORB<span>metaText(tokens, tps)</span><button data-copy>Copy</button></div></div>
+ *   assistant: <div class="ai">ORB<div class="content"><div class="bub">md.render(content)</div>
+ *              <div class="meta2">TINY<span>metaText(tokens, tps)</span><button data-copy>Copy</button>
+ *              <button data-retry>Retry</button></div></div></div>
+ *              (the stats line is always there, under every answer)
  *   summary:   <div class="note summary">Earlier messages summarised</div>
  * The Copy button copies the raw content with navigator.clipboard.writeText.
  */
@@ -70,14 +74,23 @@ function drawMessage(m) {}
  * TODO (task S21). Send #input's text (and state.files ids) to POST /api/chats/ID/messages with
  * {content, mode, files}. mode = the checked input[name=mode] value. If there is no open chat,
  * first POST /api/chats {profile: state.profile} and use its id. Clear #input and the file chips.
- * Draw the user message, then <div class="ai"><div class="phase">ORB<span class="phase-label"></span>
- * </div><div class="bub"></div></div>. Read the response with readEvents(res, onEvent):
- *   phase -> the phase orb's data-phase = data.phase, .phase-label text = data.label
- *   delta -> typewriter.push(data.text); the Typewriter's onText renders md.render(shown) into .bub
- *            and sets the orb's --fill to Math.min(0.95, shown.length / 1600)
- *   done  -> await typewriter.finish(); remove the .phase element; append the .meta2 footer
- *            (as drawMessage does); drawContext(data.context); loadChats()
- *   error -> remove the .phase element; append <div class="note error">MESSAGE</div>
+ * Draw the user message, then <div class="ai">ORB<div class="content"><div class="bub"></div>
+ * <div class="meta2"><span class="phase-label"></span></div></div></div>. Keep `orb` = that ORB element,
+ * `bub`, `meta`, and a tiny drop element `tiny` (from TINY). Read the response with readEvents(res, onEvent):
+ *   phase -> orb.dataset.phase = data.phase; the .phase-label text = data.label;
+ *            for "writing" remember writeStart = performance.now()
+ *   delta -> typewriter.push(data.text), where (create it once, before reading):
+ *            const typewriter = new Typewriter((shown, pieces) => {
+ *              renderFade(bub, md.render(shown), pieces);
+ *              placeTail(bub, tiny);
+ *              const t = (performance.now() - writeStart) / 1000;
+ *              orb.style.setProperty("--fill", (0.82 * (1 - Math.exp(-t / 2.6))).toFixed(3));
+ *              meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+ *            });
+ *   done  -> await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle" (the water drains);
+ *            meta.innerHTML = TINY + `<span>${metaText(data.tokens, data.tps)}</span>` + the Copy and
+ *            Retry buttons (as drawMessage); drawContext(data.context); loadChats()
+ *   error -> orb.dataset.phase = "idle"; tiny.remove(); append <div class="note error">MESSAGE</div> to .content
  * Keep state.busy true while streaming (the send button is disabled meanwhile). Scroll #thread to
  * the bottom as text arrives, unless the user scrolled up.
  */

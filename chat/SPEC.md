@@ -1,6 +1,6 @@
-# Coder chat: spec
+# Dewdrop (the chat app): spec
 
-The public chat for the local model ("Coder", working name). It lives in `chat/`, runs as its own
+The public chat for the local model, called Dewdrop. It lives in `chat/`, runs as its own
 pod, and talks to the model only through the status service's gateway (`/v1`, see
 `status/SPEC.md` §11). Status page = Tailscale only; chat = public (Cloudflare Tunnel), so
 security matters here.
@@ -193,15 +193,19 @@ only use these hooks; the reference markup is `docs/design/chat/2026-11-17-chat-
   evidence chats, `.me`) and `.main` (`.top` with `.title`, `button.profile`, `#model.badge`,
   the theme switch `.seg.four.theme`; `.thread > .col` messages; `.dock` with `.composer`,
   `.ctx`, `.hint`).
-- Messages: user = `.u > .msg.user` (+ `.file` chips above it). Assistant = `.ai > .bub`
-  (rendered markdown) + `.meta2` (orb, `Coder · <tokens> tokens · <tps> tok/s ·` Copy · Retry).
-  Summary = `.note.summary`.
+- Messages: user = `.u > .msg.user` (+ `.file` chips above it). Assistant = `.ai` > the orb +
+  `.content` > `.bub` (rendered markdown, on the page, no bubble) + `.meta2` (the stats line, always
+  shown: a tiny orb, `Dewdrop · <tokens> tokens · <tps> tok/s`, Copy, Retry). While writing, a tiny
+  orb (`.orb.tiny`) sits at the end of the text (stream.js `placeTail`) and moves into `.meta2` when
+  done. Summary = `.note.summary`.
 - The orb: `<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>` everywhere
   (brand, avatars, status). Phases set `data-phase` to `waiting|thinking|searching|reading|
-  summarising|writing|compressing|idle`; the label next to it is `.phase-label`. While writing,
-  JS sets the CSS variable `--fill` (0–1, the answer's length against an expected ~400 tokens,
-  capped at .95) on the orb. JS never sets other inline styles.
+  summarising|writing|compressing|idle`; the label is `.phase-label`. While writing, JS sets
+  `--fill` (0–1) on the orb: `0.82 * (1 - exp(-seconds_writing / 2.6))`, rising fast and then ever
+  slower, never "done"; back to `idle` the water drains. JS sets no inline styles other than these
+  CSS variables and the fade delays of stream.js `renderFade`.
 - Context bar: `.ctx .bar > i` with `--used` (0–1) and `.line` with `--at` (the
   `compress_at / max` fraction), `#ctx-text`, `button#compress`.
-- Streaming text: incoming deltas go into a buffer and are drawn at a steady pace (about one
-  word per 25 ms), re-rendering the markdown of the answer so far; new words get class `tok`.
+- Streaming text: stream.js `Typewriter` buffers the deltas and releases letters every frame at a
+  steady, gently changing pace; `renderFade` re-renders the markdown and lets the newest letters
+  fade in (class `nw`). The welcome screen uses `.orb.marble` (the drifting cloud marble).

@@ -12,6 +12,7 @@ Rules for every task:
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/coder/templates/`, `Makefile`, `docs/`.
 
 Done earlier (T01–T04, T07): settings, database, login, sessions, invites, users, chats, files.
+The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is done and human-owned: use it, don't edit it.
 
 - [ ] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
   accept: make chat-test K="test_step_context and test_db_helpers"
@@ -43,18 +44,18 @@ Done earlier (T01–T04, T07): settings, database, login, sessions, invites, use
   accept: make chat-test K="TestContext"
 - [ ] S15: Make the whole chat suite green (run it, fix only what fails, in the app code)
   accept: make chat-test
-- [ ] S16: In chat/static/js/stream.js fill in `splitEvents` and `readEvents` as their comments say
-  accept: node --test --test-name-pattern=S16 chat/tests/js/stream.test.mjs
-- [ ] S17: In chat/static/js/stream.js fill in the `Typewriter` class as its comment says
-  accept: node --test --test-name-pattern=S17 chat/tests/js/stream.test.mjs
-- [ ] S18: In chat/static/js/stream.js fill in `groupChats` and `metaText` as their comments say
+- [x] S16: stream.js: splitEvents and readEvents (done by hand: the writing engine)
+  accept: node --test chat/tests/js/stream.test.mjs
+- [x] S17: stream.js: Typewriter (done by hand: the writing engine)
+  accept: node --test chat/tests/js/stream.test.mjs
+- [x] S18: stream.js: groupChats and metaText (done by hand: the writing engine)
   accept: node --test chat/tests/js/stream.test.mjs
 - [ ] S19: In chat/static/js/app.js fill in `loadChats` as its comment says
   accept: node --check chat/static/js/app.js && grep -q "groupChats(state.chats" chat/static/js/app.js
 - [ ] S20: In chat/static/js/app.js fill in `openChat` and `drawMessage` as their comments say
   accept: node --check chat/static/js/app.js && grep -q "md.render(" chat/static/js/app.js && grep -q "welcome" chat/static/js/app.js
 - [ ] S21: In chat/static/js/app.js fill in `send` as its comment says
-  accept: node --check chat/static/js/app.js && grep -q "readEvents(" chat/static/js/app.js && grep -q "new Typewriter(" chat/static/js/app.js
+  accept: node --check chat/static/js/app.js && grep -q "readEvents(" chat/static/js/app.js && grep -q "new Typewriter(" chat/static/js/app.js && grep -q "renderFade(" chat/static/js/app.js && grep -q "placeTail(" chat/static/js/app.js
 - [ ] S22: In chat/static/js/app.js fill in `drawContext` as its comment says
   accept: node --check chat/static/js/app.js && grep -q -- "--used" chat/static/js/app.js && grep -q -- "--at" chat/static/js/app.js
 - [ ] S23: In chat/static/js/app.js fill in `setupFiles` as its comment says

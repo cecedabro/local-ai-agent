@@ -27,3 +27,4 @@ chat/static/vendor/
 chat/static/js/theme.js
 chat/static/js/login.js
 chat/static/js/invite.js
+chat/static/js/stream.js

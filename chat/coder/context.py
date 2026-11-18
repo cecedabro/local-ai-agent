@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable
 
 SYSTEM_PROMPTS = {
-    "general": ("You are Coder, a helpful assistant running locally on Cédric's PC. "
+    "general": ("You are Dewdrop, a helpful assistant running locally on Cédric's PC. "
                 "Answer in the user's language. Use Markdown."),
     "evidence": ("You are EvidenceHunt. Answer only from medical evidence and say when the evidence is "
                  "weak or missing. Answer in the user's language. Use Markdown."),

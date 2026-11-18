@@ -190,23 +190,14 @@ body.locked #chat{display:none}
 .seg input:checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
 .seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 
-/* Loading: an Aero orb that turns and breathes, with a shimmering status line.
-   .fast while the model is thinking. */
-.loading{display:flex;align-items:center;gap:12px;padding:2px 0;white-space:normal}
-.orb{position:relative;flex:none;width:30px;height:30px;border-radius:50%;overflow:hidden;
-  box-shadow:0 0 16px rgba(34,195,238,.55);animation:breathe 1.8s ease-in-out infinite}
-.orb i{position:absolute;inset:0;border-radius:50%;
-  background:conic-gradient(from 0deg,#22c3ee,#34d399,#a6ec7e,#5fc2ff,#8f7bff,#22c3ee);animation:spin 2.4s linear infinite}
-.orb::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;
-  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
-.loading.fast .orb i{animation-duration:.9s}
-.loading.fast .orb{box-shadow:0 0 20px rgba(143,123,255,.6)}
-.shimmer{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
+/* Shimmering status text (phase labels), in the theme accent.
+   The orb itself lives in orb.css. */
+.shimmer{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,var(--accent) 50%,var(--muted) 70%);background-size:250% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 @keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
-@media (prefers-reduced-motion:reduce){.orb,.orb i,.shimmer,.progress.live i{animation:none}}
+@media (prefers-reduced-motion:reduce){.shimmer,.progress.live i{animation:none}}
 
 /* ------------------------------------------------------------------ phone */
 @media (max-width:700px){
