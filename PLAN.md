@@ -12,7 +12,7 @@ Rules for every task:
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/`, `chat/coder/templates/`,
   `Makefile`, `docs/`. The pages and browser code for passkeys are already written.
 
-- [ ] P01: In chat/coder/db.py add the passkey tables and methods, and in chat/coder/config.py the settings RP_ID and ORIGIN (see "P01 details")
+- [x] P01: In chat/coder/db.py add the passkey tables and methods, and in chat/coder/config.py the settings RP_ID and ORIGIN (see "P01 details")
   accept: make chat-test K="test_step_passkeys and test_db_and_settings"
 - [ ] P02: In chat/coder/passkeys.py fill in `user_handle` and `registration_options` as their docstrings say
   accept: make chat-test K="test_step_passkeys and test_registration_options"

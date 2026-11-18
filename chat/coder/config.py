@@ -20,7 +20,7 @@ class Settings:
     __slots__ = (
         "DATA_DIR", "GATEWAY_URL", "GATEWAY_KEY", "STATUS_URL",
         "CTX_DEFAULT", "ADMIN_USER", "ADMIN_PASSWORD", "SECURE_COOKIES",
-        "MODEL_LABEL", "HARDWARE_LABEL", "REPO_URL", "WAIT_LIMIT",
+        "MODEL_LABEL", "HARDWARE_LABEL", "REPO_URL",         "WAIT_LIMIT", "RP_ID", "ORIGIN",
     )
 
     def __init__(self, settings: dict | None = None) -> None:
@@ -39,3 +39,5 @@ class Settings:
         self.HARDWARE_LABEL = str(raw.get("HARDWARE_LABEL", env.get("HARDWARE_LABEL", "running locally on an RTX 3080 Ti")))
         self.REPO_URL = str(raw.get("REPO_URL", env.get("REPO_URL", "https://github.com/cecedabro/local-ai-agent")))
         self.WAIT_LIMIT = int(raw.get("WAIT_LIMIT", env.get("WAIT_LIMIT", "120")))
+        self.RP_ID = str(raw.get("RP_ID", env.get("RP_ID", "localhost")))
+        self.ORIGIN = str(raw.get("ORIGIN", env.get("ORIGIN", "http://localhost:8090")))
