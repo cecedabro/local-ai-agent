@@ -403,6 +403,19 @@ class App:
             self.seen_worker(worker, bool(body.get("paused")), body.get("repos"), body.get("plans"))
         return {"ok": True}
 
+    def hide_repo(self, body: dict) -> tuple[int, dict]:
+        """Hide a repo from the page's lists, or show it again (§16)."""
+        repo = str(body.get("repo") or "")
+        if not REPO_RE.fullmatch(repo) or not isinstance(body.get("hidden"), bool):
+            return 400, {"error": "need repo (owner/name) and hidden (true or false)"}
+        with self.lock:
+            cur = [r for r in self.meta("hidden_repos", []) if r.lower() != repo.lower()]
+            if body["hidden"]:
+                cur.append(repo)
+            self.set_meta("hidden_repos", sorted(cur, key=str.lower))
+            self.db.commit()
+            return 200, {"hidden": sorted(cur, key=str.lower)}
+
     DEVBOX_TTL = 900                                    # a pending update expires without a refresh
 
     def devbox_pending(self) -> bool:
@@ -768,7 +781,8 @@ class App:
                 for r in w.get("repos", []):
                     worker_repos.add(r)
         job_repos: set[str] = {j["repo"] for j, p in pub_jobs if j["repo"]}
-        all_repos = sorted(set(list(worker_repos) + list(job_repos)), key=str.lower)
+        hidden = {r.lower() for r in self.meta("hidden_repos", [])}
+        all_repos = sorted({r for r in list(worker_repos) + list(job_repos) if r.lower() not in hidden}, key=str.lower)
         job_out = {
             "running": [p for j, p in pub_jobs if j["state"] == "running"],
             "queued": [p for j, p in sorted(pub_jobs, key=lambda x: (x[0]["pos"] or 0, x[0]["id"]))
@@ -777,8 +791,9 @@ class App:
             "workers": [{"name": n, "seen": iso(w["seen"]), "paused": w["paused"], "repos": w.get("repos", [])}
                         for n, w in sorted(self.workers.items()) if now - w["seen"] < 600],
             "repos": all_repos,
+            "hidden": sorted(self.meta("hidden_repos", []), key=str.lower),
             "plans": sorted({(p["repo"], p["branch"]): p for w in self.workers.values() if now - w["seen"] < 600
-                             for p in w.get("plans", [])}.values(),
+                             for p in w.get("plans", []) if p["repo"].lower() not in hidden}.values(),
                             key=lambda p: (p["repo"].lower(), not p["default"], p["title"].lower())),
         }
         events = [{**json.loads(b), "received": iso(r)} for r, b in ev_rows]
@@ -1455,7 +1470,7 @@ function drawPlans(){
   const f=document.getElementById('add');if(!f||!f.plan)return;
   const repo=f.repo.value,keep=f.plan.value,mine=PLANS.filter(p=>p.repo===repo);
   f.plan.innerHTML=mine.length?mine.map(p=>`<option value="${escH(p.branch)}">${escH(planLabel(p))}</option>`).join('')
-    :'<option value="">No plans with open tasks in this repo: ask Claude to write one</option>';
+    :'<option value="">No plan with open tasks here: add a PLAN.md to start a loop</option>';
   if(mine.some(p=>p.branch===keep))f.plan.value=keep;
   drawPreview();
 }
@@ -1474,6 +1489,12 @@ async function loadPlans(){
   try{const s=await fetch('/api/status',{cache:'no-store'}).then(r=>r.json());PLANS=(s.jobs&&s.jobs.plans)||[];drawPlans()}catch(e){}
 }
 document.getElementById('add')?.repo?.addEventListener('change',drawPlans);
+document.getElementById('repo-hide')?.addEventListener('click',async()=>{
+  const r=document.getElementById('add').repo.value;
+  if(r&&confirm('Hide '+r+' from this list? You can show it again under Options.')&&await post('/api/repos/hidden',{repo:r,hidden:true}))location.reload();
+});
+document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-unhide]');
+  if(b&&await post('/api/repos/hidden',{repo:b.dataset.unhide,hidden:false}))location.reload()});
 document.getElementById('add')?.plan?.addEventListener('change',drawPreview);
 if(document.getElementById('add')){loadPlans();setInterval(loadPlans,60000)}
 document.getElementById('repo-new')?.addEventListener('click',ev=>{
@@ -1593,9 +1614,12 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True, owner: str 
     repos = list(known_repos)
     if owner:                                            # repos the agent worked on, from the history
         have = {r.lower() for r in repos}
+        hidden = {h.lower() for h in st["jobs"].get("hidden", [])}
         for r in (st.get("totals") or {}).get("repos", []):
             name = str(r.get("repo") or "")
             full = name if "/" in name else f"{owner}/{name}"
+            if full.lower() in hidden:
+                continue
             if REPO_RE.fullmatch(full) and full.split("/")[0].lower() == owner.lower() and full.lower() not in have:
                 repos.append(full)
                 have.add(full.lower())
@@ -1604,7 +1628,8 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True, owner: str 
         repo_input = (f'<div class="repo-pick"><select name="repo" required aria-label="Repository">{options}</select>'
                       + (f'<input name="new_repo" placeholder="new repo name" aria-label="New repository" hidden>'
                          f'<button type="button" class="mini" id="repo-new" title="A repo that is not in the list">'
-                         f'+ repo</button>' if owner else '') + '</div>')
+                         f'+ repo</button>' if owner else '')
+                      + '<button type="button" class="mini" id="repo-hide" title="Hide this repo from the list">hide</button></div>')
     else:
         repo_input = '<input name="repo" placeholder="owner/repo" required aria-label="Repository">'
     return (
@@ -1629,7 +1654,11 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True, owner: str 
         '<label class="chip">stop after <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
         'value="24" aria-label="Max hours"> h</label>'
         '<label class="switch"><input name="ci" type="checkbox" checked><span class="track"></span>wait for CI</label>'
-        '</div></details>'
+        '</div>'
+        + (f'<p class="small muted hidden-repos">Hidden repos: '
+           + ", ".join(f'{e(h)} <button type="button" class="link small" data-unhide="{e(h)}">show</button>'
+                       for h in st["jobs"].get("hidden", [])) + '</p>' if st["jobs"].get("hidden") else '')
+        + '</details>'
         '<button class="primary start-loop">▶ Start loop</button></form>'
         '<form id="unlock"><span class="small muted">Read-only. Paste the status token to add and manage jobs:</span>'
         '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
@@ -1799,6 +1828,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 return self.send(*app.import_history(body))
             if path == "/api/devbox":
                 return self.send(*app.devbox_report(body))
+            if path == "/api/repos/hidden":
+                return self.send(*app.hide_repo(body))
             m = re.fullmatch(r"/api/runs/([^/]+)/(pause|resume|control)", path)
             if m:
                 return self.send(*app.run_control(urllib.parse.unquote(m.group(1)), m.group(2)))

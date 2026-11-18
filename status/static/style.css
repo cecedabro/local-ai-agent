@@ -288,5 +288,6 @@ body.locked .loop-intro{display:none}
 .plan-preview ol.plan{margin:2px 0 6px}
 .loop-opts summary{cursor:pointer;color:var(--muted);margin-bottom:8px}
 .loop-opts .opts>input{flex:1;min-width:160px}
-#add .start-loop{justify-self:stretch;padding:10px;font-size:15px}
+#add .start-loop{justify-self:end;padding:8px 22px}
 @media (max-width:760px){#add .loop-fields{grid-template-columns:minmax(0,1fr)}}
+.hidden-repos{margin:8px 0 0}
