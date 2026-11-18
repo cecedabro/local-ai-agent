@@ -16,7 +16,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import answer, context, gateway
+import hashlib
+
+from . import answer, context, gateway, passkeys
 from .config import Settings
 from .db import DB
 
@@ -102,6 +104,14 @@ def create_app(settings: dict | None = None) -> FastAPI:
     @app.get("/invite", response_class=HTMLResponse)
     async def invite_page(request: Request):
         return templates.TemplateResponse(request, "invite.html", {})
+
+    @app.get("/account", response_class=HTMLResponse)
+    async def account_page(request: Request):
+        s = _session_from_cookie(request, app.state.db)
+        if not s:
+            return RedirectResponse("/login", status_code=303)
+        username, _ = s
+        return templates.TemplateResponse(request, "account.html", {"me": {"username": username}})
 
     async def _handle_login(request: Request) -> Any:
         # Try JSON body first, fall back to form
@@ -534,6 +544,135 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if not _is_admin(user):
             return HTMLResponse("<h1>403 Forbidden</h1>", status_code=403)
         return templates.TemplateResponse(request, "admin.html", {})
+
+    # ------------------------------------------------------------------ #
+    #  Passkey registration, list and delete (P06)                        #
+    # ------------------------------------------------------------------ #
+
+    def _wa_set(resp: Response, key: str) -> None:
+        resp.set_cookie(
+            "coder_wa", key,
+            httponly=True,
+            samesite="lax",
+            path="/api/passkeys",
+            max_age=300,
+            secure=app.state.settings.SECURE_COOKIES,
+        )
+
+    def _wa_take(request: Request, kind: str):
+        key = request.cookies.get("coder_wa")
+        if not key:
+            return None
+        return app.state.db.take_challenge(hashlib.sha256(key.encode()).hexdigest(), kind)
+
+    @app.post("/api/passkeys/register/options")
+    async def passkeys_register_options(request: Request) -> Response:
+        db = app.state.db
+        settings = app.state.settings
+        s = _session_from_cookie(request, db)
+        if not s:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = s
+        existing = [bytes(p["credential_id"]) for p in db.list_passkeys(username)]
+        js, challenge = passkeys.registration_options(settings, username, existing)
+        key = secrets.token_urlsafe(32)
+        db.put_challenge(hashlib.sha256(key.encode()).hexdigest(), "register", username, challenge)
+        resp = Response(js, media_type="application/json")
+        _wa_set(resp, key)
+        return resp
+
+    @app.post("/api/passkeys/register/verify", status_code=201)
+    async def passkeys_register_verify(request: Request) -> Response:
+        db = app.state.db
+        settings = app.state.settings
+        s = _session_from_cookie(request, db)
+        if not s:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = s
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        got = _wa_take(request, "register")
+        if not got or got[1] != username or not isinstance(body.get("credential"), dict):
+            return JSONResponse({"error": "That passkey could not be added. Try again."}, status_code=400)
+        try:
+            cred_id, public_key, count = passkeys.verify_registration(settings, body["credential"], got[0])
+        except passkeys.PasskeyError:
+            return JSONResponse({"error": "That passkey could not be added. Try again."}, status_code=400)
+        name = (str(body.get("name") or "").strip() or "Passkey")[:60]
+        return JSONResponse(db.add_passkey(username, cred_id, public_key, count, name), status_code=201)
+
+    @app.get("/api/passkeys")
+    async def passkeys_list(request: Request) -> JSONResponse:
+        s = _session_from_cookie(request, app.state.db)
+        if not s:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = s
+        return JSONResponse([{k: p[k] for k in ("id", "name", "created", "last_used")} for p in app.state.db.list_passkeys(username)])
+
+    @app.delete("/api/passkeys/{passkey_id}")
+    async def passkeys_delete(passkey_id: int, request: Request) -> Response:
+        s = _session_from_cookie(request, app.state.db)
+        if not s:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = s
+        if not app.state.db.delete_passkey(passkey_id, username):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return Response(status_code=204)
+
+    @app.post("/api/passkeys/login/options")
+    async def passkeys_login_options(request: Request) -> Response:
+        settings = app.state.settings
+        db = app.state.db
+        js, challenge = passkeys.authentication_options(settings)
+        key = secrets.token_urlsafe(32)
+        db.put_challenge(hashlib.sha256(key.encode()).hexdigest(), "login", None, challenge)
+        resp = Response(js, media_type="application/json")
+        _wa_set(resp, key)
+        return resp
+
+    @app.post("/api/passkeys/login/verify")
+    async def passkeys_login_verify(request: Request) -> JSONResponse:
+        db = app.state.db
+        settings = app.state.settings
+        ipkey = f"ip:{request.client.host if request.client else 'unknown'}"
+        if db.has_recent_failures(ipkey):
+            return JSONResponse({"error": "Too many tries. Wait 15 minutes."}, status_code=429)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        got = _wa_take(request, "login")
+        cred = body.get("credential")
+        try:
+            if not got or not isinstance(cred, dict):
+                raise passkeys.PasskeyError("missing challenge or credential")
+            cid = passkeys.credential_id(cred)
+            pk = db.get_passkey(cid)
+            if pk is None:
+                raise passkeys.PasskeyError("passkey not found")
+            count = passkeys.verify_authentication(settings, cred, got[0], bytes(pk["public_key"]), pk["sign_count"])
+        except passkeys.PasskeyError:
+            db.record_login_failure(ipkey)
+            return JSONResponse({"error": "That passkey did not work."}, status_code=401)
+        user = db.get_user(pk["username"])
+        if user is None:
+            return JSONResponse({"error": "That passkey did not work."}, status_code=401)
+        db.touch_passkey(pk["id"], count)
+        db.set_last_login(pk["username"])
+        session_id = secrets.token_urlsafe(32)
+        db.create_session(pk["username"], session_id)
+        resp = JSONResponse({"username": pk["username"], "rights": user["rights"]})
+        resp.set_cookie(
+            "coder_session", session_id,
+            httponly=True,
+            samesite="lax",
+            path="/",
+            max_age=30 * 24 * 3600,
+            secure=app.state.settings.SECURE_COOKIES,
+        )
+        return resp
 
     return app
 

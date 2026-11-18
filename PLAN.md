@@ -22,15 +22,15 @@ Rules for every task:
   accept: make chat-test K="test_step_passkeys and test_authentication_options"
 - [x] P05: In chat/coder/passkeys.py fill in `verify_authentication` as its docstring says
   accept: make chat-test K="test_step_passkeys"
-- [ ] P06: In chat/coder/app.py add the passkey registration, list and delete routes (see "P06 details")
+- [x] P06: In chat/coder/app.py add the passkey registration, list and delete routes (see "P06 details")
   accept: make chat-test K="TestPasskeyRegister"
-- [ ] P07: In chat/coder/app.py add the passkey sign-in routes (see "P07 details")
+- [x] P07: In chat/coder/app.py add the passkey sign-in routes (see "P07 details")
   accept: make chat-test K="TestPasskeyLogin and not account"
-- [ ] P08: In chat/coder/app.py add the page GET /account (see "P08 details")
+- [x] P08: In chat/coder/app.py add the page GET /account (see "P08 details")
   accept: make chat-test
-- [ ] P09: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only the app code in chat/coder/
+- [x] P09: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only the app code in chat/coder/
   accept: make chat-test && make chat-browser-test
-- [ ] P10: Add a "## Passkeys" section to chat/README.md (see "P10 details")
+- [x] P10: Add a "## Passkeys" section to chat/README.md (see "P10 details")
   accept: grep -q "## Passkeys" chat/README.md && grep -q "RP_ID" chat/README.md && make chat-test
 
 ## P01 details

@@ -1,5 +1,15 @@
 # PROGRESS
 
+- [P06] `chat/coder/app.py`: Added 4 passkey routes — `POST /api/passkeys/register/options` (session check, `passkeys.registration_options`, challenge cookie), `POST /api/passkeys/register/verify` (session + challenge + credential validation → `passkeys.verify_registration` → `db.add_passkey`), `GET /api/passkeys` (list), `DELETE /api/passkeys/{passkey_id}` (delete). Added helper functions `_wa_set` / `_wa_take` for WebAuthn cookie/challenge handling. All 4 `TestPasskeyRegister` tests pass. `make check` green.
+
+- [P07] `chat/coder/app.py`: Added 2 passkey login routes — `POST /api/passkeys/login/options` (no session, `passkeys.authentication_options`, challenge cookie, IP rate-limit key), `POST /api/passkeys/login/verify` (no session, IP rate-limit check → 429, WebAuthn verify → `db.get_passkey` → `passkeys.verify_authentication` → `db.touch_passkey` → `db.set_last_login` → session creation via `secrets.token_urlsafe(32)` + `db.create_session` + `coder_session` cookie, returns `{"username", "rights"}`). Wrapped challenge/credential/passkey-fetch validation in `try`/`except passkeys.PasskeyError` to record failure and return 401. All 7 `TestPasskeyLogin` tests pass. `make check` green.
+
+- [P08] `chat/coder/app.py`: Added `GET /account` route — no session → `RedirectResponse("/login", status_code=303)`, else `templates.TemplateResponse("account.html", {"me": {"username": username}})`. Template already existed. `make chat-test K="test_account_page"` passes. `make check` green.
+
+- [P09] `make chat-browser-test` — all browser tests pass: password sign-in + message + answer finish, and passkey flow (add on /account, sign out, sign in with passkey).
+
+- [P10] `chat/README.md`: Appended `## Passkeys` section (4 lines: what they are, where to add them, production RP_ID+ORIGIN requirement). `grep -q "## Passkeys"` + `grep -q "RP_ID"` + `make chat-test` all pass.
+
 - [T03] `chat/coder/app.py` + `chat/coder/db.py`: Fixed §3 invite acceptance tests (`TestInvites`) — patched `timezone` import in `api_accept_invite`, added `threading.local()` for per-thread SQLite connections in `db.py`, rewrote `api_create_invite`/`api_list_invites`/`api_delete_invite` with correct session/CSRF validation and status codes, added `_is_admin()` helper, fixed `admin_page` to use `_session_from_cookie`, fixed `api_list_users` to bypass explicit CSRF wrapper, fixed `api_delete_user` path param name mismatch (`{username}` → `{target_username}`). All 4 `TestInvites` tests pass.
 
 - [T06] `status/backfill.py`: added `opencode_tokens(db_path: Path) -> list[dict]` — reads OpenCode's SQLite DB via `file:ro` URI, uses `json_valid` + `json_extract` to safely filter assistant rows with tokens, groups by UTC date, sums input/output+reasoning, returns sorted list.
