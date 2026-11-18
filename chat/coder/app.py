@@ -337,8 +337,11 @@ def create_app(settings: dict | None = None) -> FastAPI:
              file_ids = body.get("files") or []
           4. not content.strip() and not file_ids -> 400 {"error": "Type a message first."}
              len(content) > 20000 -> 413 {"error": "That message is too long."}
-          5. (task S13 adds the files here)
-          6. db.add_message(chat_id, "user", content)
+           5. for each file_id in file_ids: f = db.get_file(file_id, username);
+              if f is None: return 400 {"error": "One or more files not found."}
+           6. for each fid in file_ids: fc = db.get_file_content(fid); append "File <name>:\n```\n<fc>\n```" to content;
+              msg_id = db.add_message(chat_id, "user", content);
+              db.add_message_files(msg_id, file_ids)
           7. return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
                                       media_type="text/event-stream")
         """
@@ -361,7 +364,17 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "Type a message first."}, status_code=400)
         if len(content) > 20000:
             return JSONResponse({"error": "That message is too long."}, status_code=413)
-        db.add_message(chat_id, "user", content)
+        for fid in file_ids:
+            if not db.get_file(fid, username):
+                return JSONResponse({"error": "One or more files not found."}, status_code=400)
+        if file_ids:
+            for fid in file_ids:
+                f = db.get_file(fid, username)
+                fc = db.get_file_content(fid)
+                content += f'\nFile {f["name"]}:\n```\n{fc.decode()}```'
+        msg_id = db.add_message(chat_id, "user", content)
+        if file_ids:
+            db.add_message_files(msg_id, file_ids)
         return StreamingResponse(answer.run_answer(db, settings, chat, body.get("mode") == "think"),
                                  media_type="text/event-stream")
 
