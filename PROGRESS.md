@@ -40,3 +40,5 @@
 - [S15] Verified `make chat-test` (50 passed) and `make check` (32 passed) — both already green, no code changes needed.
 
 - [S19] `chat/static/js/app.js`: Implemented `loadChats` — fetches GET /api/chats, stores in state.chats, filters by #search value (case-insensitive title substring), groups via groupChats(), renders sidebar with <h4> group labels, <div class="conv" data-id> items with escaped titles, <em class="tag">EH</em> for evidence profile, and "on" class for the active chat. `node --check` + `grep` validation + `make check` all pass.
+
+- [S20] `chat/static/js/app.js`: Implemented `openChat(id)` — fetches GET /api/chats/ID, sets state.chatId/profile/chat-title, draws messages via drawMessage() or welcome screen (MARBLE + USERNAME + example chips), calls drawContext() + loadChats(). Implemented `drawMessage(m)` — user messages show file chips + text (stripped of `\n\nFile ` blocks), assistant messages show ORB + md.render(content) in bubble + meta2 with TINY + metaText(tokens,tps) + Copy/Retry buttons, summary messages show `.note.summary` line. `node --check` + `grep` validation + `make check` all pass.

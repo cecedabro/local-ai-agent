@@ -72,7 +72,33 @@ async function loadChats() {
  * document.body.dataset.username); clicking an example puts its text in #input and sends.
  * Then call drawContext(chat.context) and loadChats() (to update the "on" marker).
  */
-async function openChat(id) {}
+async function openChat(id) {
+  const res = await api(`/api/chats/${encodeURIComponent(id)}`);
+  const chat = await res.json();
+  state.chatId = chat.id;
+  state.profile = chat.profile;
+  $("#chat-title").textContent = chat.title;
+  const $messages = $("#messages");
+  $messages.innerHTML = "";
+  if (chat.messages.length === 0) {
+    const username = document.body.dataset.username;
+    const chips = EXAMPLES[state.profile].map((ex) =>
+      `<button data-example="${esc(ex)}">${esc(ex)}</button>`
+    ).join("");
+    $messages.innerHTML =
+      `<div class="welcome">${MARBLE}<h2>Hi ${username}, what's up?</h2><div class="chips">${chips}</div></div>`;
+    $messages.querySelectorAll("button[data-example]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $("#input").value = btn.dataset.example;
+        send();
+      });
+    });
+  } else {
+    chat.messages.forEach((m) => drawMessage(m));
+  }
+  drawContext(chat.context);
+  await loadChats();
+}
 
 /**
  * TODO (task S20). Return the element for one message and append it to #messages:
@@ -86,7 +112,40 @@ async function openChat(id) {}
  *   summary:   <div class="note summary">Earlier messages summarised</div>
  * The Copy button copies the raw content with navigator.clipboard.writeText.
  */
-function drawMessage(m) {}
+function drawMessage(m) {
+  const $messages = $("#messages");
+  if (m.role === "summary") {
+    $messages.insertAdjacentHTML("beforeend", '<div class="note summary">Earlier messages summarised</div>');
+    return;
+  }
+  if (m.role === "user") {
+    let text = m.content;
+    if (m.files && m.files.length) {
+      text = text.split("\n\nFile ")[0];
+    }
+    let chips = "";
+    if (m.files && m.files.length) {
+      chips = m.files.map((f) => `<span class="file">${esc(f.name)}</span>`).join("");
+    }
+    $messages.insertAdjacentHTML("beforeend",
+      `<div class="u">${chips}<div class="msg user">${esc(text)}</div></div>`
+    );
+    return;
+  }
+  const rendered = md.render(m.content);
+  const stats = metaText(m.tokens, m.tps);
+  const $msg = document.createElement("div");
+  $msg.className = "ai";
+  $msg.innerHTML =
+    ORB +
+    `<div class="content"><div class="bub">${rendered}</div>` +
+    `<div class="meta2">${TINY}<span>${stats}</span>` +
+    `<button data-copy>Copy</button><button data-retry>Retry</button></div></div>`;
+  $msg.querySelector("button[data-copy]").addEventListener("click", () => {
+    navigator.clipboard.writeText(m.content);
+  });
+  $messages.appendChild($msg);
+}
 
 /**
  * TODO (task S21). Send #input's text (and state.files ids) to POST /api/chats/ID/messages with
