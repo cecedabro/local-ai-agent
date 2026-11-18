@@ -132,6 +132,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
             yield ev
 
     stopped = False
+    msg_stored = False
     try:
         async for tag, val in events():
             if tag == "reasoning":
@@ -155,6 +156,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         yield sse("error", {"error": "The model could not answer.", "status": e.status})
         return
     finally:
+        if not msg_stored and text:
+            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True)
         try:
             await agen.aclose()
         except Exception:
@@ -166,6 +169,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
     if text or not stopped:
         msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped)
+        msg_stored = True
     else:
         msg_id = None
     if msg_id is not None and usage:

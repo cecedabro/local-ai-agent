@@ -25,3 +25,13 @@ Modified `chat/coder/answer.py`:
 Tests: `make chat-test K="test_step_answer or (test_step_round2 and stop_event)"` — 9 passed. `make check` — 36 passed, OK.
 
 Note: The `try/finally` with `agen.aclose()` is already in place, so R05 (client disconnect handling via try/finally) has a head start — it only needs to add the partial-store logic.
+
+## Task R05 — client disconnect partial store, done (2026-11-18)
+
+Modified `chat/coder/answer.py`:
+1. Added `msg_stored = False` flag before the try block (line 135).
+2. After `db.add_message(...)` in Step 5, set `msg_stored = True`.
+3. In the `finally` block, before `agen.aclose()`, added partial-store logic: if `not msg_stored and text`, store accumulated text with `stopped=True`.
+(When Starlette calls `aclose()` on the generator due to client disconnect, the finally block catches it and saves the partial answer.)
+
+Tests: `make chat-test K="test_step_answer or test_step_round2"` — 14 passed. `make check` — 36 passed, OK.
