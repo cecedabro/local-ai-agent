@@ -133,7 +133,24 @@ async def complete(settings: Any, messages: list[dict]) -> str:
     timeout 600, same Authorization header. 503/429 -> Busy; other != 200 -> GatewayError(status);
     connection errors -> GatewayError(502).
     """
-    raise NotImplementedError
+    headers: dict[str, str] | None = None
+    if settings.GATEWAY_KEY:
+        headers = {"Authorization": f"Bearer {settings.GATEWAY_KEY}"}
+
+    url = settings.GATEWAY_URL.rstrip("/") + "/chat/completions"
+
+    try:
+        async with httpx.AsyncClient(timeout=600) as client:
+            async with client.stream("POST", url, json=request_body(messages, think=False, stream=False), headers=headers) as resp:
+                if resp.status_code in (503, 429):
+                    raise Busy()
+                if resp.status_code != 200:
+                    raise GatewayError(resp.status_code)
+
+                body = json.loads(await resp.aread())
+                return body["choices"][0]["message"]["content"]
+    except (httpx.ConnectError, httpx.TimeoutException):
+        raise GatewayError(502)
 
 
 def _unused() -> None:  # keeps the json import for the code you will write

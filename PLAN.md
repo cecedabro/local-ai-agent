@@ -20,7 +20,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"
 - [x] S03: In chat/coder/gateway.py fill in `stream_chat` as its docstring says
   accept: make chat-test K="test_step_gateway and (test_stream_chat or test_no_key_no_header)"
-- [ ] S04: In chat/coder/gateway.py fill in `complete` as its docstring says
+- [x] S04: In chat/coder/gateway.py fill in `complete` as its docstring says
   accept: make chat-test K="test_step_gateway"
 - [ ] S05: In chat/coder/context.py fill in `ctx_max` and `window` as their docstrings say
   accept: make chat-test K="test_step_context and test_ctx_max_and_cache"
