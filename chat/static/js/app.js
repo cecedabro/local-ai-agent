@@ -171,7 +171,109 @@ function drawMessage(m) {
  * Keep state.busy true while streaming (the send button is disabled meanwhile). Scroll #thread to
  * the bottom as text arrives, unless the user scrolled up.
  */
-async function send() {}
+async function send() {
+  const text = $("#input").value.trim();
+  if (!text || state.busy) return;
+  state.busy = true;
+
+  let chatId = state.chatId;
+  if (!chatId) {
+    const res = await api("/api/chats", { method: "POST", json: { profile: state.profile } });
+    chatId = (await res.json()).id;
+    state.chatId = chatId;
+  }
+
+  const modeEl = document.querySelector('input[name="mode"]:checked');
+  const mode = modeEl ? modeEl.value : "think";
+
+  const $messages = $("#messages");
+  const welcome = $messages.querySelector(".welcome");
+  if (welcome) welcome.remove();
+
+  // Draw user message
+  const fileIds = state.files.map((f) => f.id);
+  let textHtml = esc(text);
+  if (fileIds.length) {
+    textHtml = fileIds.map((id) => {
+      const f = state.files.find((ff) => ff.id === id);
+      return f ? `<span class="file">${esc(f.name)}</span>` : "";
+    }).join("") + textHtml;
+  }
+  $messages.insertAdjacentHTML("beforeend", `<div class="u">${textHtml}</div>`);
+
+  // Draw assistant placeholder
+  const aiId = "ai-" + Date.now();
+  $messages.insertAdjacentHTML("beforeend",
+    `<div class="ai" id="${aiId}">${ORB}<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div></div>`
+  );
+  const $ai = $(`#${aiId}`);
+  const bub = $ai.querySelector(".bub");
+  const meta = $ai.querySelector(".meta2");
+  const orb = $ai.querySelector(".orb");
+  const tiny = document.createElement("span");
+  tiny.className = "tiny";
+  tiny.textContent = " ";
+
+  // Clear input and file chips
+  $("#input").value = "";
+  $("#file-chips").innerHTML = "";
+  state.files = [];
+
+  const writeStart = performance.now();
+
+  const typewriter = new Typewriter((shown, pieces) => {
+    renderFade(bub, md.render(shown), pieces);
+    placeTail(bub, tiny);
+    const t = (performance.now() - writeStart) / 1000;
+    orb.style.setProperty("--fill", (0.82 * (1 - Math.exp(-t / 2.6))).toFixed(3));
+    meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+  });
+
+  const streamRes = await api(`/api/chats/${encodeURIComponent(chatId)}/messages`, {
+    method: "POST",
+    json: { content: text, mode, files: fileIds }
+  });
+
+  await readEvents(streamRes, (event, data) => {
+    if (event === "phase") {
+      orb.dataset.phase = data.phase;
+      meta.innerHTML = `<span class="phase-label">${esc(data.label)}</span>`;
+      if (data.phase === "writing") writeStart = performance.now();
+    } else if (event === "delta") {
+      typewriter.push(data.text);
+    } else if (event === "done") {
+      typewriter.finish().then(() => {
+        tiny.remove();
+        orb.dataset.phase = "idle";
+        meta.innerHTML = TINY + `<span>${metaText(data.tokens, data.tps)}</span>` +
+          `<button data-copy>Copy</button><button data-retry>Retry</button>`;
+        $ai.querySelector("button[data-copy]").addEventListener("click", () => {
+          navigator.clipboard.writeText(data.content);
+        });
+        $ai.querySelector("button[data-retry]").addEventListener("click", () => {
+          $("#input").value = text;
+          send();
+        });
+        drawContext(data.context);
+        loadChats().then(() => { state.busy = false; });
+      });
+    } else if (event === "error") {
+      typewriter.finish().then(() => {
+        tiny.remove();
+        orb.dataset.phase = "idle";
+        bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(data.message)}</div>`);
+        state.busy = false;
+      });
+    }
+  });
+
+  // Scroll #thread to bottom
+  const $thread = $("#thread");
+  if ($thread) {
+    const shouldScroll = $thread.scrollHeight - $thread.scrollTop - $thread.clientHeight < 200;
+    if (shouldScroll) $thread.scrollTop = $thread.scrollHeight;
+  }
+}
 
 /**
  * TODO (task S22). Draw the context bar from {used, max, compress_at}: on ".ctx .bar > i" set

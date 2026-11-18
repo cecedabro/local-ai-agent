@@ -54,7 +54,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: node --check chat/static/js/app.js && grep -q "groupChats(state.chats" chat/static/js/app.js
 - [x] S20: In chat/static/js/app.js fill in `openChat` and `drawMessage` as their comments say
   accept: node --check chat/static/js/app.js && grep -q "md.render(" chat/static/js/app.js && grep -q "welcome" chat/static/js/app.js
-- [ ] S21: In chat/static/js/app.js fill in `send` as its comment says
+- [x] S21: In chat/static/js/app.js fill in `send` as its comment says
   accept: node --check chat/static/js/app.js && grep -q "readEvents(" chat/static/js/app.js && grep -q "new Typewriter(" chat/static/js/app.js && grep -q "renderFade(" chat/static/js/app.js && grep -q "placeTail(" chat/static/js/app.js
 - [ ] S22: In chat/static/js/app.js fill in `drawContext` as its comment says
   accept: node --check chat/static/js/app.js && grep -q -- "--used" chat/static/js/app.js && grep -q -- "--at" chat/static/js/app.js
