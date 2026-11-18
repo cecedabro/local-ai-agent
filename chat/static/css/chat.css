@@ -303,3 +303,39 @@ body.admin header a{margin-left:auto}
 .cmenu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
 .cmenu small{display:block;padding:4px 10px 2px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 @media (prefers-reduced-motion:reduce){.phase-label{animation:none;color:var(--muted)}}
+
+/* ================================================================ phones and the home-screen app */
+.scrim{display:none}
+.side-extras{display:none}
+@media (max-width:760px){
+  body.app{padding-top:env(safe-area-inset-top)}
+  .side{display:flex;position:fixed;z-index:40;left:0;top:0;bottom:0;width:min(84vw,320px);margin:0;border-radius:0 24px 24px 0;
+    padding:calc(14px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+    transform:translate3d(-105%,0,0);transition:transform .32s cubic-bezier(.3,.9,.3,1);will-change:transform}
+  :root[data-theme=dark] .side{background:rgba(12,26,42,.96)}
+  :root[data-theme=light] .side,:root[data-theme=blossom] .side{background:rgba(255,255,255,.95)}
+  body.drawer-open .side{transform:none}
+  .scrim{display:block;position:fixed;inset:0;z-index:39;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .3s}
+  body.drawer-open .scrim{opacity:1;pointer-events:auto}
+  .side-extras{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 2px}
+  .side-extras .badge,.side-extras .seg{display:inline-flex}
+  .side-extras .seg{display:grid}
+  .menu{width:40px;height:40px;flex:none}
+  .top{padding:8px 12px 6px}
+  .top .title{font-size:15px}
+  .profile{padding:4px 10px 4px 5px}.profile .orb{--s:26px}
+  .pmenu{top:calc(52px + env(safe-area-inset-top));right:10px;left:10px;width:auto}
+  .dock{padding:0 10px max(10px,env(safe-area-inset-bottom))}
+  .composer{padding:8px 10px;border-radius:22px}
+  .composer textarea{min-height:40px;font-size:16px;padding:4px 6px}   /* 16px: iOS does not zoom in on focus */
+  .send{width:38px;height:38px}
+  .ctx{gap:8px;font-size:11.5px}.ctx button{padding:2px 8px;font-size:11.5px}
+  .hint{display:none}
+  .thread{padding:6px 12px 12px}
+  .ai{grid-template-columns:22px minmax(0,1fr);gap:10px}.ai>.orb{--s:22px}
+  .welcome{padding:24px 0}.welcome .orb{--s:72px}
+  .jump{top:-44px}
+  .cmenu{max-width:calc(100vw - 20px)}
+}
+/* the home-screen app (standalone): no browser bar, so the top needs the notch space on wide screens too */
+@media (display-mode:standalone){body.app{padding-top:env(safe-area-inset-top)}}
