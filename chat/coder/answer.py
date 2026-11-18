@@ -22,20 +22,22 @@ LABELS = {
 
 
 def sse(event: str, data: dict) -> str:
-    """TODO (task S09). One event in text/event-stream format:
-    f"event: {event}\\ndata: {json.dumps(data, ensure_ascii=False)}\\n\\n"."""
-    raise NotImplementedError
+    """One event in text/event-stream format."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def phase(name: str) -> str:
-    """TODO (task S09). sse("phase", {"phase": name, "label": LABELS[name]})."""
-    raise NotImplementedError
+    """Yield the phase SSE event."""
+    return sse("phase", {"phase": name, "label": LABELS[name]})
 
 
 def make_title(text: str) -> str:
-    """TODO (task S09). The chat title from the first user message: collapse all whitespace to single
-    spaces and strip; if longer than 60 characters: the first 60, trailing spaces removed, plus "…"."""
-    raise NotImplementedError
+    """The chat title from the first user message."""
+    import re
+    title = re.sub(r'\s+', ' ', text).strip()
+    if len(title) > 60:
+        title = title[:59].rstrip() + "…"
+    return title
 
 
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
