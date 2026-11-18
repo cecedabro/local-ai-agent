@@ -22,3 +22,14 @@
 - The `merge_tool_calls()` function already aggregates streamed tool call fragments by index.
 - `stream_chat()` currently does not yet pass `tools` or merge tool calls; this is deferred to a later task.
 - All acceptance commands pass: `make chat-test K="test_step_tools or test_step_gateway"` and `make check`.
+
+## Task B06 - profile tables and database methods (chat/coder/db.py:705)
+- Added `profile_settings` and `sources` tables to `_SCHEMA` in `db.py` per SPEC §12.1 data contract.
+- Added `sources` column migration to `init_schema`: updates existing `messages` table with JSON `sources` column.
+- Extended `add_message()` to accept a `sources` parameter (list of source dicts) and stores it as JSON.
+- Extended `get_messages()` to parse and include `sources` JSON in message dictionaries (defaults to `[]` when missing).
+- Updated `delete_user()` to cascade-delete `profile_settings` and `sources` rows for the user.
+- Implemented 7 new DB methods: `get_profile_settings`, `set_profile_settings`, `add_source`, `list_sources`, `get_source`, `update_source`, `delete_source`.
+- Fixed deadlock: changed `self._lock` from `threading.Lock()` to `threading.RLock()` to support nested calls (e.g., `add_source` -> `get_source`).
+- Fixed `update_source` WHERE clause: swapped `username`/`source_id` bind order to match `WHERE id = ? AND username = ?`.
+- Acceptance command passes: `make chat-test K="test_step_profiles and profile_db"`.
