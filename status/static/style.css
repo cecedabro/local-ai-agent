@@ -278,3 +278,15 @@ td.lines span{display:block;font-variant-numeric:tabular-nums;line-height:1.35}
   -webkit-mask-image:linear-gradient(#000 62%,transparent);mask-image:linear-gradient(#000 62%,transparent)}
 .repo-pick{display:flex;gap:6px;min-width:0}.repo-pick>select,.repo-pick>input{flex:1;min-width:0}
 @media (prefers-reduced-motion:reduce){.badge.ok::after{animation:none}.fold{transition:none}}
+
+/* ------------------------------------------------------------------ start an agent loop (§16) */
+.loop-intro{margin:-4px 0 12px;line-height:1.45}
+body.locked .loop-intro{display:none}
+#add .loop-fields{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr)}
+.plan-preview{padding:10px 14px;border-radius:16px;background:var(--chip);border:1px solid var(--stroke-soft);font-size:13.5px}
+.plan-preview .progress{margin:8px 0}
+.plan-preview ol.plan{margin:2px 0 6px}
+.loop-opts summary{cursor:pointer;color:var(--muted);margin-bottom:8px}
+.loop-opts .opts>input{flex:1;min-width:160px}
+#add .start-loop{justify-self:stretch;padding:10px;font-size:15px}
+@media (max-width:760px){#add .loop-fields{grid-template-columns:minmax(0,1fr)}}

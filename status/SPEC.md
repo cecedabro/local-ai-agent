@@ -489,3 +489,20 @@ restart the pod.
 - `/api/status` → `devbox`: `{"pending", "target", "since"}`. The Queue card shows "devbox update:
   waiting to install X.Y.Z, applies when idle".
 
+## 16. Starting a loop from a plan
+
+The worker lists every branch that has a `PLAN.md` with open tasks, so the page can start a loop
+by picking a plan instead of typing a branch.
+
+- Worker (`harness/worker.py`): every 10 minutes (and after each job) it asks GitHub, for each of
+  its repos, for the default branch and the `agent/*` branches, reads `PLAN.md` on each (only
+  again after a new commit) and sends `"plans": [{"repo", "branch", "title", "default", "total",
+  "done", "skipped", "open", "next": [up to 3 "ID title"]}]` with its pings and claims.
+- Service: kept per worker like `repos` (a ping without `plans` keeps the old list; an empty list
+  clears it); malformed entries and other owners' repos are dropped; at most 200.
+  `/api/status` → `jobs.plans`: the union over live workers, by repo, default branch first.
+- Page: the card "Start an agent loop" explains what a loop is, picks the repo and a plan
+  ("New · <title> · main · N open" starts a new `agent/<title>` branch; "Continue · <title> ·
+  agent/… · d of t done" resumes), previews progress and the next tasks, and keeps branch, note,
+  max hours and CI under "Options". Start queues a job with `ref` = the plan's branch.
+

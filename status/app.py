@@ -79,6 +79,27 @@ def num(v: object, default: float = 0) -> float:
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else default
 
 
+BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
+
+
+def clean_plans(value: list, owners: set[str]) -> list[dict]:
+    """The worker's plan list (§16): well-formed entries of allowed owners, at most 200."""
+    out: list[dict] = []
+    for v in value[:200]:
+        if not isinstance(v, dict):
+            continue
+        repo, branch = str(v.get("repo") or ""), str(v.get("branch") or "")
+        if not REPO_RE.fullmatch(repo) or not BRANCH_RE.fullmatch(branch) or ".." in branch:
+            continue
+        if owners and repo.split("/")[0].lower() not in owners:
+            continue
+        num = {k: v.get(k) if isinstance(v.get(k), int) and v.get(k) >= 0 else 0 for k in ("total", "done", "skipped", "open")}
+        nxt = [str(x)[:120] for x in v.get("next", []) if isinstance(x, str)][:3] if isinstance(v.get("next"), list) else []
+        out.append({"repo": repo, "branch": branch, "title": str(v.get("title") or "")[:120],
+                    "default": bool(v.get("default")), **num, "next": nxt})
+    return out
+
+
 def clean_repos(value: list[object] | None, owners: set[str]) -> list[str]:
     if not value:
         return []
@@ -367,16 +388,19 @@ class App:
             self.db.commit()
             return 201, self.job_pub(self.job_row(cur.lastrowid))
 
-    def seen_worker(self, worker: str, paused: bool, raw_repos: object) -> None:
-        """Record a ping or claim; keep the worker's last non-empty repo list (§8). Caller holds the lock."""
+    def seen_worker(self, worker: str, paused: bool, raw_repos: object, raw_plans: object = None) -> None:
+        """Record a ping or claim; keep the worker's last non-empty repo list (§8) and its latest plan
+        list (§16; a missing `plans` keeps the old one). Caller holds the lock."""
         repos = clean_repos(raw_repos if isinstance(raw_repos, list) else None, self.job_owners)
         old = self.workers.get(worker) or {}
-        self.workers[worker] = {"seen": self.clock(), "paused": paused, "repos": repos or old.get("repos", [])}
+        plans = clean_plans(raw_plans, self.job_owners) if isinstance(raw_plans, list) else old.get("plans", [])
+        self.workers[worker] = {"seen": self.clock(), "paused": paused, "repos": repos or old.get("repos", []),
+                                "plans": plans}
 
     def ping(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            self.seen_worker(worker, bool(body.get("paused")), body.get("repos"))
+            self.seen_worker(worker, bool(body.get("paused")), body.get("repos"), body.get("plans"))
         return {"ok": True}
 
     DEVBOX_TTL = 900                                    # a pending update expires without a refresh
@@ -405,7 +429,7 @@ class App:
     def claim(self, body: dict) -> dict:
         worker = str(body.get("worker") or "worker")[:100]
         with self.lock:
-            self.seen_worker(worker, False, body.get("repos"))
+            self.seen_worker(worker, False, body.get("repos"), body.get("plans"))
             self.expire_jobs()
             if self.devbox_pending():
                 self.db.commit()
@@ -753,6 +777,9 @@ class App:
             "workers": [{"name": n, "seen": iso(w["seen"]), "paused": w["paused"], "repos": w.get("repos", [])}
                         for n, w in sorted(self.workers.items()) if now - w["seen"] < 600],
             "repos": all_repos,
+            "plans": sorted({(p["repo"], p["branch"]): p for w in self.workers.values() if now - w["seen"] < 600
+                             for p in w.get("plans", [])}.values(),
+                            key=lambda p: (p["repo"].lower(), not p["default"], p["title"].lower())),
         }
         events = [{**json.loads(b), "received": iso(r)} for r, b in ev_rows]
         gateway = self.gateway.snapshot(now) if self.gateway else None
@@ -1413,11 +1440,42 @@ document.getElementById('add')?.addEventListener('submit',async ev=>{
   ev.preventDefault();const f=ev.target;
   const nr=f.new_repo&&!f.new_repo.hidden?f.new_repo.value.trim():'';
   const repo=nr?(nr.includes('/')?nr:f.dataset.owner+'/'+nr):f.repo.value.trim();
-  const ok=await post('/api/jobs',{repo:repo,ref:f.ref.value.trim(),note:f.note.value.trim(),
+  const ref=f.ref.value.trim()||f.plan.value;
+  if(!ref&&!confirm('No plan picked: start a loop on the default branch anyway?'))return;
+  const ok=await post('/api/jobs',{repo:repo,ref:ref,note:f.note.value.trim(),
     max_hours:parseFloat(f.max_hours.value||'24'),ci:f.ci.checked});
-  if(ok){f.ref.value='';f.note.value='';if(f.new_repo)f.new_repo.value='';msg('Job added.')}
-  refresh();
+  if(ok){f.ref.value='';f.note.value='';if(f.new_repo)f.new_repo.value='';msg('Loop queued: it starts within half a minute.')}
+  refresh();loadPlans();
 });
+// Plans (§16): the worker lists every branch with a PLAN.md that still has open tasks.
+let PLANS=[];
+const escH=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function planLabel(p){return (p.default?'New · ':'Continue · ')+p.title+' · '+p.branch+' · '+(p.default?p.open+' open':p.done+' of '+p.total+' done')}
+function drawPlans(){
+  const f=document.getElementById('add');if(!f||!f.plan)return;
+  const repo=f.repo.value,keep=f.plan.value,mine=PLANS.filter(p=>p.repo===repo);
+  f.plan.innerHTML=mine.length?mine.map(p=>`<option value="${escH(p.branch)}">${escH(planLabel(p))}</option>`).join('')
+    :'<option value="">No plans with open tasks in this repo: ask Claude to write one</option>';
+  if(mine.some(p=>p.branch===keep))f.plan.value=keep;
+  drawPreview();
+}
+function drawPreview(){
+  const f=document.getElementById('add'),box=document.getElementById('plan-preview');if(!f||!box)return;
+  const p=PLANS.find(x=>x.repo===f.repo.value&&x.branch===f.plan.value);
+  if(!p){box.hidden=true;return}
+  const pct=p.total?Math.round(100*(p.done+p.skipped)/p.total):0;
+  box.hidden=false;
+  box.innerHTML=`<b>${escH(p.title||p.branch)}</b> <span class="muted">· ${p.total} tasks · ${p.done} done${p.skipped?' · '+p.skipped+' skipped':''}</span>`+
+    `<div class="progress"><i style="width:${pct}%"></i></div>`+
+    (p.next.length?`<div class="small muted">Next:</div><ol class="plan">${p.next.map(t=>`<li>${escH(t)}</li>`).join('')}</ol>`:'')+
+    (p.default?`<div class="small muted">Starts a new branch from <code>${escH(p.branch)}</code>.</div>`:'');
+}
+async function loadPlans(){
+  try{const s=await fetch('/api/status',{cache:'no-store'}).then(r=>r.json());PLANS=(s.jobs&&s.jobs.plans)||[];drawPlans()}catch(e){}
+}
+document.getElementById('add')?.repo?.addEventListener('change',drawPlans);
+document.getElementById('add')?.plan?.addEventListener('change',drawPreview);
+if(document.getElementById('add')){loadPlans();setInterval(loadPlans,60000)}
 document.getElementById('repo-new')?.addEventListener('click',ev=>{
   const f=document.getElementById('add'),on=f.new_repo.hidden;
   f.new_repo.hidden=!on;f.repo.hidden=on;f.repo.required=!on;f.new_repo.required=on;
@@ -1556,16 +1614,23 @@ def render_page(st: dict, known_repos: list[str], chat: bool = True, owner: str 
         f'<span id="model" class="badge {BADGE.get(state, "off")}">model {e(state)}</span>'
         f'<span id="updated" class="muted small"></span>{theme_switch()}</header>'
         '<section id="controls"><div class="card wide">'
-        '<div class="card-head ctl"><h2>Queue a job</h2>'
+        '<div class="card-head ctl"><h2>Start an agent loop</h2>'
         '<button type="button" id="lock" class="link small">lock</button></div>'
-        f'<form id="add" autocomplete="off" data-owner="{e(owner)}"><div class="fields">'
+        '<p class="small muted ctl loop-intro">The agent works through a plan (<code>PLAN.md</code>) one task at a time, '
+        'on its own, until every task is done or you pause it. A plan on the main branch starts a new '
+        '<code>agent/…</code> branch; a plan on an <code>agent/…</code> branch continues where it stopped.</p>'
+        f'<form id="add" autocomplete="off" data-owner="{e(owner)}"><div class="fields loop-fields">'
         f'{repo_input}'
-        '<input name="ref" placeholder="branch (default)" aria-label="Branch">'
-        '<input name="note" placeholder="note" maxlength="200" aria-label="Note"></div>'
-        '<div class="opts"><label class="chip">max <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
+        '<select name="plan" aria-label="Plan"><option value="">Loading plans…</option></select></div>'
+        '<div id="plan-preview" class="plan-preview" hidden></div>'
+        '<details class="loop-opts"><summary class="small">Options</summary><div class="opts">'
+        '<input name="ref" placeholder="other branch (instead of a plan)" aria-label="Branch">'
+        '<input name="note" placeholder="note" maxlength="200" aria-label="Note">'
+        '<label class="chip">stop after <input name="max_hours" type="number" min="0.1" max="24" step="0.5" '
         'value="24" aria-label="Max hours"> h</label>'
         '<label class="switch"><input name="ci" type="checkbox" checked><span class="track"></span>wait for CI</label>'
-        '<span class="spacer"></span><button class="primary">Add to queue</button></div></form>'
+        '</div></details>'
+        '<button class="primary start-loop">▶ Start loop</button></form>'
         '<form id="unlock"><span class="small muted">Read-only. Paste the status token to add and manage jobs:</span>'
         '<input name="token" type="password" placeholder="STATUS_TOKEN" aria-label="Token" required>'
         '<button>Unlock</button></form>'

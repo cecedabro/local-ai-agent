@@ -61,7 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-TASK_RE = re.compile(r"^- \[(?P<mark>[ x~])\] (?P<id>T\d+): (?P<title>.+?)\s*$")
+TASK_RE = re.compile(r"^- \[(?P<mark>[ x~])\] (?P<id>[A-Z]{1,3}\d+): (?P<title>.+?)\s*$")
 ACCEPT_RE = re.compile(r"^\s+accept:\s*`?(?P<cmd>.+?)`?\s*$")
 STATE_DIR = ".agent"          # logs + STOP file; kept out of git via .git/info/exclude
 PROTECT_FILE = ".agent-protected"

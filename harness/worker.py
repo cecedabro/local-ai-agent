@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -78,6 +79,61 @@ def owner_repos(owners: set[str]) -> list[str]:
         if res.returncode == 0:
             found += [r.strip() for r in res.stdout.splitlines() if r.strip().count("/") == 1]
     return sorted(set(found), key=str.lower)
+
+
+PLAN_TASK = re.compile(r"^- \[(?P<mark>[ x~])\] (?P<id>[A-Z]{1,3}\d+): (?P<title>.+?)\s*$")
+
+
+def parse_plan(text: str) -> dict:
+    """Title and task counts of a PLAN.md, plus the next three open tasks (short titles)."""
+    title, tasks = "", []
+    for line in text.splitlines():
+        if not title and line.startswith("#"):
+            m = re.match(r"#\s*PLAN\s*:?\s*(.*)$", line.strip())
+            title = (m.group(1) if m else line.lstrip("# ")).strip()
+        m = PLAN_TASK.match(line)
+        if m:
+            short = re.split(r" \(see | — |\. ", m["title"])[0][:90]
+            tasks.append((m["mark"], f'{m["id"]} {short}'))
+    open_ = [t for mark, t in tasks if mark == " "]
+    return {"title": title[:120], "total": len(tasks), "done": sum(1 for mark, _ in tasks if mark == "x"),
+            "skipped": sum(1 for mark, _ in tasks if mark == "~"), "open": len(open_), "next": open_[:3]}
+
+
+def gh(*args: str) -> str | None:
+    try:
+        res = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return res.stdout if res.returncode == 0 else None
+
+
+def repo_plans(repos: list[str], cache: dict) -> list[dict]:
+    """Every branch (default branch or agent/*) with a PLAN.md that still has open tasks.
+
+    `cache` maps (repo, branch) -> (commit sha, plan or None), so a branch is only re-read after a
+    new commit. Starting a loop on the default branch makes agent-loop create agent/<plan-title>.
+    """
+    out: list[dict] = []
+    for repo in repos:
+        default = (gh("api", f"repos/{repo}", "-q", ".default_branch") or "").strip()
+        listing = gh("api", "--paginate", f"repos/{repo}/branches", "-q", '.[] | [.name, .commit.sha] | @tsv')
+        if not default or listing is None:
+            continue
+        for line in listing.splitlines():
+            name, _, sha = line.partition("\t")
+            if name != default and not name.startswith("agent/"):
+                continue
+            hit = cache.get((repo, name))
+            if hit and hit[0] == sha:
+                plan = hit[1]
+            else:
+                text = gh("api", "-H", "Accept: application/vnd.github.raw", f"repos/{repo}/contents/PLAN.md?ref={name}")
+                plan = parse_plan(text) if text else None
+                cache[(repo, name)] = (sha, plan)
+            if plan and plan["open"]:
+                out.append({"repo": repo, "branch": name, "default": name == default, **plan})
+    return out[:200]
 
 
 def git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
@@ -207,15 +263,18 @@ def main() -> int:
     print(f"[{now()}] agent-queue on {worker}: polling {url} (pause: touch {STOP_FILE})")
     told_down = told_paused = False
     repos: list[str] = []
+    plans: list[dict] = []
+    plan_cache: dict = {}
     repos_at = -REPO_REFRESH
     while True:
         if time.monotonic() - repos_at >= REPO_REFRESH:
             repos, repos_at = owner_repos(args.owners) or repos, time.monotonic()
+            plans = repo_plans(repos, plan_cache)
         if STOP_FILE.exists():
             if not told_paused:
                 print(f"[{now()}] paused ({STOP_FILE} exists); rm it to resume")
                 told_paused = True
-            client.post("/api/workers/ping", {"worker": worker, "paused": True, "repos": repos})
+            client.post("/api/workers/ping", {"worker": worker, "paused": True, "repos": repos, "plans": plans})
             if args.once:
                 return 0
             try:
@@ -226,7 +285,7 @@ def main() -> int:
         if told_paused:
             print(f"[{now()}] resumed")
             told_paused = False
-        res = client.post("/api/jobs/claim", {"worker": worker, "repos": repos})
+        res = client.post("/api/jobs/claim", {"worker": worker, "repos": repos, "plans": plans})
         if res is None and not told_down:
             print(f"[{now()}] status service unreachable; retrying every {args.poll:g} s")
             told_down = True
@@ -238,6 +297,7 @@ def main() -> int:
                 run_job(client, job, args)
             except KeyboardInterrupt:
                 return 130
+            repos_at = -REPO_REFRESH                    # progress changed: re-read the plans
         if args.once:
             return 0
         if not job:
