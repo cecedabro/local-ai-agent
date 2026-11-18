@@ -115,7 +115,19 @@ def verify_authentication(settings: Any, credential: dict, challenge: bytes, pub
     require_user_verification=True) and return v.new_sign_count.
     Any exception -> raise PasskeyError(str(e)).
     """
-    raise NotImplementedError
+    try:
+        v = verify_authentication_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=settings.RP_ID,
+            expected_origin=settings.ORIGIN,
+            credential_public_key=public_key,
+            credential_current_sign_count=sign_count,
+            require_user_verification=True,
+        )
+        return v.new_sign_count
+    except Exception as e:
+        raise PasskeyError(str(e))
 
 
 def _unused() -> None:  # imports you may need

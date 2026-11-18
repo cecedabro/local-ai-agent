@@ -20,7 +20,7 @@ Rules for every task:
   accept: make chat-test K="test_step_passkeys and test_verify_registration"
 - [x] P04: In chat/coder/passkeys.py fill in `authentication_options` and `credential_id` as their docstrings say
   accept: make chat-test K="test_step_passkeys and test_authentication_options"
-- [ ] P05: In chat/coder/passkeys.py fill in `verify_authentication` as its docstring says
+- [x] P05: In chat/coder/passkeys.py fill in `verify_authentication` as its docstring says
   accept: make chat-test K="test_step_passkeys"
 - [ ] P06: In chat/coder/app.py add the passkey registration, list and delete routes (see "P06 details")
   accept: make chat-test K="TestPasskeyRegister"
