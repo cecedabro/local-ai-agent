@@ -61,7 +61,7 @@ async function loadChats() {
       (c.profile === "evidence" ? `<em class="tag">EH</em>` : "") +
       `</div>`
     ).join("")
-  ).join(""));
+  ).join("");
 }
 
 /**
@@ -198,14 +198,8 @@ async function send() {
 
   // Draw user message
   const fileIds = state.files.map((f) => f.id);
-  let textHtml = esc(text);
-  if (fileIds.length) {
-    textHtml = fileIds.map((id) => {
-      const f = state.files.find((ff) => ff.id === id);
-      return f ? `<span class="file">${esc(f.name)}</span>` : "";
-    }).join("") + textHtml;
-  }
-  $messages.insertAdjacentHTML("beforeend", `<div class="u">${textHtml}</div>`);
+  const chipHtml = state.files.map((f) => `<span class="file">${esc(f.name)}</span>`).join("");
+  $messages.insertAdjacentHTML("beforeend", `<div class="u">${chipHtml}<div class="msg user">${esc(text)}</div></div>`);
 
   // Draw assistant placeholder
   const aiId = "ai-" + Date.now();
@@ -216,16 +210,22 @@ async function send() {
   const bub = $ai.querySelector(".bub");
   const meta = $ai.querySelector(".meta2");
   const orb = $ai.querySelector(".orb");
-  const tiny = document.createElement("span");
-  tiny.className = "tiny";
-  tiny.textContent = " ";
+  const tmp = document.createElement("span");
+  tmp.innerHTML = TINY;
+  const tiny = tmp.firstElementChild;
+  const $thread = $("#thread");
+  let follow = true;                                  // keep following the text unless the user scrolls up
+  $thread.addEventListener("scroll", () => {
+    follow = $thread.scrollHeight - $thread.scrollTop - $thread.clientHeight < 80;
+  }, { passive: true });
+  let full = "";
 
   // Clear input and file chips
   $("#input").value = "";
   $("#file-chips").innerHTML = "";
   state.files = [];
 
-  const writeStart = performance.now();
+  let writeStart = performance.now();
 
   const typewriter = new Typewriter((shown, pieces) => {
     renderFade(bub, md.render(shown), pieces);
@@ -233,6 +233,7 @@ async function send() {
     const t = (performance.now() - writeStart) / 1000;
     orb.style.setProperty("--fill", (0.82 * (1 - Math.exp(-t / 2.6))).toFixed(3));
     meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+    if (follow) $thread.scrollTop = $thread.scrollHeight;
   });
 
   const streamRes = await api(`/api/chats/${encodeURIComponent(chatId)}/messages`, {
@@ -246,6 +247,7 @@ async function send() {
       meta.innerHTML = `<span class="phase-label">${esc(data.label)}</span>`;
       if (data.phase === "writing") writeStart = performance.now();
     } else if (event === "delta") {
+      full += data.text;
       typewriter.push(data.text);
     } else if (event === "done") {
       typewriter.finish().then(() => {
@@ -254,7 +256,7 @@ async function send() {
         meta.innerHTML = TINY + `<span>${metaText(data.tokens, data.tps)}</span>` +
           `<button data-copy>Copy</button><button data-retry>Retry</button>`;
         $ai.querySelector("button[data-copy]").addEventListener("click", () => {
-          navigator.clipboard.writeText(data.content);
+          navigator.clipboard.writeText(full);
         });
         $ai.querySelector("button[data-retry]").addEventListener("click", () => {
           $("#input").value = text;
@@ -267,18 +269,12 @@ async function send() {
       typewriter.finish().then(() => {
         tiny.remove();
         orb.dataset.phase = "idle";
-        bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(data.message)}</div>`);
+        $ai.querySelector(".content").insertAdjacentHTML("beforeend", `<div class="note error">${esc(data.error || "Something went wrong.")}</div>`);
         state.busy = false;
       });
     }
   });
 
-  // Scroll #thread to bottom
-  const $thread = $("#thread");
-  if ($thread) {
-    const shouldScroll = $thread.scrollHeight - $thread.scrollTop - $thread.clientHeight < 200;
-    if (shouldScroll) $thread.scrollTop = $thread.scrollHeight;
-  }
 }
 
 function fmt(n) {
