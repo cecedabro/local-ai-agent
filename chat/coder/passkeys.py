@@ -88,13 +88,21 @@ def authentication_options(settings: Any) -> tuple[str, bytes]:
     TODO (task P04). generate_authentication_options(rp_id=settings.RP_ID, allow_credentials=[],
     user_verification=UserVerificationRequirement.REQUIRED); return (options_to_json(o), o.challenge).
     """
-    raise NotImplementedError
+    o = generate_authentication_options(rp_id=settings.RP_ID, allow_credentials=[],
+        user_verification=UserVerificationRequirement.REQUIRED)
+    return (options_to_json(o), o.challenge)
 
 
 def credential_id(credential: dict) -> bytes:
     """TODO (task P04). The credential id the browser sent: base64url_to_bytes(credential["rawId"])
     (fall back to credential["id"]); a missing or malformed value -> raise PasskeyError."""
-    raise NotImplementedError
+    try:
+        return base64url_to_bytes(credential["rawId"])
+    except (KeyError, TypeError, ValueError):
+        try:
+            return base64url_to_bytes(credential["id"])
+        except (KeyError, TypeError, ValueError):
+            raise PasskeyError("missing or malformed credential id")
 
 
 def verify_authentication(settings: Any, credential: dict, challenge: bytes, public_key: bytes,
