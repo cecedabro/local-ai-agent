@@ -322,7 +322,8 @@ body.admin header a{margin-left:auto}
   .side-extras .seg{display:grid}
   .menu{width:40px;height:40px;flex:none}
   .top{padding:8px 12px 6px}
-  .top .title{font-size:15px}
+  .top .title{flex:1;min-width:0;font-size:14px;font-weight:600;opacity:.9}   /* the title gives way to the buttons */
+  .top .profile{flex:none}
   .profile{padding:4px 10px 4px 5px}.profile .orb{--s:26px}
   .pmenu{top:calc(52px + env(safe-area-inset-top));right:10px;left:10px;width:auto}
   .dock{padding:0 10px max(10px,env(safe-area-inset-bottom))}

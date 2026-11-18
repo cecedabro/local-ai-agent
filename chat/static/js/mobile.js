@@ -41,4 +41,13 @@
   };
   place();
   narrow.addEventListener("change", place);
+  // the profile menu closes when you tap anywhere else, or pick a profile
+  const pmenu = document.getElementById("pmenu");
+  const profile = document.getElementById("profile");
+  document.addEventListener("click", (e) => {
+    if (!pmenu || pmenu.classList.contains("hidden")) return;
+    if (e.target.closest("#profile")) return;
+    if (!e.target.closest("#pmenu") || e.target.closest(".opt")) pmenu.classList.add("hidden");
+  });
+  if (profile) profile.setAttribute("aria-haspopup", "true");
 })();
