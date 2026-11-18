@@ -20,7 +20,7 @@ Rules for every task:
   accept: make chat-test K="test_step_round2 and prompt_names_files"
 - [x] R03: In chat/coder/answer.py do `TODO (task R03)` in the `run_answer` docstring (reading phase, every chunk as a delta, title in done)
   accept: make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"
-- [ ] R04: In chat/coder/answer.py do `TODO (task R04)` in the `run_answer` docstring (the stop event)
+- [x] R04: In chat/coder/answer.py do `TODO (task R04)` in the `run_answer` docstring (the stop event)
   accept: make chat-test K="test_step_answer or (test_step_round2 and stop_event)"
 - [ ] R05: In chat/coder/answer.py do `TODO (task R05)` in the `run_answer` docstring (store the partial answer when the browser goes away)
   accept: make chat-test K="test_step_answer or test_step_round2"

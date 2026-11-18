@@ -11,3 +11,17 @@ Modified `chat/coder/answer.py`:
 Tests: `make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"` — 9 passed. `make check` — 36 passed, OK.
 
 Next: Task R04 adds `stop: asyncio.Event | None` parameter and per-event stop checking, setting `stopped=True` on the done event. Task R05 wraps the loop in try/finally for client disconnect handling.
+
+## Task R04 — stop event, done (2026-11-18)
+
+Modified `chat/coder/answer.py`:
+1. Added `stop: asyncio.Event | None = None` parameter to `run_answer` signature.
+2. Added `stopped = False` flag before the event loop.
+3. After each event in the loop: check `stop.is_set()` and if so, set `stopped = True` and break.
+4. Wrapped the loop in `try/finally` that calls `await agen.aclose()` on exit (serves R04 and R05).
+5. Store the message only if `text or not stopped`, passing `stopped=stopped` to `db.add_message`.
+6. `done` SSE event now carries `"stopped": stopped` (True when stopped, False on normal completion).
+
+Tests: `make chat-test K="test_step_answer or (test_step_round2 and stop_event)"` — 9 passed. `make check` — 36 passed, OK.
+
+Note: The `try/finally` with `agen.aclose()` is already in place, so R05 (client disconnect handling via try/finally) has a head start — it only needs to add the partial-store logic.

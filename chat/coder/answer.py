@@ -45,7 +45,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                      stream: Callable = gateway.stream_chat,
                      complete: Callable = gateway.complete,
                      sleep: Callable = asyncio.sleep,
-                     clock: Callable[[], float] = time.monotonic) -> AsyncIterator[str]:
+                     clock: Callable[[], float] = time.monotonic,
+                     stop: asyncio.Event | None = None) -> AsyncIterator[str]:
     """Yield the SSE text of one answer. The user's message is already stored.
 
     Round 2 (chat/SPEC.md §11.1–11.2). Tests: test_step_answer.py and test_step_round2.py.
@@ -130,6 +131,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         async for ev in agen:
             yield ev
 
+    stopped = False
     try:
         async for tag, val in events():
             if tag == "reasoning":
@@ -146,16 +148,27 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                 yield sse("delta", {"text": val})
             elif tag == "usage":
                 usage = val
+            if stop is not None and stop.is_set():
+                stopped = True
+                break
     except gateway.GatewayError as e:
         yield sse("error", {"error": "The model could not answer.", "status": e.status})
         return
+    finally:
+        try:
+            await agen.aclose()
+        except Exception:
+            pass
 
     # Step 5
     tokens = usage["completion_tokens"] if usage else count
     tps = round(tokens / (clock() - t0), 1) if t0 else None
 
-    msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps)
-    if usage:
+    if text or not stopped:
+        msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped)
+    else:
+        msg_id = None
+    if msg_id is not None and usage:
         db.update_chat_usage(chat["id"], usage["prompt_tokens"], usage["completion_tokens"])
 
     # Step 6
@@ -169,7 +182,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     chat = db.get_chat(chat["id"], chat["username"])
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
                         "context": context.info(db, chat, settings),
-                        "title": chat["title"], "stopped": False})
+                        "title": chat["title"], "stopped": stopped})
 
 
 def _unused() -> None:
