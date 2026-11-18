@@ -34,7 +34,7 @@ class PasskeyError(Exception):
 
 def user_handle(username: str) -> bytes:
     """TODO (task P02). The WebAuthn user handle: the username encoded as UTF-8."""
-    raise NotImplementedError
+    return username.encode("utf-8")
 
 
 def registration_options(settings: Any, username: str, existing: list[bytes]) -> tuple[str, bytes]:
@@ -50,7 +50,15 @@ def registration_options(settings: Any, username: str, existing: list[bytes]) ->
         supported_pub_key_algs=ALGORITHMS)
     and return (options_to_json(opts), opts.challenge).
     """
-    raise NotImplementedError
+    opts = generate_registration_options(
+        rp_id=settings.RP_ID, rp_name=RP_NAME, user_id=user_handle(username), user_name=username,
+        user_display_name=username,
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=c) for c in existing],
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED),
+        supported_pub_key_algs=ALGORITHMS)
+    return (options_to_json(opts), opts.challenge)
 
 
 def verify_registration(settings: Any, credential: dict, challenge: bytes) -> tuple[bytes, bytes, int]:

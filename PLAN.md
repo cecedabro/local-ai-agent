@@ -14,7 +14,7 @@ Rules for every task:
 
 - [x] P01: In chat/coder/db.py add the passkey tables and methods, and in chat/coder/config.py the settings RP_ID and ORIGIN (see "P01 details")
   accept: make chat-test K="test_step_passkeys and test_db_and_settings"
-- [ ] P02: In chat/coder/passkeys.py fill in `user_handle` and `registration_options` as their docstrings say
+- [x] P02: In chat/coder/passkeys.py fill in `user_handle` and `registration_options` as their docstrings say
   accept: make chat-test K="test_step_passkeys and test_registration_options"
 - [ ] P03: In chat/coder/passkeys.py fill in `verify_registration` as its docstring says
   accept: make chat-test K="test_step_passkeys and test_verify_registration"
