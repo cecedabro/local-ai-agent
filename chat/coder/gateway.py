@@ -29,7 +29,15 @@ def request_body(messages: list[dict], think: bool, stream: bool = True) -> dict
        "chat_template_kwargs": {"enable_thinking": think}}
     and when stream is True also the key "stream_options": {"include_usage": True}.
     """
-    raise NotImplementedError
+    body: dict[str, Any] = {
+        "model": "coder",
+        "messages": messages,
+        "stream": stream,
+        "chat_template_kwargs": {"enable_thinking": think},
+    }
+    if stream:
+        body["stream_options"] = {"include_usage": True}
+    return body
 
 
 def parse_line(line: str) -> list[tuple[str, Any]]:
@@ -46,7 +54,37 @@ def parse_line(line: str) -> list[tuple[str, Any]]:
       Keep that order: reasoning, content, usage.
     Example: 'data: {"choices":[{"delta":{"content":"Hi"}}]}' -> [("content", "Hi")]
     """
-    raise NotImplementedError
+    if not line.startswith("data:"):
+        return []
+
+    payload = line[len("data:"):].strip()
+
+    if payload == "[DONE]":
+        return [("done", None)]
+
+    try:
+        obj = json.loads(payload)
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+    events: list[tuple[str, Any]] = []
+
+    choices = obj.get("choices")
+    if choices:
+        first = choices[0]
+        delta = first.get("delta", {})
+        rc = delta.get("reasoning_content")
+        if rc:
+            events.append(("reasoning", rc))
+        c = delta.get("content")
+        if c:
+            events.append(("content", c))
+
+    usage = obj.get("usage")
+    if usage is not None:
+        events.append(("usage", usage))
+
+    return events
 
 
 async def stream_chat(settings: Any, messages: list[dict], think: bool) -> AsyncIterator[tuple[str, Any]]:

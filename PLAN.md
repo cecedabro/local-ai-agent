@@ -16,7 +16,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
 
 - [x] S01: In chat/coder/db.py add `add_message_at` and `reset_chat_usage`, and order messages by created then id (`grep -n "task S01" chat/coder/db.py`)
   accept: make chat-test K="test_step_context and test_db_helpers"
-- [ ] S02: In chat/coder/gateway.py fill in `request_body` and `parse_line` as their docstrings say
+- [x] S02: In chat/coder/gateway.py fill in `request_body` and `parse_line` as their docstrings say
   accept: make chat-test K="test_step_gateway and (test_request_body or test_parse_line)"
 - [ ] S03: In chat/coder/gateway.py fill in `stream_chat` as its docstring says
   accept: make chat-test K="test_step_gateway and (test_stream_chat or test_no_key_no_header)"
