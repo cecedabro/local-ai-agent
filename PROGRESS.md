@@ -15,3 +15,10 @@
 - Added `tools` parameter to `gateway.request_body()` and implemented `merge_tool_calls()` in `gateway.py` to support B05 test compatibility.
 - All 9 tests in `test_step_tools.py` pass, including `test_run_tool` and `test_gateway_tool_calls`.
 - All acceptance commands pass: `make chat-test K="test_step_tools"` and `make check`.
+
+## Task B05 - tool calls in gateway.py (removed TODO comment)
+- The `request_body()` function already handles the `tools` parameter (adds `body["tools"]` when non-empty).
+- The `parse_line()` function already extracts tool_calls fragments from stream deltas as `("tool_call", tc)` events.
+- The `merge_tool_calls()` function already aggregates streamed tool call fragments by index.
+- `stream_chat()` currently does not yet pass `tools` or merge tool calls; this is deferred to a later task.
+- All acceptance commands pass: `make chat-test K="test_step_tools or test_step_gateway"` and `make check`.

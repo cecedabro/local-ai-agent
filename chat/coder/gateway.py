@@ -11,18 +11,6 @@ from typing import Any, AsyncIterator
 import httpx
 
 
-# TODO (task B05): tool calls (chat/SPEC.md §12.3). Tests: test_step_tools.py::test_gateway_tool_calls (+ the accept tests)
-#   1. request_body(messages, think, stream=True, tools=None): when `tools` is non-empty also body["tools"] = tools.
-#   2. parse_line: after the content check, delta["tool_calls"] non-empty -> ("tool_call", that list).
-#      Order: reasoning, content, tool_call, usage.
-#   3. New function merge_tool_calls(calls: dict[int, dict], fragments: list[dict]) -> None: for each fragment,
-#      c = calls.setdefault(int(f.get("index", 0)), {"id": "", "name": "", "arguments": ""}); f["id"] set -> c["id"];
-#      f["function"]["name"] set -> c["name"]; f["function"]["arguments"] -> append to c["arguments"].
-#   4. stream_chat(settings, messages, think, tools=None): send request_body(messages, think, tools=tools); keep a
-#      `calls = {}`; a ("tool_call", frags) event is merged with merge_tool_calls (not yielded); "done" ends reading
-#      (break out of both loops instead of returning); after reading, if calls: yield ("tool_calls",
-#      [calls[i] for i in sorted(calls)]).
-
 
 class Busy(Exception):
     """The gateway answered 503 or 429: the model is busy, try again later."""

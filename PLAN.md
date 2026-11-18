@@ -23,7 +23,7 @@ Rules for every task:
   accept: make chat-test K="test_step_tools and tool_specs"
 - [x] B04: In chat/coder/tools.py fill in `run_tool` as its docstring says
   accept: make chat-test K="test_step_tools"
-- [ ] B05: In chat/coder/gateway.py add tool calls (`TODO (task B05)`)
+- [x] B05: In chat/coder/gateway.py add tool calls (`TODO (task B05)`)
   accept: make chat-test K="test_step_tools or test_step_gateway"
 - [ ] B06: In chat/coder/db.py add the profile tables and methods (`TODO (task B06)`)
   accept: make chat-test K="test_step_profiles and profile_db or test_step_round2"
