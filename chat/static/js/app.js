@@ -181,49 +181,179 @@ function drawMessage(m) {
 }
 
 /**
- * TODO (task R12). Mark the page busy or not: state.busy = on; #send gets class "stop" while on
- * (classList.toggle("stop", on)), its title and aria-label become "Stop" while on, else "Send".
- */
+  * TODO (task R12). Mark the page busy or not: state.busy = on; #send gets class "stop" while on
+  * (classList.toggle("stop", on)), its title and aria-label become "Stop" while on, else "Send".
+  */
 function setBusy(on) {
+  state.busy = on;
+  const sendBtn = $("#send");
+  sendBtn.classList.toggle("stop", on);
+  sendBtn.title = on ? "Stop" : "Send";
+  sendBtn.setAttribute("aria-label", on ? "Stop" : "Send");
 }
 
 /** TODO (task R12). If state.busy and there is an open chat: POST /api/chats/ID/stop with api() (SPEC §11.2). */
 async function stopAnswer() {
+  if (!state.busy || !state.chatId) return;
+  setBusy(false);
+  await api(`/api/chats/${encodeURIComponent(state.chatId)}/stop`, { method: "POST" });
 }
 
 /**
- * TODO (task R12). Send #input's text (and state.files) and write the answer as it streams in (SPEC §5, §11).
- *   0. text = #input value trimmed; nothing to send when !text && !state.files.length, or when state.busy.
- *   1. setBusy(true); everything below in try { ... } finally { setBusy(false) }.
- *   2. No open chat -> POST /api/chats {profile: state.profile}, state.chatId = its id.
- *      mode = the checked input[name=mode] value, or "quick".
- *   3. Remove .welcome; draw <div class="u">CHIPS<div class="msg user">TEXT</div></div> (escaped); then a div.ai with
- *      innerHTML = ORB + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`.
- *      Keep bub, meta (.meta2), orb (.orb) and tiny = an element made from TINY (not in the page yet).
- *      Clear #input, #file-chips and state.files. Then state.follow.bottom()  (the page goes down to your message).
- *   4. full = ""; writeStart = performance.now();
- *      const typewriter = new Typewriter((shown, pieces) => {
- *        renderFade(bub, md.render(shown), pieces); placeTail(bub, tiny);
- *        fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
- *        orb.style.setProperty("--fill", fill); tiny.dataset.phase = "writing"; tiny.style.setProperty("--fill", fill);
- *        meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
- *        state.follow.stick();
- *      });
- *   5. res = POST /api/chats/ID/messages {content: text, mode, files: ids}. Not res.ok -> orb idle, meta empty,
- *      append <div class="note error">(the JSON error or "Something went wrong.")</div> to .content, return.
- *   6. await readEvents(res, (event, data) => ...):
- *        phase -> orb.dataset.phase = data.phase; meta.innerHTML = <span class="phase-label">LABEL</span>;
- *                 for "writing": writeStart = performance.now()
- *        delta -> full += data.text; typewriter.push(data.text)
- *        done / error -> remember it (finished = {event, data}); handle it after reading ends
- *   7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
- *      done: if !full && data.stopped: meta.innerHTML = "" else doneMeta(meta, full, data.tokens, data.tps, false, () => text);
- *            if data.stopped: <div class="note stopped">Stopped</div> after meta;
- *            if data.title: #chat-title text = data.title; drawContext(data.context); await loadChats()
- *      error or nothing: meta.innerHTML = ""; <div class="note error">(data.error or "The connection was lost.")</div>
- *      Last: state.follow.stick().
- */
+  * TODO (task R12). Send #input's text (and state.files) and write the answer as it streams in (SPEC §5, §11).
+  *   0. text = #input value trimmed; nothing to send when !text && !state.files.length, or when state.busy.
+  *   1. setBusy(true); everything below in try { ... } finally { setBusy(false) }.
+  *   2. No open chat -> POST /api/chats {profile: state.profile}, state.chatId = its id.
+  *      mode = the checked input[name=mode] value, or "quick".
+  *   3. Remove .welcome; draw <div class="u">CHIPS<div class="msg user">TEXT</div></div> (escaped); then a div.ai with
+  *      innerHTML = ORB + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`.
+  *      Keep bub, meta (.meta2), orb (.orb) and tiny = an element made from TINY (not in the page yet).
+  *      Clear #input, #file-chips and state.files. Then state.follow.bottom()  (the page goes down to your message).
+  *   4. full = ""; writeStart = performance.now();
+  *      const typewriter = new Typewriter((shown, pieces) => {
+  *        renderFade(bub, md.render(shown), pieces); placeTail(bub, tiny);
+  *        fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
+  *        orb.style.setProperty("--fill", fill); tiny.dataset.phase = "writing"; tiny.style.setProperty("--fill", fill);
+  *        meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+  *        state.follow.stick();
+  *      });
+  *   5. res = POST /api/chats/ID/messages {content: text, mode, files: ids}. Not res.ok -> orb idle, meta empty,
+  *      append <div class="note error">(the JSON error or "Something went wrong.")</div> to .content, return.
+  *   6. await readEvents(res, (event, data) => ...):
+  *        phase -> orb.dataset.phase = data.phase; meta.innerHTML = <span class="phase-label">LABEL</span>;
+  *                 for "writing": writeStart = performance.now()
+  *        delta -> full += data.text; typewriter.push(data.text)
+  *        done / error -> remember it (finished = {event, data}); handle it after reading ends
+  *   7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
+  *      done: if !full && data.stopped: meta.innerHTML = "" else doneMeta(meta, full, data.tokens, data.tps, false, () => text);
+  *            if data.stopped: <div class="note stopped">Stopped</div> after meta;
+  *            if data.title: #chat-title text = data.title; drawContext(data.context); await loadChats()
+  *      error or nothing: meta.innerHTML = ""; <div class="note error">(data.error or "The connection was lost.")</div>
+  *      Last: state.follow.stick().
+  */
 async function send() {
+  // 0. text = #input value trimmed; nothing to send when !text && !state.files.length, or when state.busy.
+  const text = $("#input").value.trim();
+  if (!text && !state.files.length) return;
+  if (state.busy) return;
+
+  // 1. setBusy(true); everything below in try { ... } finally { setBusy(false) }.
+  setBusy(true);
+  try {
+    // 2. No open chat -> POST /api/chats {profile: state.profile}, state.chatId = its id.
+    let mode = document.querySelector('input[name="mode"]:checked')?.value || "quick";
+    if (!state.chatId) {
+      const res = await api("/api/chats", { method: "POST", json: { profile: state.profile } });
+      state.chatId = (await res.json()).id;
+    }
+
+    // 3. Remove .welcome; draw user message; then a div.ai with ORB, bub, meta, orb, tiny.
+    const welcome = $("#messages").querySelector(".welcome");
+    if (welcome) welcome.remove();
+
+    // Draw user message
+    let userChips = "";
+    if (state.files.length) {
+      userChips = state.files.map((f) => `<span class="file">${esc(f.name)}</span>`).join("");
+    }
+    const userText = state.files.length ? esc(typedText(text)) : esc(text);
+    $("#messages").insertAdjacentHTML("beforeend", `<div class="u">${userChips}<div class="msg user">${userText}</div></div>`);
+
+    // Draw assistant message placeholder
+    const aiDiv = document.createElement("div");
+    aiDiv.className = "ai";
+    aiDiv.innerHTML = ORB + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
+    $("#messages").appendChild(aiDiv);
+
+    const bub = aiDiv.querySelector(".bub");
+    const meta = aiDiv.querySelector(".meta2");
+    const orb = aiDiv.querySelector(".orb");
+    const tiny = document.createElement("span");
+    tiny.innerHTML = TINY;
+    const tinyEl = tiny.firstElementChild;
+
+    // Clear #input, #file-chips and state.files
+    $("#input").value = "";
+    $("#file-chips").innerHTML = "";
+    state.files = [];
+
+    state.follow.bottom();
+
+    // 4. full = ""; writeStart = performance.now(); Typewriter
+    let full = "";
+    let writeStart = performance.now();
+    const typewriter = new Typewriter((shown, pieces) => {
+      renderFade(bub, md.render(shown), pieces);
+      placeTail(bub, tinyEl);
+      const fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
+      orb.style.setProperty("--fill", fill);
+      tinyEl.dataset.phase = "writing";
+      tinyEl.style.setProperty("--fill", fill);
+      meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+      state.follow.stick();
+    });
+
+    // 5. res = POST /api/chats/ID/messages {content: text, mode, files: ids}
+    const res = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages`, {
+      method: "POST",
+      json: { content: text, mode, files: state.files.map((f) => f.id) },
+    });
+    if (!res.ok) {
+      orb.dataset.phase = "idle";
+      meta.innerHTML = "";
+      const errObj = await res.json().catch(() => null);
+      const errMsg = errObj?.error || "Something went wrong.";
+      bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(errMsg)}</div>`);
+      return;
+    }
+
+    // 6. await readEvents(res, (event, data) => ...)
+    let finished = null;
+    await readEvents(res, (event, data) => {
+      if (event === "phase") {
+        orb.dataset.phase = data.phase;
+        meta.innerHTML = `<span class="phase-label">${data.label || data.phase}</span>`;
+        if (data.phase === "writing") {
+          writeStart = performance.now();
+        }
+      } else if (event === "delta") {
+        full += data.text;
+        typewriter.push(data.text);
+      } else if (event === "done" || event === "error") {
+        finished = { event, data };
+      }
+    });
+
+    // 7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
+    await typewriter.finish();
+    tinyEl.remove();
+    orb.dataset.phase = "idle";
+
+    if (finished && finished.event === "done") {
+      const data = finished.data;
+      if (!full && data.stopped) {
+        meta.innerHTML = "";
+      } else {
+        doneMeta(meta, full, data.tokens, data.tps, false, () => text);
+      }
+      if (data.stopped) {
+        meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
+      }
+      if (data.title) {
+        $("#chat-title").textContent = data.title;
+        drawContext(data.context);
+        await loadChats();
+      }
+    } else {
+      meta.innerHTML = "";
+      const errMsg = finished?.data?.error || "The connection was lost.";
+      bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(errMsg)}</div>`);
+    }
+
+    state.follow.stick();
+  } finally {
+    setBusy(false);
+  }
 }
 
 function fmt(n) {

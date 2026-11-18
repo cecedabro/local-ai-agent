@@ -58,3 +58,12 @@ Modified `chat/static/js/app.js`:
 2. Implemented `drawMessage(m)` — handles summary (`.note.summary`), user messages (`.u` with file chips and text via `typedText()` when files exist), and assistant messages (`.ai` with ORB + markdown-rendered content + `meta2` initialized with `doneMeta`). Retry callback gets the last `.u .msg.user` text from the DOM.
 
 Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
+
+## Task R12 — setBusy, stopAnswer, send, done (2026-11-18)
+
+Modified `chat/static/js/app.js`:
+1. Implemented `setBusy(on)` — sets `state.busy = on`, toggles "stop" class on `#send`, updates title and aria-label to "Stop" while busy, "Send" otherwise.
+2. Implemented `stopAnswer()` — if `state.busy` and there is an open chat, calls `setBusy(false)` then POSTs to `/api/chats/{id}/stop`.
+3. Implemented `send()` — full message send flow: validates input, creates chat if needed, draws user message and assistant placeholder, streams via `readEvents()` with phase/delta/done/error handling, uses `Typewriter` for smooth text rendering, calls `doneMeta` on completion, handles errors and stopped state.
+
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.

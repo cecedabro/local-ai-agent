@@ -36,7 +36,7 @@ Rules for every task:
   accept: node --check chat/static/js/app.js && make chat-test
 - [x] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
+- [x] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] R13: In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`)
   accept: node --check chat/static/js/app.js && make chat-test
