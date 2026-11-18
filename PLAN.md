@@ -37,7 +37,7 @@ Rules for every task:
   accept: make chat-test K="test_step_profiles or test_step_answer or test_step_round2"
 - [x] B11: In chat/coder/context.py use the profile's prompt (`TODO (task B11)`) and in chat/coder/config.py add SEARXNG_URL (`TODO (task B11)`)
   accept: make chat-test K="test_step_context or test_step_round2 or TestStream"
-- [ ] B12: In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`)
+- [x] B12: In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`)
   accept: make chat-test K="TestProfileApi and (seeds or rights or settings or profiles_page)"
 - [ ] B13: In chat/coder/app.py add the source card routes (`TODO (task B13)`)
   accept: make chat-test K="TestProfileApi and sources"

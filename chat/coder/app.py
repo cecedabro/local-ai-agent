@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 import hashlib
 
-from . import answer, context, gateway, passkeys
+from . import answer, context, gateway, passkeys, profiles
 from .config import Settings
 from .db import DB
 
@@ -356,43 +356,107 @@ def create_app(settings: dict | None = None) -> FastAPI:
             ev.set()
         return Response(status_code=204)
 
-    # TODO (task B12): profiles API, part 1 (chat/SPEC.md §12.1). `from . import profiles` at the top.
-    #   helper _profile_access(request, profile): r = _require_session(...) (Response -> return it); profile not in
-    #     profiles.PROFILES -> 404 {"error": "not found"}; rights = r[1]["rights"]: neither "admin" nor
-    #     profiles.RIGHT[profile] in it -> 403 {"error": "forbidden"}; else return r
-    #   helper _profile_json(username, profile) -> JSONResponse(profiles.public(profiles.config(db, username, profile), settings))
-    #   helper async _json_body(request) -> the JSON body if it is a dict, else None
-    #   GET   /api/profiles/{profile}  -> _profile_access, then _profile_json
-    #   PATCH /api/profiles/{profile}  -> body None or neither "instructions" nor "web" in it -> 400 {"error": "Nothing to change."};
-    #     instructions not a str or > 4000 chars -> 400; web not a bool -> 400;
-    #     profiles.config(...) first (so the seed never overwrites), then db.set_profile_settings(username, profile, **fields);
-    #     return _profile_json
-    #   GET /profiles (HTML, next to /account): no session -> RedirectResponse("/login", 303); else
-    #     TemplateResponse(request, "profiles.html", {"me": {"username", "rights"}, "profiles": [{"id": p, "name":
-    #     profiles.NAMES[p]} for each p in profiles.PROFILES the user may use (admin, or profiles.RIGHT[p] in rights)]})
-    #
-    # TODO (task B13): profiles API, part 2: the source cards.
-    #   _source_json(s) -> {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled", "created")}
-    #     + "tokens": profiles.tokens(s["content"]) for files, else 0
-    #   POST /api/profiles/{profile}/sources (status_code=201): _profile_access; body = _json_body or {};
-    #     note = body note or "" (not a str or > 1000 -> 400); cfg = profiles.config(...);
-    #     kind "pubmed": a pubmed card already there -> 409 {"error": "This profile already has a PubMed card."};
-    #       else db.add_source(username, profile, "pubmed", "PubMed", note=note, filters=profiles.clean_filters(body filters))
-    #     kind "website": domain = profiles.domain_of(str(body url or "")); None -> 400; else
-    #       db.add_source(username, profile, "website", domain, domain=domain, note=note)
-    #     other kinds -> 400. Return JSONResponse(_source_json(src), status_code=201)
-    #   PATCH /api/profiles/{profile}/sources/{source_id:int}: src = db.get_source(id, username); None or
-    #     src["profile"] != profile -> 404; body None or none of note/enabled/filters -> 400; note: str ≤ 1000 else 400;
-    #     enabled: bool else 400; filters (only for pubmed cards): profiles.clean_filters(...); db.update_source(...);
-    #     return _source_json(db.get_source(...))
-    #   DELETE /api/profiles/{profile}/sources/{source_id:int}: the same 404 check; db.delete_source; 204
-    #
-    # TODO (task B14): POST /api/profiles/{profile}/documents (status_code=201, multipart field "file"):
-    #   _profile_access; form = await request.form(); f = form.get("file"); missing -> 400 {"error": "Choose a file."};
-    #   data = await f.read(); name = os.path.basename(f.filename with "\\" turned into "/") or "document", max 120 chars;
-    #   text = profiles.document_text(name, data); profiles.DocumentError e -> JSONResponse({"error": str(e)}, e.status);
-    #   profiles.config(...) (seed first); src = db.add_source(username, profile, "file", name, content=text);
-    #   return JSONResponse(_source_json(src), status_code=201)
+    # ------------------------------------------------------------------ #
+    #  Profile routes (task B12, B13, B14)                               #
+    # ------------------------------------------------------------------ #
+
+    def _profile_access(request: Request, profile: str):
+        r = _require_session(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        if profile not in profiles.PROFILES:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        rights = r[1]["rights"]
+        if "admin" not in rights and profiles.RIGHT.get(profile) not in rights:
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        return r
+
+    def _profile_json(username: str, profile: str) -> JSONResponse:
+        cfg = profiles.config(app.state.db, username, profile)
+        return JSONResponse(profiles.public(cfg, app.state.settings))
+
+    async def _json_body(request: Request):
+        try:
+            body = await request.json()
+            return body if isinstance(body, dict) else None
+        except Exception:
+            return None
+
+    @app.get("/api/profiles/{profile}")
+    async def api_get_profile(profile: str, request: Request) -> JSONResponse:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        return _profile_json(username, profile)
+
+    @app.patch("/api/profiles/{profile}")
+    async def api_update_profile(profile: str, request: Request) -> JSONResponse:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        body = await _json_body(request)
+        if body is None or ("instructions" not in body and "web" not in body):
+            return JSONResponse({"error": "Nothing to change."}, status_code=400)
+        if "instructions" in body:
+            if not isinstance(body["instructions"], str) or len(body["instructions"]) > 4000:
+                return JSONResponse({"error": "instructions must be a string ≤ 4000 characters"}, status_code=400)
+        if "web" in body:
+            if not isinstance(body["web"], bool):
+                return JSONResponse({"error": "web must be a boolean"}, status_code=400)
+        profiles.config(app.state.db, username, profile)
+        app.state.db.set_profile_settings(username, profile, **body)
+        return _profile_json(username, profile)
+
+    @app.get("/profiles", response_class=HTMLResponse)
+    def profiles_page(request: Request) -> HTMLResponse:
+        s = _session_from_cookie(request, app.state.db)
+        if not s:
+            return RedirectResponse("/login", status_code=303)
+        username, user = s
+        rights = user.get("rights", [])
+        profiles_list = [
+            {"id": p, "name": profiles.NAMES[p]}
+            for p in profiles.PROFILES
+            if "admin" in rights or profiles.RIGHT.get(p) in rights
+        ]
+        return templates.TemplateResponse(request, "profiles.html",
+                                          {"me": {"username": username, "rights": sorted(rights)},
+                                           "profiles": profiles_list})
+
+    def _source_json(s: dict) -> dict:
+        out = {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled", "created")}
+        out["tokens"] = profiles.tokens(s.get("content", "") or "") if s.get("kind") == "file" else 0
+        return out
+
+    @app.post("/api/profiles/{profile}/sources", status_code=201)
+    async def api_add_source(profile: str, request: Request) -> Response:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        body = _json_body(request) or {}
+        note = body.get("note") if body.get("note") is not None else ""
+        if not isinstance(note, str) or len(note) > 1000:
+            return JSONResponse({"error": "Invalid note"}, status_code=400)
+        cfg = profiles.config(app.state.db, username, profile)
+        kind = body.get("kind")
+        if kind == "pubmed":
+            if any(s.get("kind") == "pubmed" for s in cfg["sources"]):
+                return JSONResponse({"error": "This profile already has a PubMed card."}, status_code=409)
+            src = app.state.db.add_source(username, profile, "pubmed", "PubMed",
+                                          note=note, filters=profiles.clean_filters(body.get("filters")))
+            return JSONResponse(_source_json(src), status_code=201)
+        elif kind == "website":
+            domain = profiles.domain_of(str(body.get("url") or ""))
+            if domain is None:
+                return JSONResponse({"error": "Invalid URL"}, status_code=400)
+            src = app.state.db.add_source(username, profile, "website", domain,
+                                          domain=domain, note=note)
+            return JSONResponse(_source_json(src), status_code=201)
+        else:
+            return JSONResponse({"error": "Invalid kind"}, status_code=400)
 
     @app.delete("/api/chats/{chat_id}")
     async def api_delete_chat(chat_id: str, request: Request) -> Response:
