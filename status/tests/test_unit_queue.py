@@ -122,6 +122,20 @@ class JobsTest(Base):
         self.req("POST", "/api/devbox", {"pending": False})
         self.assertFalse(self.status()["devbox"]["pending"])
 
+    def test_plans_from_the_worker(self) -> None:
+        plan = {"repo": "cecedabro/woodshed", "branch": "agent/x", "title": "X", "default": False,
+                "total": 5, "done": 2, "skipped": 1, "open": 2, "next": ["T04 a", "T05 b"]}
+        bad = [{"repo": "nope", "branch": "a"}, {"repo": "c/d", "branch": "../etc"}, "junk"]
+        self.req("POST", "/api/workers/ping", {"worker": "devbox-0", "paused": False, "plans": [plan, *bad]})
+        self.assertEqual(self.status()["jobs"]["plans"], [plan])
+        self.req("POST", "/api/jobs/claim", {"worker": "devbox-0"})          # no `plans`: keep them
+        self.assertEqual(len(self.status()["jobs"]["plans"]), 1)
+        self.req("POST", "/api/workers/ping", {"worker": "devbox-0", "paused": False, "plans": []})
+        self.assertEqual(self.status()["jobs"]["plans"], [])
+        page = self.req("GET", "/", token=None)[2].decode()
+        self.assertIn("Start an agent loop", page)
+        self.assertIn('<select name="plan"', page)
+
     def test_lost_worker_frees_the_queue(self) -> None:
         a, b = self.add(), self.add()
         self.claim()

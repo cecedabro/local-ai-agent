@@ -22,7 +22,7 @@ from pathlib import Path
 SEP = "\x1e"
 RECORD_SEP = "\x1f"
 
-_TASK_RE = re.compile(r"^(T\d+): (.*)")
+_TASK_RE = re.compile(r"^([A-Z]{1,3}\d+): (.*)")
 _STAT_RE = re.compile(r",\s*(\d+)\s+insertion\(s?\),?\s*(\d+)\s+deletion\(s?\),?")
 _LOG_RE = re.compile(r"-a(\d+)\.log$")
 _SHORTSTAT_RE = re.compile(r"(\d+) file(s)? changed(?:,\s+(\d+) insertion(s)?,?\s+(\d+) deletion(s)?)?")

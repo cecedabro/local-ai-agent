@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 prompt = sys.argv[-1]
-task = re.search(r"## Task (T\d+|CI\d+)", prompt).group(1)
+task = re.search(r"## Task ([A-Z]{1,3}\d+)", prompt).group(1)
 retry = "previous attempt failed" in prompt
 
 if task == "T01":
