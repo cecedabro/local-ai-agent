@@ -408,6 +408,8 @@ function setupFiles() {
 // ------------------------------------------------------------------ folders and the ⋯ menu (SPEC §11.3, §11.5)
 /** TODO (task R13). PATCH /api/chats/CHAT {folder_id} (null = no folder), then loadChats(). */
 async function moveChat(chatId, folderId) {
+  await api(`/api/chats/${encodeURIComponent(chatId)}`, { method: "PATCH", json: { folder_id: folderId } });
+  await loadChats();
 }
 
 /**
@@ -415,6 +417,13 @@ async function moveChat(chatId, folderId) {
  * not ok -> alert("A folder name needs 1 to 60 characters."), return null; else return the new folder's id.
  */
 async function newFolder() {
+  const name = prompt("Folder name:");
+  if (name === null) return null;
+  const trimmed = name.trim();
+  if (!trimmed) { alert("A folder name needs 1 to 60 characters."); return null; }
+  const res = await api("/api/folders", { method: "POST", json: { name: trimmed } });
+  if (!res.ok) { alert("A folder name needs 1 to 60 characters."); return null; }
+  return (await res.json()).id;
 }
 
 /**
@@ -423,6 +432,12 @@ async function newFolder() {
  * (style.setProperty); menu.hidden = false.  closeMenu(): #cmenu hidden = true.
  */
 function openMenu(button, html) {
+  const menu = $("#cmenu");
+  menu.innerHTML = html;
+  const r = button.getBoundingClientRect();
+  menu.style.setProperty("--x", `${Math.min(r.left, innerWidth - 210)}px`);
+  menu.style.setProperty("--y", `${Math.min(r.bottom + 4, innerHeight - 260)}px`);
+  menu.hidden = false;
 }
 
 function closeMenu() { $("#cmenu").hidden = true; }
@@ -436,6 +451,19 @@ function closeMenu() { $("#cmenu").hidden = true; }
  * then #cmenu.dataset.chat = chatId and delete #cmenu.dataset.folder.
  */
 function chatMenu(button, chatId) {
+  const chat = state.chats.find((c) => c.id === chatId);
+  const chatInFolder = chat ? chat.folder_id : null;
+  let html = `<button data-act="rename">Rename</button><small>Move to</small>`;
+  for (const f of state.folders) {
+    html += `<button data-act="move" data-folder="${f.id}">${esc(f.name)}</button>`;
+  }
+  if (chatInFolder !== null) {
+    html += `<button data-act="move" data-folder="">No folder</button>`;
+  }
+  html += `<button data-act="newfolder">New folder…</button><hr><button data-act="delete" class="danger">Delete</button>`;
+  openMenu(button, html);
+  $("#cmenu").dataset.chat = String(chatId);
+  delete $("#cmenu").dataset.folder;
 }
 
 /**
@@ -443,6 +471,9 @@ function chatMenu(button, chatId) {
  * <button data-act="delete-folder" class="danger">Delete folder</button>); #cmenu.dataset.folder = folderId; delete dataset.chat.
  */
 function folderMenu(button, folderId) {
+  openMenu(button, `<button data-act="rename-folder">Rename</button><hr><button data-act="delete-folder" class="danger">Delete folder</button>`);
+  $("#cmenu").dataset.folder = String(folderId);
+  delete $("#cmenu").dataset.chat;
 }
 
 /**
@@ -457,6 +488,45 @@ function folderMenu(button, folderId) {
  *   delete-folder -> confirm("Delete this folder? Its chats are kept.") or stop; DELETE /api/folders/ID; loadChats()
  */
 async function menuAction(act, btn) {
+  const menu = $("#cmenu");
+  const chatId = Number(menu.dataset.chat);
+  const folderId = Number(menu.dataset.folder);
+  closeMenu();
+
+  if (act === "rename" && chatId) {
+    const chat = state.chats.find((c) => c.id === chatId);
+    const title = prompt("Rename chat:", chat?.title || "");
+    if (!title) return;
+    await api(`/api/chats/${encodeURIComponent(chatId)}`, { method: "PATCH", json: { title } });
+    if (state.chatId === chatId) $("#chat-title").textContent = title;
+    await loadChats();
+  } else if (act === "move" && chatId) {
+    const folderVal = btn.dataset.folder;
+    await moveChat(chatId, folderVal ? Number(folderVal) : null);
+  } else if (act === "newfolder" && chatId) {
+    const id = await newFolder();
+    if (id) await moveChat(chatId, id);
+  } else if (act === "delete" && chatId) {
+    if (!confirm("Delete this chat? This cannot be undone.")) return;
+    const wasOpen = state.chatId === chatId;
+    await api(`/api/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
+    if (wasOpen) {
+      state.chatId = null;
+      $("#chat-title").textContent = "New chat";
+      drawWelcome();
+    }
+    await loadChats();
+  } else if (act === "rename-folder" && folderId) {
+    const folder = state.folders.find((f) => f.id === folderId);
+    const name = prompt("Rename folder:", folder?.name || "");
+    if (!name) return;
+    await api(`/api/folders/${encodeURIComponent(folderId)}`, { method: "PATCH", json: { name } });
+    await loadChats();
+  } else if (act === "delete-folder" && folderId) {
+    if (!confirm("Delete this folder? Its chats are kept.")) return;
+    await api(`/api/folders/${encodeURIComponent(folderId)}`, { method: "DELETE" });
+    await loadChats();
+  }
 }
 
 /**
@@ -471,6 +541,86 @@ async function menuAction(act, btn) {
  *   #new-folder click -> if (await newFolder()) loadChats()
  */
 function setupSidebar() {
+  const convs = $("#convs");
+  const cmenu = $("#cmenu");
+
+  // Click handling on sidebar
+  convs.addEventListener("click", async (e) => {
+    const chatMenuBtn = e.target.closest("[data-chat-menu]");
+    if (chatMenuBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      chatMenu(chatMenuBtn, Number(chatMenuBtn.dataset.chatMenu));
+      return;
+    }
+    const folderMenuBtn = e.target.closest("[data-folder-menu]");
+    if (folderMenuBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      folderMenu(folderMenuBtn, Number(folderMenuBtn.dataset.folderMenu));
+      return;
+    }
+    const conv = e.target.closest(".conv");
+    if (conv) {
+      const id = Number(conv.dataset.id);
+      if (!state.busy) openChat(id);
+    }
+  });
+
+  // Drag and drop on sidebar
+  convs.addEventListener("dragstart", (e) => {
+    const conv = e.target.closest(".conv");
+    if (conv) {
+      e.dataTransfer.setData("text/plain", String(conv.dataset.id));
+    }
+  });
+
+  convs.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    document.querySelectorAll(".drop").forEach((el) => el.classList.remove("drop"));
+    const folder = e.target.closest(".folder");
+    if (folder) {
+      folder.classList.add("drop");
+    } else {
+      convs.classList.add("drop");
+    }
+  });
+
+  convs.addEventListener("drop", (e) => {
+    e.preventDefault();
+    document.querySelectorAll(".drop").forEach((el) => el.classList.remove("drop"));
+    const chatId = Number(e.dataTransfer.getData("text/plain"));
+    const folder = e.target.closest(".folder");
+    const folderId = folder ? Number(folder.dataset.folder) : null;
+    moveChat(chatId, folderId);
+  });
+
+  // Context menu click handling
+  cmenu.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (btn) {
+      menuAction(btn.dataset.act, btn);
+    }
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!cmenu.hidden && !cmenu.contains(e.target)) {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !cmenu.hidden) {
+      closeMenu();
+    }
+  });
+
+  // New folder button
+  $("#new-folder").addEventListener("click", async () => {
+    const id = await newFolder();
+    if (id) await loadChats();
+  });
 }
 
 /** Wire everything once at start. */

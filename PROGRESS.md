@@ -51,6 +51,19 @@ Modified `chat/static/js/app.js`:
 
 Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
 
+## Task R13 — moveChat, newFolder, openMenu, chatMenu, folderMenu, menuAction, done (2026-11-18)
+
+Modified `chat/static/js/app.js`:
+1. Implemented `moveChat(chatId, folderId)` — PATCHes `/api/chats/CHAT` with `{folder_id}` (null clears folder), then reloads sidebar via `loadChats()`.
+2. Implemented `newFolder()` — prompts for folder name, trims it, POSTs to `/api/folders`, returns the new folder's id or null on failure.
+3. Implemented `openMenu(button, html)` — sets `#cmenu` innerHTML to `html`, positions it via `--x`/`--y` CSS variables based on `getBoundingClientRect()` of the button, and shows it.
+4. Implemented `chatMenu(button, chatId)` — builds the chat context menu HTML (Rename, Move to per-folder buttons, "No folder" if applicable, New folder, Delete), opens it, and sets `#cmenu.dataset.chat = chatId`.
+5. Implemented `folderMenu(button, folderId)` — builds the folder context menu HTML (Rename, Delete folder), opens it, and sets `#cmenu.dataset.folder = folderId`.
+6. Implemented `menuAction(act, btn)` — handles all menu actions: rename (PATCH chat title), move (calls `moveChat`), newfolder (creates folder + moves chat), delete (confirms, DELETEs chat, resets open chat UI), rename-folder, delete-folder.
+7. Implemented `setupSidebar()` — wires `#convs` click (menu buttons + conv open), drag-and-drop (dragstart/dragover/drop for moving chats into folders), `#cmenu` click (dispatches `menuAction`), outside-click + Escape to close menu, and `#new-folder` click.
+
+Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make chat-browser-test` — all 7 tests passed including "round 2: folders: new folder, move a chat with the menu, delete a chat". `make check` — 36 passed, OK.
+
 ## Task R11 — doneMeta and drawMessage, done (2026-11-18)
 
 Modified `chat/static/js/app.js`:
@@ -67,3 +80,10 @@ Modified `chat/static/js/app.js`:
 3. Implemented `send()` — full message send flow: validates input, creates chat if needed, draws user message and assistant placeholder, streams via `readEvents()` with phase/delta/done/error handling, uses `Typewriter` for smooth text rendering, calls `doneMeta` on completion, handles errors and stopped state.
 
 Tests: `node --check chat/static/js/app.js && make chat-test` — 79 passed. `make check` — 36 passed, OK.
+
+## Task R16 — README.md Round 2 section, done (2026-11-18)
+
+Modified `chat/README.md`:
+1. Appended a "## Round 2" section (6 lines) covering: reading phase shimmer, stop button with partial answer persistence, folder organisation (the ⋯ menu + drag-and-drop), coloured code blocks with Copy and Download, and scroll-pinning with "↓ Latest".
+
+Tests: `make chat-test` — 79 passed. `grep -q "## Round 2"` and `grep -q "folders"` confirmed.

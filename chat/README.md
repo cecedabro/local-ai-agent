@@ -77,3 +77,12 @@ Your password keeps working as a backup. Add one on your account page
 (`/account`, right after accepting an invite). In production, passkeys only
 work on the exact `RP_ID` + `ORIGIN` pair (e.g. `RP_ID=dewdrop.cedricschippers.dev`,
 `ORIGIN=https://dewdrop.cedricschippers.dev`).
+
+## Round 2
+
+Round 2 adds a "Reading your message…" shimmer at the top of every stream so you know the app
+is working. A **Stop** button ends a reply mid-stream, and the partial answer is saved so nothing
+is lost. You can organise chats into folders via the ⋯ menu or by dragging a chat onto a folder.
+Code blocks are syntax-coloured and include Copy and Download buttons (the model puts the file name
+on the fence line). If you scroll away while a reply is still writing, the page pins your position
+and "↓ Latest" brings you back when it catches up.

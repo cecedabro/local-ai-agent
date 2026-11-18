@@ -38,13 +38,13 @@ Rules for every task:
   accept: node --check chat/static/js/app.js && make chat-test
 - [x] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] R13: In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`)
+- [x] R13: In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] R14: In chat/static/js/app.js fill in `setupSidebar` (`TODO (task R14)`)
+- [x] R14: In chat/static/js/app.js fill in `setupSidebar` (`TODO (task R14)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] R15: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/static/js/app.js or chat/coder/ (see "R15 details")
+- [x] R15: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/static/js/app.js or chat/coder/ (see "R15 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [ ] R16: Add a "## Round 2" section to chat/README.md (see "R16 details")
+- [x] R16: Add a "## Round 2" section to chat/README.md (see "R16 details")
   accept: grep -q "## Round 2" chat/README.md && grep -q "folders" chat/README.md && make chat-test
 
 ## R15 details
