@@ -40,7 +40,7 @@ The app is called Dewdrop. `chat/static/js/stream.js` (the writing engine) is do
   accept: make chat-test K="TestStream"
 - [x] S13: In chat/coder/app.py add step 5 (files) to `api_create_message`: see "S13 details" below
   accept: make chat-test K="TestFiles or TestStream"
-- [ ] S14: In chat/coder/app.py fill in `api_compress`, and make `api_get_chat` return `context.info(...)` as "context"
+- [x] S14: In chat/coder/app.py fill in `api_compress`, and make `api_get_chat` return `context.info(...)` as "context"
   accept: make chat-test K="TestContext"
 - [ ] S15: Make the whole chat suite green (run it, fix only what fails, in the app code)
   accept: make chat-test

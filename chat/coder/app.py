@@ -240,7 +240,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "not found"}, status_code=404)
         messages = app.state.db.get_messages(chat_id, username)
         chat["messages"] = messages
-        chat["context"] = {"used": 0, "max": 32768, "compress_at": 24576}
+        chat["context"] = context.info(app.state.db, chat, app.state.settings)
         return JSONResponse(chat)
 
     @app.patch("/api/chats/{chat_id}")
@@ -388,7 +388,18 @@ def create_app(settings: dict | None = None) -> FastAPI:
         await context.compress(db, chat, settings, gateway.complete), reload the chat with db.get_chat,
         and return {"context": context.info(db, chat, settings)}.
         """
-        return JSONResponse({"error": "not built yet"}, status_code=501)
+        db = app.state.db
+        settings = app.state.settings
+        r = _require_session(request, db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        chat = db.get_chat(chat_id, username)
+        if chat is None:
+            return JSONResponse({"error": "Chat not found."}, status_code=404)
+        await context.compress(db, chat, settings, gateway.complete)
+        chat = db.get_chat(chat_id, username)
+        return JSONResponse({"context": context.info(db, chat, settings)})
 
     # ── POST /api/invites ─────────────────────────────────────────────────
 
