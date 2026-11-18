@@ -39,7 +39,7 @@ Rules for every task:
   accept: make chat-test K="test_step_context or test_step_round2 or TestStream"
 - [x] B12: In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`)
   accept: make chat-test K="TestProfileApi and (seeds or rights or settings or profiles_page)"
-- [ ] B13: In chat/coder/app.py add the source card routes (`TODO (task B13)`)
+- [x] B13: In chat/coder/app.py add the source card routes (`TODO (task B13)`)
   accept: make chat-test K="TestProfileApi and sources"
 - [ ] B14: In chat/coder/app.py add the documents route (`TODO (task B14)`)
   accept: make chat-test

@@ -436,7 +436,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if isinstance(r, Response):
             return r
         username, _ = r
-        body = _json_body(request) or {}
+        body = await request.json()
         note = body.get("note") if body.get("note") is not None else ""
         if not isinstance(note, str) or len(note) > 1000:
             return JSONResponse({"error": "Invalid note"}, status_code=400)
@@ -457,6 +457,70 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse(_source_json(src), status_code=201)
         else:
             return JSONResponse({"error": "Invalid kind"}, status_code=400)
+
+    @app.patch("/api/profiles/{profile}/sources/{source_id}")
+    async def api_update_source(profile: str, source_id: int, request: Request) -> Response:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        body = await request.json()
+        if not body:
+            return JSONResponse({"error": "Nothing to change"}, status_code=400)
+        updatable = {"note", "enabled", "filters"} & set(body.keys())
+        if not updatable:
+            return JSONResponse({"error": "Nothing to change"}, status_code=400)
+        src = app.state.db.get_source(source_id, username)
+        if not src or src.get("profile") != profile:
+            return Response(status_code=404)
+        note = body.get("note")
+        if note is not None:
+            if not isinstance(note, str) or len(note) > 1000:
+                return JSONResponse({"error": "Invalid note"}, status_code=400)
+        enabled = body.get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            return JSONResponse({"error": "Invalid enabled"}, status_code=400)
+        if "filters" in body:
+            if src.get("kind") != "pubmed":
+                return JSONResponse({"error": "Filters only for pubmed"}, status_code=400)
+        if app.state.db.update_source(source_id, username,
+                                        **{k: v for k, v in body.items() if k in updatable}):
+            return JSONResponse(_source_json(app.state.db.get_source(source_id, username)))
+        return Response(status_code=404)
+
+    @app.delete("/api/profiles/{profile}/sources/{source_id}", status_code=204)
+    async def api_delete_source(profile: str, source_id: int, request: Request) -> Response:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        src = app.state.db.get_source(source_id, username)
+        if not src or src.get("profile") != profile:
+            return Response(status_code=404)
+        app.state.db.delete_source(source_id, username)
+        return Response(status_code=204)
+
+    @app.post("/api/profiles/{profile}/documents", status_code=201)
+    async def api_add_document(profile: str, request: Request) -> Response:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        form = await request.form()
+        file = form.get("file")
+        if file is None:
+            return JSONResponse({"error": "No file"}, status_code=400)
+        filename = os.path.basename(getattr(file, "filename", "upload") or "upload")
+        content = await file.read()
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        try:
+            text = profiles.document_text(filename, content)
+        except profiles.DocumentError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=exc.status)
+        src = app.state.db.add_source(username, profile, "file", filename,
+                                        content=text)
+        return JSONResponse(_source_json(src), status_code=201)
 
     @app.delete("/api/chats/{chat_id}")
     async def api_delete_chat(chat_id: str, request: Request) -> Response:
