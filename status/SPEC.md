@@ -505,4 +505,8 @@ by picking a plan instead of typing a branch.
   ("New · <title> · main · N open" starts a new `agent/<title>` branch; "Continue · <title> ·
   agent/… · d of t done" resumes), previews progress and the next tasks, and keeps branch, note,
   max hours and CI under "Options". Start queues a job with `ref` = the plan's branch.
+- Hiding repos: `POST /api/repos/hidden` (token) `{"repo": "owner/name", "hidden": bool}` →
+  **200** `{"hidden": [...]}`; bad input → **400**. Hidden repos (kept in the database) are left
+  out of `jobs.repos`, `jobs.plans` and the page's repo list; `jobs.hidden` lists them, and the card's
+  Options show them with a "show" button. The card has a "hide" button next to the repo list.
 

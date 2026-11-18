@@ -136,6 +136,19 @@ class JobsTest(Base):
         self.assertIn("Start an agent loop", page)
         self.assertIn('<select name="plan"', page)
 
+    def test_hide_repos(self) -> None:
+        self.req("POST", "/api/workers/ping", {"worker": "w", "paused": False,
+                 "repos": ["cecedabro/a", "cecedabro/b"],
+                 "plans": [{"repo": "cecedabro/b", "branch": "main", "title": "B", "open": 1}]})
+        self.assertEqual(self.req("POST", "/api/repos/hidden", {"repo": "cecedabro/b", "hidden": True}, token=None)[0], 401)
+        self.assertEqual(self.req("POST", "/api/repos/hidden", {"repo": "bad", "hidden": True})[0], 400)
+        self.req("POST", "/api/repos/hidden", {"repo": "cecedabro/b", "hidden": True})
+        jobs = self.status()["jobs"]
+        self.assertEqual((jobs["repos"], jobs["plans"], jobs["hidden"]), (["cecedabro/a"], [], ["cecedabro/b"]))
+        self.assertIn('data-unhide="cecedabro/b"', self.req("GET", "/", token=None)[2].decode())
+        self.req("POST", "/api/repos/hidden", {"repo": "cecedabro/b", "hidden": False})
+        self.assertEqual(self.status()["jobs"]["repos"], ["cecedabro/a", "cecedabro/b"])
+
     def test_lost_worker_frees_the_queue(self) -> None:
         a, b = self.add(), self.add()
         self.claim()
