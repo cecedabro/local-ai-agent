@@ -31,7 +31,7 @@ Rules for every task:
   accept: make chat-test K="test_step_research and helpers"
 - [x] E08: In chat/coder/research.py fill in `parse_plan` as its docstring says
   accept: make chat-test K="test_step_research and parse_plan"
-- [ ] E09: In chat/coder/research.py fill in `gather` as its docstring says
+- [x] E09: In chat/coder/research.py fill in `gather` as its docstring says
   accept: make chat-test K="test_step_research and gather"
 - [ ] E10: In chat/coder/research.py fill in `evidence_messages` and `public_sources` as their docstrings say
   accept: make chat-test K="test_step_research and evidence_messages"
