@@ -227,7 +227,7 @@ def study_type(pub_types: list[str] | None) -> str | None:
 
 
 async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list[str]:
-    r"""TODO (task F03). The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
+    r"""The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
       want = per term: str(term).strip(); skip empty ones, ones longer than 80 characters, ones with a '"', and ones
         already in want (case-insensitive); keep at most 8. want empty -> return [] without any request.
       r = GET PUBMED + "/esearch.fcgi" params {"db": "mesh", "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
@@ -240,7 +240,63 @@ async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list
         added once (skip it when it is already in out); a term without a record is dropped.
     Tests: test_step_clear.py::test_mesh_check
     """
-    raise NotImplementedError
+    try:
+        want = []
+        seen = set()
+        if terms:
+            for t in terms:
+                t = str(t).strip()
+                if not t or len(t) > 80 or '"' in t:
+                    continue
+                if t.lower() in seen:
+                    continue
+                seen.add(t.lower())
+                want.append(t)
+                if len(want) >= 8:
+                    break
+
+        if not want:
+            return []
+
+        r = await client.get(
+            PUBMED + "/esearch.fcgi",
+            params={
+                "db": "mesh",
+                "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
+                "retmode": "json",
+                "retmax": 20,
+            },
+            headers={"User-Agent": UA},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return []
+        ids = r.json()["esearchresult"].get("idlist")
+        if not ids:
+            return []
+
+        r = await client.get(
+            PUBMED + "/esummary.fcgi",
+            params={"db": "mesh", "id": ",".join(ids), "retmode": "json"},
+            headers={"User-Agent": UA},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return []
+        res = r.json()["result"]
+        records = [res[uid]["ds_meshterms"] for uid in res["uids"]]
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        return []
+
+    out = []
+    for t in want:
+        for record in records:
+            if any(t.lower() == term.lower() for term in record):
+                heading = record[0]
+                if heading not in out:
+                    out.append(heading)
+                break
+    return out
 
 
 def pubmed_term(query: str, filters: dict | None, mesh: list[str] | None = None) -> str:
