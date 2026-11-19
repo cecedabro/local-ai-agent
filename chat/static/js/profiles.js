@@ -201,8 +201,9 @@ async function start() {
   });
   $("#pf-sources").addEventListener("input", (ev) => {
     const target = ev.target;
-    if (target.matches("[data-note]") && target.dataset.source) {
-      const id = target.dataset.source;
+    if (target.matches("[data-note]") && target.closest("[data-source]")) {
+      const card = target.closest("[data-source]");
+      const id = card.dataset.source;
       later("note" + id, async () => {
         try { await sourceApi(id, { note: target.value }); } catch { /* ignore */ }
         refresh();

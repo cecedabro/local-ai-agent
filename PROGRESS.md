@@ -86,4 +86,11 @@
 
 ## Task B17 - start function in profiles.js
 - Implemented `start()` in `chat/static/js/profiles.js`: profile tab clicks, debounced instruction save via `PATCH /api/profiles/{profile}`, web toggle, source card event delegation (note/enable/filters via `PATCH /api/profiles/{profile}/sources/{id}`, delete via `DELETE`, restore-on-failure), add-pubmed and add-website via `POST /api/profiles/{profile}/sources`, document upload via `POST /api/profiles/{profile}/documents`, and localStorage tab restoration.
+- Fixed note save bug: `[data-note]` textarea had `data-source` on the parent `<article>`, so `target.dataset.source` was always `undefined`. Changed to `target.closest("[data-source]")` (matching the filter handlers pattern).
+
+## Task B18 - Browser test fix (chat/static/js/profiles.js)
+- Fixed failing browser test "round 3: profiles page: note, filter, website, document, budget" where the note was not saving.
+- Root cause: event delegation checked `target.dataset.source` on the `<textarea data-note>`, but `data-source` lives on the parent `<article>`. The condition failed silently so the PATCH never fired.
+- Fix: replaced `target.dataset.source` with `target.closest("[data-source]").dataset.source` (same pattern already used for filter controls).
+- All acceptance commands pass: `make chat-test` (102 tests), `make chat-browser-test` (all 9 rounds), `make check` (36 tests), `node --test chat/tests/js/stream.test.mjs` (11 tests).
 - All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).
