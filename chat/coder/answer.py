@@ -13,7 +13,7 @@ from typing import Any, AsyncIterator, Callable
 
 import httpx
 
-from . import context, gateway, profiles, tools
+from . import context, gateway, profiles, research, tools
 
 MAX_ROUNDS = 4
 
@@ -45,6 +45,23 @@ def make_title(text: str) -> str:
     return title
 
 
+# Notes (task E12): EvidenceHunt has its own pipeline, and every profile keeps its thinking and trail (SPEC §13.2-13.3).
+# Tests: test_step_answer.py, test_step_round2.py, test_step_profiles.py, test_accept_core.py::TestStream,
+# test_accept_evidence.py::TestEvidenceV2.
+#   1. `from . import research`. In run_answer, right after the optional compress (before build_messages):
+#        if chat["profile"] == "evidence":
+#            async for chunk in research.run_evidence(db, settings, chat, think, stream=stream, complete=complete, stop=stop):
+#                yield chunk
+#            return
+#   2. Before the rounds: trail = []; thinking_text = ""; th0 = None.
+#   3. A ("reasoning", val) event: besides the first-time phase("thinking"), when val is not empty: th0 = th0 or clock();
+#      thinking_text += val; yield sse("thinking", {"text": val}).
+#   4. After each `result, found = await run_tool(...)`: step = tools.trail_step(name, arguments, found); trail.append(step);
+#      yield sse("trail", {"step": step}).
+#   5. Both db.add_message calls for the assistant also store trail=trail and thinking=thinking_text; the normal one also
+#      thought_s = round((t0 or clock()) - th0, 1) when th0 is not None, else None.
+#   6. done also carries "trail": trail.
+
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                      stream: Callable = gateway.stream_chat,
                      complete: Callable = gateway.complete,
@@ -64,6 +81,12 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         await context.compress(db, chat, settings, complete)
         chat = db.get_chat(chat["id"], chat["username"])
 
+    # EvidenceHunt profile: run its own pipeline
+    if chat["profile"] == "evidence":
+        async for chunk in research.run_evidence(db, settings, chat, think, stream=stream, complete=complete, stop=stop):
+            yield chunk
+        return
+
     # Step 2
     messages = context.build_messages(db, chat)
     cfg = profiles.config(db, chat["username"], chat["profile"])
@@ -80,6 +103,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     usage = None
     stopped = False
     msg_stored = False
+    trail: list[dict] = []
+    thinking_text = ""
+    th0 = None
 
     try:
         while True:
@@ -128,6 +154,10 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                     if not hasattr(events, "_thinking_sent") or not events._thinking_sent:
                         yield phase("thinking")
                         events._thinking_sent = True
+                    if val:
+                        th0 = th0 or clock()
+                        thinking_text += val
+                        yield sse("thinking", {"text": val})
                 elif tag == "content":
                     count += 1
                     show, held = gateway.tag_split(held + val)
@@ -186,6 +216,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                         found = [found] if found else []
                     if not isinstance(found, list):
                         found = []
+                    step = tools.trail_step(name, arguments, found)
+                    trail.append(step)
+                    yield sse("trail", {"step": step})
                     for src in found:
                         src_url = src.get("url", "")
                         existing = next((s for s in sources if s.get("url") == src_url), None)
@@ -219,7 +252,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         return
     finally:
         if not msg_stored and text:
-            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True, sources=sources)
+            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True, sources=sources, trail=trail, thinking=thinking_text)
         try:
             await agen.aclose()
         except Exception:
@@ -231,7 +264,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     tps = round(tokens / (clock() - t0), 1) if t0 else None
 
     if text or not stopped:
-        msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped, sources=sources)
+        msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped, sources=sources, trail=trail, thinking=thinking_text,
+                                thought_s=round((t0 or clock()) - th0, 1) if th0 is not None else None)
         msg_stored = True
     else:
         msg_id = None
@@ -250,7 +284,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
                         "context": context.info(db, chat, settings),
                         "title": chat["title"], "stopped": stopped,
-                        "sources": sources})
+                        "sources": sources, "trail": trail})
 
 
 def _unused() -> None:

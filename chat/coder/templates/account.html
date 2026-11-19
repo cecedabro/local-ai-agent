@@ -5,6 +5,16 @@
 <header><h1>Your account</h1><a href="/">← back to the chat</a></header>
 <main class="admin-main">
   <section class="card">
+    <h2>App icon</h2>
+    <p class="muted small">The icon on your home screen. After changing it, remove Dewdrop from your home screen and add it
+      again (Safari → Share → Add to Home Screen): your phone only reads the icon when you add it.</p>
+    <div class="icon-pick" id="icon-pick">
+      <button type="button" data-icon="aero"><img src="/static/icons/aero-180.png" alt="">Aero dewdrop</button>
+      <button type="button" data-icon="blossom"><img src="/static/icons/blossom-180.png" alt="">Blossom dewdrop</button>
+    </div>
+    <p id="icon-msg" class="small" role="status"></p>
+  </section>
+  <section class="card">
     <h2>Passkeys</h2>
     <p class="muted small">Sign in with Face ID, Touch ID or your phone instead of typing your password.
       Your password keeps working as a backup.</p>
@@ -14,5 +24,6 @@
   </section>
 </main>
 <script src="/static/js/webauthn.js"></script>
+<script type="module" src="/static/js/icons.js"></script>
 </body>
 {% endblock %}

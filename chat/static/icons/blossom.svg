@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><filter id="blur8" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"/></filter><filter id="blur4" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter><filter id="blur20" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="20"/></filter></defs><defs><radialGradient id="pp" cx=".5" cy=".45" r=".75"><stop offset="0" stop-color="#fff8fb"/><stop offset=".7" stop-color="#ffe8f1"/><stop offset="1" stop-color="#ffd6e6"/></radialGradient></defs><rect width="512" height="512" fill="url(#pp)"/><ellipse cx="256" cy="399.45000000000005" rx="123.75" ry="23.1" fill="#c25d8c" opacity=".25" filter="url(#blur8)"/><defs><radialGradient id="blv" cx=".68" cy=".58" r=".42"><stop offset="0" stop-color="#cdb9ff" stop-opacity=".6"/><stop offset="1" stop-color="#cdb9ff" stop-opacity="0"/></radialGradient>
+<radialGradient id="bpk" cx=".45" cy=".4" r=".65"><stop offset="0" stop-color="#ffc4dc" stop-opacity=".35"/><stop offset="1" stop-color="#f59cc4" stop-opacity=".55"/></radialGradient></defs>
+<circle cx="256" cy="246" r="165" fill="url(#bpk)"/><circle cx="256" cy="246" r="165" fill="url(#blv)"/><defs>
+<radialGradient id="bb" cx=".5" cy=".55" r=".55"><stop offset="0" stop-color="#ffd9e8" stop-opacity=".10"/><stop offset=".72" stop-color="#ffd9e8" stop-opacity=".22"/><stop offset=".93" stop-color="#e38bb3" stop-opacity=".55"/><stop offset="1" stop-color="#e38bb3" stop-opacity=".8"/></radialGradient>
+<radialGradient id="bc" cx=".5" cy=".82" r=".42"><stop offset="0" stop-color="#fff4fa" stop-opacity=".95"/><stop offset=".55" stop-color="#fff4fa" stop-opacity=".35"/><stop offset="1" stop-color="#fff4fa" stop-opacity="0"/></radialGradient>
+<radialGradient id="bt" cx=".5" cy=".08" r=".7"><stop offset="0" stop-color="#2a3a48" stop-opacity=".35"/><stop offset=".5" stop-color="#2a3a48" stop-opacity="0"/></radialGradient>
+<radialGradient id="bh" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<clipPath id="bk"><circle cx="256" cy="246" r="165"/></clipPath></defs>
+<circle cx="256" cy="246" r="165" fill="url(#bb)"/>
+<g clip-path="url(#bk)"><circle cx="256" cy="246" r="165" fill="url(#bt)"/>
+<ellipse cx="256" cy="336.75" rx="115.49999999999999" ry="69.3" fill="url(#bc)"/></g>
+<circle cx="256" cy="246" r="163.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3"/>
+<ellipse cx="196.6" cy="176.7" rx="49.5" ry="28.05" transform="rotate(-32 196.6 176.7)" fill="url(#bh)"/>
+<circle cx="173.5" cy="163.5" r="9.075" fill="#fff"/>
+<ellipse cx="325.3" cy="328.5" rx="16.5" ry="8.25" transform="rotate(-40 325.3 328.5)" fill="#fff" opacity=".7"/></svg>

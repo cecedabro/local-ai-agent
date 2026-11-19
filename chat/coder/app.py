@@ -23,6 +23,8 @@ from . import answer, context, gateway, passkeys, profiles
 from .config import Settings
 from .db import DB
 
+ICONS = ("aero", "blossom")
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     db = DB(app.state.settings.DATA_DIR)
@@ -182,10 +184,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
         session = _session_from_cookie(request, app.state.db)
         if not session:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
-        username, user = session
-        theme = user.get("theme", "auto")
-        rights = sorted(user.get("rights", []))
-        return JSONResponse({"username": username, "rights": rights, "theme": theme})
+        username, _ = session
+        return JSONResponse(_me(username, app.state.db))
 
     @app.patch("/api/me")
     async def api_me_patch(request: Request) -> JSONResponse:
@@ -194,12 +194,49 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         username, _ = session
         body = await request.json()
-        theme = (body.get("theme") or "auto").strip()
-        if theme not in ("auto", "light", "dark", "blossom"):
-            return JSONResponse({"error": "invalid theme"}, status_code=400)
-        app.state.db.update_user_theme(username, theme)
-        user = app.state.db.get_user(username)
-        return JSONResponse({"username": username, "rights": sorted(user["rights"]), "theme": theme})
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Nothing to change."}, status_code=400)
+        if not body:
+            return JSONResponse({"error": "Nothing to change."}, status_code=400)
+        if "theme" in body:
+            theme = body["theme"]
+            if theme not in ("auto", "light", "dark", "blossom"):
+                return JSONResponse({"error": "invalid theme"}, status_code=400)
+            app.state.db.update_user_theme(username, theme)
+        if "icon" in body:
+            icon = body["icon"]
+            if icon not in ICONS:
+                return JSONResponse({"error": "invalid icon"}, status_code=400)
+            app.state.db.update_user_icon(username, icon)
+        return JSONResponse(_me(username, app.state.db))
+
+    @app.get("/manifest.json")
+    async def manifest_json(request: Request) -> Response:
+        session = _session_from_cookie(request, app.state.db)
+        if session:
+            username, _ = session
+            icon = _me(username, app.state.db)["icon"]
+        else:
+            icon = "aero"
+        icons = [{"src": f"/static/icons/{icon}-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "any maskable"} for n in (192, 512)]
+        return JSONResponse(
+            {"name": "Dewdrop", "short_name": "Dewdrop", "description": "Your private chat, running on a local model.",
+             "start_url": "/", "scope": "/", "display": "standalone", "background_color": "#0b2233", "theme_color": "#0b2233",
+             "icons": icons},
+            media_type="application/manifest+json",
+        )
+
+    @app.get("/apple-touch-icon.png")
+    async def apple_touch_icon(request: Request) -> Response:
+        session = _session_from_cookie(request, app.state.db)
+        if session:
+            username, _ = session
+            icon = _me(username, app.state.db)["icon"]
+        else:
+            icon = "aero"
+        icon_path = Path(__file__).parent.parent / "static" / "icons" / f"{icon}-180.png"
+        data = icon_path.read_bytes()
+        return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/invites")
     async def api_invites_get(request: Request) -> JSONResponse:
@@ -483,6 +520,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if "filters" in body:
             if src.get("kind") != "pubmed":
                 return JSONResponse({"error": "Filters only for pubmed"}, status_code=400)
+            clean = profiles.clean_filters(body["filters"])
+            body = {**body, "filters": clean}
         if app.state.db.update_source(source_id, username,
                                         **{k: v for k, v in body.items() if k in updatable}):
             return JSONResponse(_source_json(app.state.db.get_source(source_id, username)))
@@ -938,6 +977,13 @@ def create_app(settings: dict | None = None) -> FastAPI:
 # -------------------------------------------------------------------- #
 #  HTML rendering helpers                                               #
 # -------------------------------------------------------------------- #
+
+def _me(username: str, db: DB) -> dict[str, Any]:
+    """Return the user dict for /api/me responses."""
+    user = db.get_user(username)
+    icon = (user.get("icon") or "blossom") if user.get("theme") == "blossom" else (user.get("icon") or "aero")
+    return {"username": username, "rights": sorted(user.get("rights", [])), "theme": user.get("theme", "auto"), "icon": icon}
+
 
 def _session_from_cookie(request: Request, db: DB):
     """Return ``(username, user_dict)`` if the session cookie is valid, else None."""

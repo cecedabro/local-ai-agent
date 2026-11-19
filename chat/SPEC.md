@@ -378,3 +378,68 @@ PubMed the filters `[data-type]`, `select[data-years]`, `[data-humans]`, `[data-
 `#add-pubmed`, `#add-website` (asks the address), `#add-doc` (file input). The context bar
 `#budget-bar` has one `<i>` per budget part (`--w` = tokens / max) and a line at half;
 `#budget-text`, `#budget-legend`, `#budget-hint` explain it; the bar gets class `over` above half.
+
+## 13. EvidenceHunt v2: research by the app, a checker for every answer
+
+The model is never trusted to stay within the evidence; the app enforces it.
+
+### 13.1 The checker (`chat/coder/verify.py`, pure functions)
+- `normalize(text)`: lower case; curly quotes → straight (`‘’`→`'`, `“”„`→`"`); `–—−` → `-`; soft hyphens
+  removed; every run of whitespace → one space; stripped.
+- `find_quote(quote, text)`: True when the quote appears in the source text after `normalize` on both. An
+  ellipsis (`...`, `…` or `[...]`) splits the quote into parts that must all appear, in order. Parts shorter
+  than 3 characters are ignored; a quote with no part left is False.
+- `quotes(answer)`: every quote in the Markdown answer, in order: each blockquote line group (`> …`, the
+  surrounding quote marks stripped) and each inline quote in `"…"` or `“…”` of at least 4 words. Each as
+  `{"text", "cites": [n, …]}`: the `[n]` (also `[1, 2]`) right after the quote, or for a blockquote anywhere
+  in it.
+- `sentences(answer)`: the answer's sentences outside quotes, headings and code, as `{"text", "cites"}`.
+- `check(answer, sources)` (sources = `[{"n", "text"}]`) → `{"ok", "quotes": [{"text", "cites", "ok", "why"}],
+  "uncited": [sentence texts], "bad_refs": [n…]}`: a quote is ok when it is found in at least one source it
+  cites (`why`: `"not in source n"`, `"no source"` when it cites none); `uncited` = sentences of 8+ words with
+  no `[n]` (the closing line on evidence strength is allowed without one); `bad_refs` = numbers cited that are
+  not a source; `ok` = every quote ok and no bad refs.
+
+### 13.2 The research pipeline (`chat/coder/research.py`), EvidenceHunt only
+1. **Plan**: one non-streaming call (`gateway.complete`) with `PLAN_PROMPT` asks for a JSON list of up to 6
+   searches `{"source": "pubmed" | "site:<domain>" | "web", "query"}`; `parse_plan(text, cfg)` reads it
+   (also inside a ```` ``` ```` fence), keeps only sources the profile enables, drops empty queries, max 6.
+   An unusable plan falls back to one PubMed search with the question (when PubMed is enabled).
+2. **Search** (`gather`): PubMed → `tools.pubmed_search` (with the card's filters); a site → `tools.web_search`
+   with `site=` and then `tools.fetch_page` of the top 2 results; web → `web_search` + top 2 pages. Every source
+   gets a number in order, `{"n", "title", "url", "kind", "meta", "text"}` (`text` = the abstract or page
+   text, ≤ 4000 characters), duplicates by URL kept once, at most 10. Every step goes into the **trail**:
+   `{"kind": "search", "source": "PubMed" | "<domain>" | "the web", "query", "found", "url"}` (`url` = the
+   search on PubMed's own site for PubMed, else null) and `{"kind": "read", "title", "url"}` per page read.
+   A failing search is a trail step with `"found": 0, "error"`, never an exception.
+3. **Nothing found** (no sources): the app answers `NO_EVIDENCE[lang]` itself (Dutch when the question looks
+   Dutch: `looks_dutch`), the model is not asked.
+4. **Answer**: `evidence_messages(question, sources, cfg)` = a system prompt with the rules (only these
+   sources, never own knowledge; short answer first, then the reasoning built from verbatim quotes
+   `> "…" [n]`, then how strong the evidence is; say so when the sources do not answer the question) and the
+   numbered excerpts; the answer streams like any other (no tools).
+5. **Check**: `verify.check(answer, sources)` on the full answer; the report is stored with the message.
+
+Events (in this order): `phase reading` → `phase thinking` "Choosing search terms…" → per search `phase
+searching` (its label) and a `trail` event `{"step": {...}}` → `phase reading` "Reading N sources…" →
+`phase summarising` "Building the answer from N sources…" → `phase writing` + `delta`s → `verify`
+`{"report"}` → `done` (also with `sources`, `trail`, `verify`). Messages in `GET /api/chats/<id>` have
+`trail` (list) and `verify` (object or null).
+
+### 13.3 Trail and thinking for every profile
+- The General profile's tool calls (§12.3) also send a `trail` event per call and store the trail.
+- Reasoning (Think mode) is no longer thrown away: each reasoning chunk is a `thinking` event `{"text"}`;
+  the assistant message stores it as `thinking` (text, `""` when none) and the seconds spent as `thought_s`.
+- The page (stream.js helpers, app.js wiring): `trailHtml(steps)` → `<details class="trail">` with
+  "Searched PubMed for "x" · 5 found ↗" lines; `thoughtHtml(text, secs)` → `<details class="thought">
+  <summary>Thought for N s</summary>`; `markVerify(bub, report)` gives each quote a ✓ or ⚠ and adds a note
+  under the answer for sentences without a source.
+
+### 13.4 PubMed strictness (design C) and the app icon
+- A PubMed card's filters may carry `"preset": "strict" | "balanced" | "broad" | "custom"`.
+  `profiles.PRESETS`: strict = systematic reviews, meta-analyses, guidelines, last 10 years, humans;
+  balanced = + randomised trials, last 15 years, humans; broad = no type or year filter. `clean_filters`
+  keeps the preset; a known preset sets the types/years/humans of that preset (languages stay).
+- Each user picks an app icon: `PATCH /api/me {"icon": "aero" | "blossom"}` (default: `blossom` when their
+  theme is Blossom, else `aero`), shown by `GET /api/me`. `GET /manifest.json` and `GET /apple-touch-icon.png`
+  serve the signed-in user's icon (no session: aero); the pages link those two URLs.

@@ -7,6 +7,8 @@ const state = { profile: null, data: null, timers: {} };
 const TYPES = [["systematic_review", "Systematic reviews"], ["meta_analysis", "Meta-analyses"], ["rct", "Randomised trials"],
   ["guideline", "Guidelines"], ["review", "Reviews"]];
 const LANGS = [["english", "English"], ["dutch", "Dutch"]];
+const PRESETS = [["strict", "Strict", "Reviews, meta-analyses and guidelines · last 10 years · humans"],
+  ["balanced", "Balanced", "+ randomised trials · last 15 years · humans"], ["broad", "Broad", "All study types · any year"]];
 const KIND = { pubmed: "PubMed", website: "Website", file: "Document" };
 
 /** fetch() for /api with the CSRF header; on 401 go to /login. (done) */
@@ -104,6 +106,13 @@ function cardHtml(s) {
   h += `<button type="button" class="link danger" data-delete>Remove</button></header>`;
   if (s.kind === "pubmed") {
     const f = s.filters || {};
+    const cur = f.preset || "custom";
+    h += `<div class="presets">`;
+    for (const [key, name, desc] of PRESETS) {
+      h += `<button type="button" class="preset${cur === key ? " on" : ""}" data-preset="${key}"><b>${name}</b><small>${desc}</small></button>`;
+    }
+    h += `</div>`;
+    h += `<details class="custom"${cur === "custom" ? " open" : ""}><summary>Customise</summary>`;
     h += `<div class="filters">`;
     for (const [key, label] of TYPES) {
       const on = (f.types && f.types.includes(key)) ? " checked" : "";
@@ -121,7 +130,7 @@ function cardHtml(s) {
       const on = (f.languages && f.languages.includes(key)) ? " checked" : "";
       h += `<label><input type="checkbox" data-lang="${key}"${on}> ${label}</label>`;
     }
-    h += `</div>`;
+    h += `</div></details>`;
   }
   const placeholders = { pubmed: "Only use reliable studies: \u2026", website: "When to use this site\u2026", file: "What this document is\u2026" };
   h += `<textarea data-note rows="2" maxlength="1000" placeholder="${placeholders[s.kind]}">${esc(s.note || "")}</textarea>`;
@@ -208,8 +217,9 @@ async function start() {
         try { await sourceApi(id, { note: target.value }); } catch { /* ignore */ }
         refresh();
       });
-    } else if (target.matches("[data-enabled]") && target.dataset.source) {
-      const id = target.dataset.source;
+    } else if (target.matches("[data-enabled]") && target.closest("[data-source]")) {
+      const card = target.closest("[data-source]");
+      const id = card.dataset.source;
       const enabled = target.checked;
       setTimeout(async () => {
         try { await sourceApi(id, { enabled }); } catch { /* ignore */ }
@@ -219,12 +229,23 @@ async function start() {
       const card = target.closest("[data-source]");
       const id = card.dataset.source;
       setTimeout(async () => {
-        try { await sourceApi(id, { filters: readFilters(card) }); } catch { /* ignore */ }
+        try { await sourceApi(id, { filters: { ...readFilters(card), preset: "custom" } }); } catch { /* ignore */ }
         refresh();
       }, 0);
     }
   });
   $("#pf-sources").addEventListener("click", (ev) => {
+    const presetBtn = ev.target.closest("[data-preset]");
+    if (presetBtn) {
+      const card = presetBtn.closest("[data-source]");
+      const id = card.dataset.source;
+      const presets = [...card.querySelectorAll("[data-lang]:checked")].map((x) => x.dataset.lang);
+      (async () => {
+        try { await sourceApi(id, { filters: { preset: presetBtn.dataset.preset, languages: presets } }); } catch { /* ignore */ }
+        refresh();
+      })();
+      return;
+    }
     const del = ev.target.closest("[data-delete]");
     if (del) {
       const card = del.closest("[data-source]");

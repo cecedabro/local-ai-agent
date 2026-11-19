@@ -419,3 +419,81 @@ export function flyFrom(el, from) {
   el.style.setProperty("--dy", `${Math.round(b.top + b.height / 2 - a.bottom)}px`);
   el.classList.add("fly");
 }
+
+// ------------------------------------------------------------------ §13.3: the search trail, thinking, the checker's marks
+
+/** One trail step as a list item (search: "Searched PubMed for "x" · 5 found ↗"; read: "Read <title> ↗"). */
+export function trailStep(s) {
+  const link = (url, text) => (url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>` : text);
+  if (s.kind === "read") return `<li class="step read">Read ${link(s.url, escHtml(s.title || s.url || "a page"))}</li>`;
+  const found = s.error ? `<span class="err">${escHtml(s.error)}</span>` : `${Number(s.found) || 0} found`;
+  return `<li class="step search">Searched ${escHtml(s.source || "the web")} for <b>"${escHtml(s.query || "")}"</b> · ` +
+    `${s.url ? link(s.url, found) : found}</li>`;
+}
+
+/**
+ * The trail under an answer: <details class="trail"><summary>Searched N times · read M pages</summary><ol>steps</ol></details>.
+ * "" for no steps. Open while the answer is still being researched (`open`).
+ */
+export function trailHtml(steps, open = false) {
+  if (!steps || !steps.length) return "";
+  const n = steps.filter((s) => s.kind === "search").length, m = steps.filter((s) => s.kind === "read").length;
+  const sum = `Searched ${n} time${n === 1 ? "" : "s"}` + (m ? ` · read ${m} page${m === 1 ? "" : "s"}` : "");
+  return `<details class="trail"${open ? " open" : ""}><summary>${sum}</summary><ol>${steps.map(trailStep).join("")}</ol></details>`;
+}
+
+/** What the model thought: <details class="thought"><summary>Thought for N s</summary><div class="thought-text">…</div></details>. */
+export function thoughtHtml(text, secs) {
+  if (!text) return "";
+  const t = secs == null ? "Thought" : `Thought for ${Math.max(1, Math.round(secs))} s`;
+  return `<details class="thought"><summary>${t}</summary><div class="thought-text">${escHtml(text)}</div></details>`;
+}
+
+const norm = (t) => String(t || "").replace(/[‘’]/g, "'").replace(/[“”„]/g, '"').replace(/[–—−]/g, "-").replace(/\s+/g, " ")
+  .trim().toLowerCase();
+
+/**
+ * Show the checker's report (SPEC §13.1) in a rendered answer: every blockquote and inline quote the report checked
+ * gets class q-ok (✓, "Found word for word in source n") or q-bad (⚠ + the reason); sentences without a source and
+ * references to sources that don't exist are listed in <div class="verify-note"> after `bub`.
+ */
+export function markVerify(bub, report) {
+  if (!bub || !report) return;
+  const qs = report.quotes || [];
+  const find = (text) => qs.find((q) => {
+    const a = norm(q.text), b = norm(text).replace(/\s*\[\d+(\s*,\s*\d+)*\]\s*/g, " ").replace(/^["']|["']$/g, "").trim();
+    return a && (b.includes(a) || a.includes(b));
+  });
+  const mark = (el, q) => {
+    el.classList.add(q.ok ? "q-ok" : "q-bad");
+    el.title = q.ok ? `Found word for word in source ${q.cites.join(", ")}` : `Not verified: ${q.why}`;
+    if (!el.querySelector(".q-mark")) el.insertAdjacentHTML("beforeend", `<span class="q-mark">${q.ok ? "✓" : "⚠"}</span>`);
+  };
+  bub.querySelectorAll("blockquote").forEach((el) => { const q = find(el.textContent); if (q) mark(el, q); });
+  // inline quotes: wrap "…" text in a span when the report checked it
+  const walker = document.createTreeWalker(bub, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) if (/["“][^"”]{10,}["”]/.test(walker.currentNode.data) && !walker.currentNode.parentElement.closest("blockquote,code,pre")) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const m = node.data.match(/["“]([^"”]{10,})["”]/);
+    const q = m && find(m[1]);
+    if (!q) continue;
+    const at = node.data.indexOf(m[0]);
+    const span = document.createElement("span");
+    span.className = "q-inline";
+    const mid = node.splitText(at);
+    mid.splitText(m[0].length);
+    mid.replaceWith(span);
+    span.append(mid);
+    mark(span, q);
+  }
+  const bits = [];
+  if ((report.uncited || []).length) bits.push(`${report.uncited.length} sentence${report.uncited.length === 1 ? " has" : "s have"} no source`);
+  if ((report.bad_refs || []).length) bits.push(`source ${report.bad_refs.join(", ")} does not exist`);
+  const bad = qs.filter((q) => !q.ok).length;
+  if (bad) bits.unshift(`${bad} quote${bad === 1 ? " was" : "s were"} not found in the source`);
+  if (!bits.length) return;
+  const list = (report.uncited || []).map((u) => `<li>${escHtml(u)}</li>`).join("");
+  bub.insertAdjacentHTML("afterend", `<details class="verify-note"><summary>⚠ ${escHtml(bits.join(" · "))}</summary>` +
+    (list ? `<ul>${list}</ul>` : "") + "</details>");
+}

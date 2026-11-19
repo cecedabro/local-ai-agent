@@ -3,6 +3,7 @@
 //   smoke:   sign in with the password, send a message, wait for the finished answer, no console errors
 //   round 2: phases, code blocks + download, scroll freeze + "Latest", stop, folders (chat/SPEC.md §11)
 //   round 3: the profiles page (notes, filters, a website, a document, the budget bar), sources under answers
+//   round 4: EvidenceHunt's trail, thinking and checked quotes; PubMed strictness (C); the app icon picker
 //   passkey: add a passkey on /account (Chromium's virtual authenticator), sign out, sign in with it
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -199,6 +200,42 @@ async function main() {
     await ev(`${last("a.cite")}.click()`);
     await waitFor(() => ev(`${last("details.src")}?.open===true`), 3000, "the source card to open when [1] is tapped");
     if (!/Wie krijgt hem/.test(await ev(`${last("details.src blockquote")}?.textContent||''`))) throw new Error("the source card has no quote");
+  });
+
+  await check("round 4: EvidenceHunt: search trail, thinking, quotes checked against the source", async () => {
+    await go("/");
+    await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "the chat page");
+    await ev(`document.getElementById('profile').click()`);
+    await ev(`document.querySelector('#pmenu .opt[data-profile=evidence]').click()`);
+    await waitFor(() => ev(`document.documentElement.dataset.profile==='evidence'`), 3000, "html[data-profile=evidence]");
+    if ((await ev(`document.getElementById('input').placeholder`)) !== "Ask EvidenceHunt…") throw new Error("placeholder is not 'Ask EvidenceHunt…'");
+    await sendText("Is apixaban veilig bij een eGFR onder 30?");
+    await waitFor(() => ev(`!!${last(".trail .step.search")}`), 15000, "a live trail step while researching");
+    await idle();
+    const sum = await ev(`${last(".trail summary")}?.textContent||''`);
+    if (!/Searched 1 time/.test(sum)) throw new Error("trail summary: " + sum);
+    if (!(await ev(`!!${last('.trail a[href^="https://pubmed.ncbi.nlm.nih.gov/?term="]')}`))) throw new Error("the PubMed search is not a link");
+    if (!/Thought/.test(await ev(`${last(".thought summary")}?.textContent||''`))) throw new Error("no thinking block");
+    if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
+    if (!(await ev(`!!${last("blockquote.q-bad")}`))) throw new Error("the made-up quote is not flagged");
+    if (!/no source/.test(await ev(`${last(".verify-note summary")}?.textContent||''`))) throw new Error("no note about sentences without a source");
+  });
+
+  await check("round 4: PubMed strictness (design C) and the app icon picker", async () => {
+    await go("/profiles");
+    await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "profile tabs");
+    await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
+    await waitFor(() => ev(`!!document.querySelector('.src-card[data-kind=pubmed] .preset[data-preset=strict]')`), 5000, "the Strict choice");
+    await ev(`document.querySelector('.src-card[data-kind=pubmed] .preset[data-preset=strict]').click()`);
+    await waitFor(async () => (await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`)).sources.find((x) => x.kind === "pubmed").filters.preset === "strict", 5000, "the preset saved");
+    await waitFor(() => ev(`document.querySelector('.src-card[data-kind=pubmed] .preset.on')?.dataset.preset==='strict'`), 5000, "Strict marked as chosen");
+    await ev(`document.querySelector('.src-card[data-kind=website] [data-enabled]').click()`);
+    await waitFor(async () => (await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`)).sources.find((x) => x.kind === "website").enabled === false, 5000, "the on/off switch saved");
+    await go("/account");
+    await waitFor(() => ev(`!!document.querySelector('#icon-pick button.on')`), 5000, "the current icon marked");
+    await ev(`document.querySelector('#icon-pick button[data-icon=blossom]').click()`);
+    await waitFor(() => ev(`/home screen/.test(document.getElementById('icon-msg').textContent)`), 5000, "the saved message");
+    if ((await ev(`fetch('/api/me').then(r=>r.json())`)).icon !== "blossom") throw new Error("icon not saved");
   });
 
   await check("passkey: add one on /account, sign out, sign in with it", async () => {

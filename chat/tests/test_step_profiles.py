@@ -130,7 +130,10 @@ def test_document_text():
 
 # ---------------------------------------------------------------- B10 answer: tool rounds
 def test_tool_rounds(db):
-    c = db.create_chat("lisa", "evidence")
+    # SPEC §13: EvidenceHunt has its own pipeline now; tool rounds are General's, here with the same sources
+    db.add_source("lisa", "general", "pubmed", "PubMed", filters={"types": ["rct"]})
+    db.add_source("lisa", "general", "website", "rivm.nl", domain="rivm.nl")
+    c = db.create_chat("lisa", "general")
     db.add_message(c["id"], "user", "Helpt vitamine D?")
     chat = db.get_chat(c["id"], "lisa")
     seen = []
@@ -145,7 +148,7 @@ def test_tool_rounds(db):
             yield ("usage", {"prompt_tokens": 900, "completion_tokens": 5})
 
     async def run_tool(name, arguments, cfg, client, searxng_url):
-        assert searxng_url == "http://searx" and cfg["profile"] == "evidence"
+        assert searxng_url == "http://searx" and cfg["profile"] == "general"
         if name == "search_pubmed":
             return "RESULTS", [{"title": "Trial", "url": "https://pubmed.ncbi.nlm.nih.gov/1/", "kind": "pubmed", "meta": "BMJ · 2021"},
                                {"title": "Review", "url": "https://pubmed.ncbi.nlm.nih.gov/2/", "kind": "pubmed"}]

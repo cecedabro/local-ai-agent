@@ -259,7 +259,9 @@ class TestStream:
         phases = [d["phase"] for e, d in evs if e == "phase"]
         assert phases == ["reading", "thinking", "writing"]
         assert "".join(d["text"] for e, d in evs if e == "delta") == "Hello world"
-        assert "let me think" not in json.dumps(evs), "reasoning is never sent"
+        # SPEC §13.3: reasoning comes as thinking events, never as part of the answer
+        assert [d["text"] for e, d in evs if e == "thinking"] == ["let me think"]
+        assert "let me think" not in "".join(d["text"] for e, d in evs if e == "delta")
         assert names[-1] == "done"
         done = evs[-1][1]
         assert done["tokens"] == 3 and done["context"]["used"] == 43 and done["context"]["max"] == 32768

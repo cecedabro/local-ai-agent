@@ -23,6 +23,8 @@ class FakeGateway:
         self.summary = "SUMMARY OF EARLIER MESSAGES"
         self.busy_left = 0
         self.search_results: list[dict] = []
+        self.plan = '[{"source": "pubmed", "query": "apixaban renal"}]'   # EvidenceHunt's planning call (SPEC §13.2)
+        self.pubmed: list[dict] = []          # fake PubMed: [{"pmid", "title", "abstract", "journal", "year"}]
         self._lock = threading.Lock()
         gw = self
 
@@ -31,6 +33,26 @@ class FakeGateway:
                 pass
 
             def do_GET(self) -> None:
+                if self.path.startswith("/esearch.fcgi") or self.path.startswith("/efetch.fcgi"):
+                    with gw._lock:
+                        gw.requests.append({"path": self.path, "body": None, "headers": dict(self.headers)})
+                    if self.path.startswith("/esearch"):
+                        body = json.dumps({"esearchresult": {"idlist": [a["pmid"] for a in gw.pubmed]}}).encode()
+                        ctype = "application/json"
+                    else:
+                        arts = "".join(
+                            f"<PubmedArticle><MedlineCitation><PMID>{a['pmid']}</PMID><Article><Journal><Title>{a.get('journal', '')}</Title>"
+                            f"<JournalIssue><PubDate><Year>{a.get('year', '')}</Year></PubDate></JournalIssue></Journal>"
+                            f"<ArticleTitle>{a['title']}</ArticleTitle><Abstract><AbstractText>{a['abstract']}</AbstractText></Abstract>"
+                            f"</Article></MedlineCitation></PubmedArticle>" for a in gw.pubmed)
+                        body = f"<?xml version='1.0'?><PubmedArticleSet>{arts}</PubmedArticleSet>".encode()
+                        ctype = "text/xml"
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if self.path.startswith("/search"):
                     with gw._lock:
                         gw.requests.append({"path": self.path, "body": None, "headers": dict(self.headers)})
@@ -77,7 +99,9 @@ class FakeGateway:
                     self.wfile.write(b'{"error":"boom"}')
                     return
                 if not body.get("stream"):
-                    out = json.dumps({"choices": [{"message": {"role": "assistant", "content": gw.summary}}],
+                    first = ((body.get("messages") or [{}])[0].get("content") or "")
+                    reply = gw.plan if first.startswith("You plan literature searches") else gw.summary
+                    out = json.dumps({"choices": [{"message": {"role": "assistant", "content": reply}}],
                                       "usage": {"prompt_tokens": 100, "completion_tokens": 20}}).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")

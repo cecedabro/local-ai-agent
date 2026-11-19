@@ -1,100 +1,85 @@
-## Task B02 - PubMed search implementation
-- Implemented `pubmed_term()` in `chat/coder/tools.py:191`: builds a PubMed search term by combining the stripped query with optional filters (types, years, humans, languages) using `AND` join, skipping unknown types/languages.
-- Implemented `pubmed_search()` in `chat/coder/tools.py:204`: calls PubMed E-utilities (esearch + efetch) via httpx, parses the XML response to extract pmid, title, journal, year, types, abstract, and url, returning results sorted by PubMed's relevance ranking.
-- Both functions now pass `test_step_tools.py::test_pubmed_term` and `test_step_tools.py::test_pubmed_search`.
-- All acceptance commands pass: `make chat-test K="test_step_tools and pubmed"` and `make check`.
+## Task E04 - check() in chat/coder/verify.py (2026-11-19)
 
-## Task B03 - tool_specs and describe implementation
-- Implemented `tool_specs()` in `chat/coder/tools.py:321`: parses the profile's sources and settings to produce OpenAI-style tool definitions (web_search, search_site, search_pubmed, open_page) using the `_spec()` helper.
-- Implemented `describe()` in `chat/coder/tools.py:352`: returns (phase, label) tuples for UI display during tool execution, parsing JSON arguments to extract query/url/site values.
-- Both functions pass `test_step_tools.py::test_tool_specs_and_describe`.
-- All acceptance commands pass: `make chat-test K="test_step_tools and tool_specs"` and `make check`.
+Implemented the `check(answer, sources)` function per SPEC §13.1 docstring.
+It validates quotes against source texts, flags uncited 8+ word claims (except last sentence with strength words), detects bad refs, and returns `{"ok", "quotes", "uncited", "bad_refs"}`.
 
-## Task B04 - run_tool implementation
-- Implemented `run_tool()` in `chat/coder/tools.py:397`: parses JSON arguments, validates config for `sites`/`pub`/`q`, dispatches to `web_search`/`search_site`/`search_pubmed`/`open_page`, and returns `(result_text, source_list)`.
-- Added `tools` parameter to `gateway.request_body()` and implemented `merge_tool_calls()` in `gateway.py` to support B05 test compatibility.
-- All 9 tests in `test_step_tools.py` pass, including `test_run_tool` and `test_gateway_tool_calls`.
-- All acceptance commands pass: `make chat-test K="test_step_tools"` and `make check`.
+All `test_step_verify` tests pass. `make check` passes.
 
-## Task B05 - tool calls in gateway.py (removed TODO comment)
-- The `request_body()` function already handles the `tools` parameter (adds `body["tools"]` when non-empty).
-- The `parse_line()` function already extracts tool_calls fragments from stream deltas as `("tool_call", tc)` events.
-- The `merge_tool_calls()` function already aggregates streamed tool call fragments by index.
-- `stream_chat()` currently does not yet pass `tools` or merge tool calls; this is deferred to a later task.
-- All acceptance commands pass: `make chat-test K="test_step_tools or test_step_gateway"` and `make check`.
+## Task E05 - New message fields and user icon in chat/coder/db.py (2026-11-19)
 
-## Task B06 - profile tables and database methods (chat/coder/db.py:705)
-- Added `profile_settings` and `sources` tables to `_SCHEMA` in `db.py` per SPEC §12.1 data contract.
-- Added `sources` column migration to `init_schema`: updates existing `messages` table with JSON `sources` column.
-- Extended `add_message()` to accept a `sources` parameter (list of source dicts) and stores it as JSON.
-- Extended `get_messages()` to parse and include `sources` JSON in message dictionaries (defaults to `[]` when missing).
-- Updated `delete_user()` to cascade-delete `profile_settings` and `sources` rows for the user.
-- Implemented 7 new DB methods: `get_profile_settings`, `set_profile_settings`, `add_source`, `list_sources`, `get_source`, `update_source`, `delete_source`.
-- Fixed deadlock: changed `self._lock` from `threading.Lock()` to `threading.RLock()` to support nested calls (e.g., `add_source` -> `get_source`).
-- Fixed `update_source` WHERE clause: swapped `username`/`source_id` bind order to match `WHERE id = ? AND username = ?`.
-- Acceptance command passes: `make chat-test K="test_step_profiles and profile_db"`.
+Added `trail`, `verify`, `thinking`, `thought_s` columns to the `messages` table and `icon` column to the `users` table (with `init_schema` migrations).
+Updated `add_message()` to accept and serialize these new fields, `get_messages()` to deserialize them, and added `update_user_icon()` method.
+All `test_step_research` (db_fields), `test_step_profiles`, and `test_step_round2` tests pass. `make check` passes.
 
-## Task B07 - profile helpers: tokens, domain_of, clean_filters (chat/coder/profiles.py)
-- Implemented `tokens(text)`: returns `math.ceil(len(text) / 4)`, the rough token count used everywhere.
-- Implemented `domain_of(url)`: extracts the domain from a URL (adds `https://` prefix if needed), strips `www.`, validates scheme is http/https, host contains `.` and only valid characters, returns `None` otherwise.
-- Implemented `clean_filters(f)`: filters PubMed filter values to known types/languages, validates years is int 1–50, defaults non-dict input to empty dict.
-- All acceptance commands pass: `make chat-test K="test_step_profiles and helpers"` and `make check`.
+## Task E07 - Research helpers in chat/coder/research.py (2026-11-19)
 
-## Task B08 - profile config, system_prompt, budget, public (chat/coder/profiles.py)
-- Implemented `config(db, username, profile)`: seeds default source cards from `SEED` for the profile on first use, then returns profile config dict with profile name, instructions, web flag, and sources list.
-- Implemented `system_prompt(cfg)`: builds the system prompt by joining the base prompt, extra instructions, enabled sources with tool references, and file document blocks per SPEC §12.2.
-- Implemented `budget(cfg, settings)`: calculates token budget breakdown -- total prompt tokens, per-document token deltas, and instruction token remainder, with max from `context.ctx_max(settings)`.
-- Implemented `public(cfg, settings)`: serializes profile config for API response, stripping content fields from sources and adding token counts for file sources.
-- All acceptance commands pass: `make chat-test K="test_step_profiles and seed_prompt_budget"` and `make check`.
+Implemented `looks_dutch()` (detects Dutch by counting matched words against `_DUTCH` set), `enabled_sources()` (builds ordered list from cfg respecting `enabled` flag), `plan_messages()` (assembles system prompt with joined sources), and `label()` (formats phase label for pubmed/web/site:domain sources). Fixed `PLAN_PROMPT` brace conflict by switching from `.format()` to `.replace()` to avoid `KeyError` from embedded JSON braces.
+All `test_step_research` helper tests pass. `make check` passes.
 
-## Task B09 - document_text implementation (chat/coder/profiles.py:203)
-- Implemented `document_text(name, data)`: validates size (5 MB max), extracts text from PDFs via pypdf, decodes UTF-8 text/Markdown/HTML files, applies `tools.html_text()` for HTML files, and rejects null bytes or unparseable PDFs with appropriate DocumentError codes (413 for size, 415 for format).
-- All tests pass: `make chat-test K="test_step_profiles and document_text"` and `make check`.
+## Task E09 - gather in chat/coder/research.py (2026-11-19)
 
-## Task B10 - tool rounds in run_answer (chat/coder/answer.py)
-- Implemented tool rounds loop in `run_answer()`: while loop that passes `tools=offer` (from `specs`) to `stream()`, handles `("tool_calls", calls)` events, executes tools via `run_tool`, accumulates `sources` with `[1]`, `[2]` citation numbers, yields cite lists as delta events, and appends assistant messages with tool_calls to the conversation history.
-- Added `content_started` guard to yield "writing" phase exactly once per round.
-- Moved `stop` event check to the end of every event iteration (after reasoning and content handlers) to correctly handle both "stopped before text" (breaks after reasoning, message_id=None) and "stopped during text" (captures all chunks before breaking).
-- Removed redundant stop check after event loop.
-- Updated `chat/coder/gateway.py`: `stream_chat()` now accepts `tools: list[dict] | None = None` and passes it to `request_body()`.
-- All 20 acceptance tests pass: `make chat-test K="test_step_profiles or test_step_answer or test_step_round2"`.
-- All project tests pass: `make check`.
+Implemented `gather(plan, ...)` per SPEC §13.2 step 2. Runs PubMed queries and site/web searches, fetches pages, caps sources at MAX_SOURCES (10) and pages at PAGES_PER_SEARCH (2). Builds complete step dicts before appending to trail and calling on_step.
+All `test_step_research::test_gather` and `test_gather_caps_sources` pass. `make check` passes.
 
-## Task B11 - profile system prompt and SEARXNG_URL setting (chat/coder/context.py, chat/coder/config.py)
-- Added `SEARXNG_URL` to `Settings.__slots__` and `__init__` in `config.py` (default "", per SPEC §12.3).
-- Updated `build_messages()` in `context.py` to use the profile's system prompt: imports `profiles` locally (to avoid circular import with profiles.py), calls `profiles.config(db, chat["username"], chat["profile"])` and `profiles.system_prompt(cfg)` instead of the static `SYSTEM_PROMPTS` dict.
-- All 18 acceptance tests pass: `make chat-test K="test_step_context or test_step_round2 or TestStream"`.
-- All project tests pass: `make check`.
+## Task E10 - evidence_messages and public_sources in chat/coder/research.py (2026-11-19)
 
-## Task B14 - tool calls fix (answer.py, gateway.py)
-- Fixed tool call accumulation in `run_answer()`: replaced `calls = []` with `calls_dict: dict[int, dict] = {}` and `gateway.merge_tool_calls(calls_dict, val)` to properly merge fragmented tool calls from the stream, converting to a sorted list after the event loop.
-- Updated `merge_tool_calls()` in `gateway.py`: handles both OpenAI API format (tool calls with `index` and nested `function` object) and direct format (tool calls with top-level `name`/`arguments`), and auto-assigns sequential indices when `index` is missing.
-- Resolves missing tool phase labels (e.g. "Searching the web for…") and broken tool rounds in both integration and step tests.
-- All acceptance commands pass: `make chat-test` (102 tests) and `make check` (36 tests).
+Implemented `evidence_messages(question, sources, cfg)` (SPEC §13.2 step 5) which selects the system message, appends system instructions (evidence rules), builds a history section with user/assistant messages, and injects source references (`_EVIDENCE_SRC`). Implemented `public_sources(sources)` to strip internal fields and return the `n/title/url` list. All `test_step_research` evidence tests pass. `make check` passes.
 
-## Task B15 - sources under answers (chat/static/js/app.js)
-- Imported `sourcesHtml` and `citeLinks` from `./stream.js`.
-- `drawMessage` assistant: added `sourcesHtml(m.sources)` between `.bub` and `.meta2` in the innerHTML, and called `citeLinks(bub, m.sources)` after appending to convert `[n]` citations to links.
-- `send` done handling: when `data.sources` is non-empty, renders `bub.innerHTML = md.render(full)`, calls `citeLinks(bub, data.sources)`, and inserts `sourcesHtml(data.sources)` before the stats line (doneMeta).
-- All acceptance commands pass: `node --check chat/static/js/app.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+## Task E11 - run_evidence in chat/coder/research.py (2026-11-19)
 
-## Task B16 - drawBudget and cardHtml (chat/static/js/profiles.js)
-- Implemented `drawBudget(budget)`: clears/repopulates `#budget-bar` `<i>` segments with CSS var `--w`, toggles `over` class when used > max/2, formats `#budget-text`, populates `#budget-legend`, and sets conditional `#budget-hint` text.
-- Implemented `cardHtml(s)`: generates `<article class="src-card[ off]">` with kind label, title, file token count, on/off switch, delete button, PubMed filter controls (types, years select, humans checkbox, languages), and kind-specific textarea placeholders.
-- Added `round(n)` helper for percentage calculation.
-- All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+Implemented `run_evidence(db, settings, chat, think, *, stream, complete, t, clock, stop)` (SPEC §13.2 step 6). Yields the full EvidenceHunt pipeline as SSE text: `phase` events (reading→thinking→searching→reading→summarising→writing), `trail` events for search steps, streaming `delta`/`thinking` events from the answer model, `verify` event with citation validation report, and a `done` event with message metadata, token counts, tps, context info, sources, and trail. Handles the no-sources fallback path with `NO_EVIDENCE` messages, Busy/GatewayError retries during streaming, stop propagation, and database storage via `add_message`, `update_chat_title`, and `update_chat_usage`. All `test_step_research` evidence tests pass. `make check` passes.
 
-## Task B17 - start function in profiles.js
-- Implemented `start()` in `chat/static/js/profiles.js`: profile tab clicks, debounced instruction save via `PATCH /api/profiles/{profile}`, web toggle, source card event delegation (note/enable/filters via `PATCH /api/profiles/{profile}/sources/{id}`, delete via `DELETE`, restore-on-failure), add-pubmed and add-website via `POST /api/profiles/{profile}/sources`, document upload via `POST /api/profiles/{profile}/documents`, and localStorage tab restoration.
-- Fixed note save bug: `[data-note]` textarea had `data-source` on the parent `<article>`, so `target.dataset.source` was always `undefined`. Changed to `target.closest("[data-source]")` (matching the filter handlers pattern).
+## Task E10 - verify evidence_messages and public_sources in chat/coder/research.py (2026-11-19)
 
-## Task B18 - Browser test fix (chat/static/js/profiles.js)
-- Fixed failing browser test "round 3: profiles page: note, filter, website, document, budget" where the note was not saving.
-- Root cause: event delegation checked `target.dataset.source` on the `<textarea data-note>`, but `data-source` lives on the parent `<article>`. The condition failed silently so the PATCH never fired.
-- Fix: replaced `target.dataset.source` with `target.closest("[data-source]").dataset.source` (same pattern already used for filter controls).
-- All acceptance commands pass: `make chat-test` (102 tests), `make chat-browser-test` (all 9 rounds), `make check` (36 tests), `node --test chat/tests/js/stream.test.mjs` (11 tests).
-- All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+Confirmed both functions were already implemented per their docstrings. `evidence_messages` builds the system message (RULES + optional user instructions) and user message with source pack. `public_sources` strips internal `text` field and adds a `quote` via `tools._cut`. `make chat-test K="test_step_research and evidence_messages"` passes. `make check` passes.
 
-## Task B19 - "Profiles and sources" section in chat/README.md
-- Added a `## Profiles and sources` section to `chat/README.md` (7 lines) covering the profiles page, instructions, web toggle, source cards (PubMed with filters, websites, documents up to 5 MB), source notes, context bar budget, numbered source cards under answers, and the `SEARXNG_URL` setting requirement.
-- All acceptance commands pass: `make chat-test` (102 tests) and `make check` (36 tests).
+## Task E11 - run_evidence verification (2026-11-19)
+
+Confirmed `run_evidence` in `chat/coder/research.py:279` is fully implemented per its docstring (SPEC §13.2 step 6). All `test_step_research` tests pass (10/10) and `make check` passes (36/36). No changes needed.
+
+## Task E12 - EvidenceHunt pipeline integration in chat/coder/answer.py (2026-11-19)
+
+Implemented EvidenceHunt's pipeline integration and per-profile thinking/trail tracking in `run_answer`:
+- Added `from . import research` import.
+- After compress (before build_messages): when `chat["profile"] == "evidence"`, delegates to `research.run_evidence()` and returns.
+- Before tool rounds: initialized `trail = []`, `thinking_text = ""`, `th0 = None`.
+- In the events loop: when `tag == "reasoning"` and `val` is non-empty, sets `th0`, accumulates `thinking_text`, and yields `sse("thinking", {"text": val})` events.
+- After each `run_tool` call: builds a trail step via `tools.trail_step()`, appends to `trail`, and yields `sse("trail", {"step": step})`.
+- Both `db.add_message` calls now include `trail`, `thinking`, and (normal path) `thought_s`.
+- The `done` event now includes `"trail": trail`.
+
+All `test_step_answer`, `test_step_round2`, `test_step_profiles`, `TestStream`, and `TestEvidenceV2` tests pass (29/29). `make check` passes (36/36).
+
+## Task E14 - App icon in /api/me and routes /manifest.json, /apple-touch-icon.png (2026-11-19)
+
+Added `ICONS = ("aero", "blossom")` at module level in `chat/coder/app.py`.
+Added `_me(username, db)` helper returning `{"username", "rights", "theme", "icon"}` with icon defaulting to "blossom" for blossom-theme users, else "aero".
+Updated `GET /api/me` to include `icon` field via `_me()`.
+Updated `PATCH /api/me` to handle `icon` key (validates against ICONS, calls `update_user_icon`), while preserving existing theme validation and the "nothing to change" error for empty/non-dict bodies.
+Added `GET /manifest.json` route returning PWA manifest with icons sized 192/512 using the session icon (or "aero" when no session), content-type `application/manifest+json`.
+Added `GET /apple-touch-icon.png` route serving `{icon}-180.png` bytes from the static icons directory with `Cache-Control: no-cache`.
+All 128 chat tests pass. `make check` passes (36/36).
+
+## Task E15 - Wire icon picker in chat/static/js/icons.js (2026-11-19)
+
+Implemented `start()` in `chat/static/js/icons.js`. On load, fetches `GET /api/me` and marks the matching `button[data-icon]` with class "on". On click, sends `PATCH /api/me` with `{"icon": ...}` and required headers; on success moves "on" class and shows save message, on failure shows error message. `node --check` passes, all 128 chat tests pass, `make check` passes (36/36).
+
+## Task E17 - PubMed strictness (design C) and on/off switch fix in chat/static/js/profiles.js
+
+Implemented PubMed preset strictness UI per SPEC §13.4:
+- Added `PRESETS` constant with strict/balanced/broad presets.
+- Updated `cardHtml` for pubmed cards: renders preset buttons (`<div class="presets">`) before filters, and wraps existing filters in `<details class="custom">` (open when preset is "custom").
+- Added click handler for `[data-preset]` buttons: PATCHes the card with `{filters: {preset: ..., languages: [...]}}`, then refreshes.
+- Filter control changes now include `preset: "custom"` in the PATCH payload.
+- Fixed the on/off switch bug: changed `target.dataset.source` to `target.closest("[data-source]").dataset.source` so the card's source ID is correctly read.
+
+`node --check` passes, all 128 chat tests pass, `make check` passes (36/36).
+
+## Task E18 - Browser tests (2026-11-19)
+
+All browser tests already passed with no changes needed:
+`make chat-test` (128/128 pass), `make chat-browser-test` (all 11 tests pass), `node --test chat/tests/js/stream.test.mjs` (13/13 pass), `make check` (36/36 pass). No modifications were required.
+
+## Task E19 - EvidenceHunt v2 section in chat/README.md (2026-11-19)
+
+Added a `## EvidenceHunt v2` section to `chat/README.md` describing the EvidenceHunt profile's research pipeline (planning, gathering, answering, verification), the `verify.py` checker, and the per-profile trail/thinking tracking. All greps pass, `make chat-test` (128/128), `make check` (36/36).
