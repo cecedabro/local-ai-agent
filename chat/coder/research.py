@@ -84,7 +84,36 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
       nothing kept and "pubmed" in allowed and question.strip() -> [{"source": "pubmed", "query": question.strip()[:200]}]
     Tests: test_step_research.py::test_parse_plan
     """
-    raise NotImplementedError
+    allowed = enabled_sources(cfg)
+    t = text.strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
+    if fence:
+        t = fence.group(1)
+    else:
+        first = t.find("[")
+        last = t.rfind("]")
+        if first != -1 and last != -1:
+            t = t[first:last + 1]
+        else:
+            t = ""
+    try:
+        items = json.loads(t)
+    except ValueError:
+        items = []
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source", "")).strip().lower()
+        query = str(item.get("query", "")).strip()[:200]
+        if source not in allowed or not query:
+            continue
+        result.append({"source": source, "query": query})
+        if len(result) >= MAX_SEARCHES:
+            break
+    if not result and "pubmed" in allowed and question.strip():
+        result.append({"source": "pubmed", "query": question.strip()[:200]})
+    return result
 
 
 def label(step: dict) -> str:
