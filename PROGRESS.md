@@ -84,3 +84,8 @@
 - `make chat-browser-test` — all 14 browser tests passed. No code changes needed.
 - `make chat-test` — 153/153 passed. `make check` — 36/36 passed.
 - All acceptance commands pass cleanly. No blocking issues remain.
+
+## Task F20 - "Clear Source, rounds 2 and 3" section
+- **File**: `chat/README.md` — added "## Clear Source, rounds 2 and 3" section after "Clear Source v2".
+- **Change**: Documented round 2 (MeSH terms, Dutch guideline defaults, study-type ordering) and round 3 (research flow with `read_one`, `parse_quotes`, `verify.find_quote`, follow-up rounds, `verify.check`).
+- Both `grep` checks pass, `make chat-test` (153/153), `make check` (36/36).

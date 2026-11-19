@@ -109,3 +109,14 @@ indicators per quote.
 For every profile, the app now tracks thinking (reasoning chunks) and a trail of research
 steps. Thinking appears as a collapsible "Thought for N s" block; the trail shows searches,
 reads, and tool calls with links to the original sources.
+
+## Clear Source, rounds 2 and 3
+
+Round 2 adds MeSH terms to PubMed searches (validated against PubMed's MeSH database), Dutch
+guideline default website cards (richtlijnendatabase.nl, farmacotherapeutischkompas.nl, rivm.nl,
+and others), and study-type ordering: guidelines first, then meta-analyses, RCTs, and other
+evidence. Round 3 introduces the research flow — the app plans searches, gathers sources, then
+calls `read_one` on each candidate to extract verified, word-for-word quotes via `parse_quotes`
+and `verify.find_quote`. If fewer than MIN_USED sources survive, a follow-up round tries new
+queries. The answer is written from passages only, checked against full texts by `verify.check`,
+and sources are ordered by study strength.
