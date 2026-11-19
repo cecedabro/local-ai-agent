@@ -154,9 +154,9 @@ class FakeTools:
         if info is not None:
             info.update({"term": f"(({mesh}) OR ({q}))", "translation": "TRANSLATED", "count": 9})
         return [{"pmid": "1", "title": "A review", "journal": "BMJ", "year": "2021", "type": "Systematic review",
-                 "abstract": "Abs 1", "url": "https://pubmed.ncbi.nlm.nih.gov/1/"},
+                 "abstract": "Abs 1 reports fewer bleeds overall.", "url": "https://pubmed.ncbi.nlm.nih.gov/1/"},
                 {"pmid": "2", "title": "A trial", "journal": "", "year": "2020", "type": None,
-                 "abstract": "Abs 2", "url": "https://pubmed.ncbi.nlm.nih.gov/2/"}]
+                 "abstract": "Abs 2 reports no difference at all.", "url": "https://pubmed.ncbi.nlm.nih.gov/2/"}]
 
     async def web_search(self, client, searxng_url, q, site=None):
         self.calls.append(("web", q, site))
@@ -165,6 +165,9 @@ class FakeTools:
 
     async def fetch_page(self, client, url, resolve=None, allowed=None):
         return {"title": "Page " + url.rsplit("/", 1)[-1], "url": url, "text": "Text of " + url}
+
+    def pmc_id(self, url):
+        return None
 
 
 def test_gather_mesh_types_and_sites():
@@ -202,7 +205,7 @@ def test_order():
 def test_public_sources_type():
     pub = research.public_sources([{"n": 1, "title": "T", "url": "u", "kind": "pubmed", "meta": "RCT · BMJ", "text": "abc",
                                     "type": "RCT", "site": None}])[0]
-    assert pub == {"n": 1, "title": "T", "url": "u", "kind": "pubmed", "meta": "RCT · BMJ", "type": "RCT", "quote": "abc"}
+    assert pub == {"n": 1, "title": "T", "url": "u", "kind": "pubmed", "meta": "RCT · BMJ", "type": "RCT", "site": None, "quote": "abc"}
 
 
 class S:
@@ -225,6 +228,8 @@ def test_run_evidence_sites_first_and_ordered(tmp_path):
     told = {}
 
     async def complete(settings, messages):
+        if messages[0]["content"].startswith("You read one source"):           # read: quote its first five words
+            return json.dumps({"quotes": [" ".join(messages[1]["content"].split("\n\n", 2)[2].split()[:5])]})
         return json.dumps([{"source": "pubmed", "query": "apixaban", "mesh": ["Renal Insufficiency, Chronic"]},
                            {"source": "site:farmacotherapeutischkompas.nl", "query": "apixaban nierfunctie"}])
 
@@ -245,7 +250,7 @@ def test_run_evidence_sites_first_and_ordered(tmp_path):
 
 
 def test_rules_and_plan_prompt():
-    assert "## " in research.RULES and "Kort antwoord" in research.RULES and "ONLY from the numbered sources" in research.RULES
+    assert "## " in research.RULES and "Kort antwoord" in research.RULES and "ONLY from the passages of the numbered sources" in research.RULES
     assert research.PLAN_PROMPT.startswith("You plan literature searches") and '"mesh"' in research.PLAN_PROMPT
 
 

@@ -513,3 +513,112 @@ a.cite{cursor:pointer;margin:0 1px}
 .src .stype{display:inline-block;font-size:10.5px;font-weight:700;line-height:1;padding:2px 6px;margin-right:6px;border-radius:999px;
   color:#fff;background:linear-gradient(180deg,color-mix(in srgb,var(--eh) 80%,#fff),var(--eh));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5);vertical-align:1px}
+
+/* ---------------------------------------------------------------- §15.6 Clear Source v3 (design round 13b,
+   docs/design/chat/2026-11-20-r13-clear-source.html): readable numbers, the trail in four stages with the drop,
+   the opening summary, ✓ right after the quote, sources as grouped lists. Later rules win. */
+.cite,a.cite,.ai .src .n{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;margin:0 1px;border-radius:99px;
+  vertical-align:1px;font-size:11px;font-weight:700;line-height:1;color:var(--title-a);text-decoration:none;text-shadow:none;
+  background:#fff;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+:root[data-theme=dark] .cite,:root[data-theme=dark] a.cite,:root[data-theme=dark] .ai .src .n{background:#12304a;color:#cfe8ff}
+.q-mark,.q-ok .q-mark,.q-bad>.q-mark{display:inline;width:auto;height:auto;margin-left:5px;border-radius:0;background:none;
+  font-size:12px;font-weight:700;color:var(--ok);font-style:normal;white-space:nowrap}
+.q-bad .q-mark{color:var(--bad);font-weight:600}
+.ai .bub blockquote{border-radius:6px 18px 18px 6px;background:linear-gradient(90deg,var(--hi-soft),transparent);font-style:italic}
+.ai .bub blockquote.q-ok{border-left-color:var(--accent)}
+.ai .bub .short{margin:0 0 10px;padding:12px 16px;border-radius:18px;background:var(--bubble);border:1px solid var(--stroke);
+  box-shadow:inset 0 1px 0 var(--hi)}
+.ai .bub .short>p{margin:4px 0 0}
+.ai .bub .short .lbl{font-size:12.5px;font-weight:700;color:var(--title-a)}
+.ai .bub .short .lbl span{font-weight:400;color:var(--muted)}
+.ai .bub h2,.ai .bub h3{font-weight:700;background:linear-gradient(90deg,var(--title-a),var(--title-b));-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+
+/* the staged trail */
+.trail.staged>summary{padding:5px 14px 5px 10px;background:var(--btn);border:1px solid var(--stroke);color:var(--ink);font-weight:600;
+  box-shadow:inset 0 1px 0 var(--hi),0 2px 8px rgba(0,0,0,.05)}
+.trail .stages{margin:10px 0 4px;padding:14px 16px 10px;list-style:none;display:block;border-radius:22px;background:var(--glass);
+  backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);border:1px solid var(--stroke);
+  box-shadow:var(--shadow),inset 0 1px 0 var(--hi)}
+.trail .stage{display:grid;grid-template-columns:28px minmax(0,1fr);gap:2px 12px;position:relative;padding-bottom:14px}
+.trail .stage:last-child{padding-bottom:2px}
+.trail .stage::before{content:"";position:absolute;left:13px;top:32px;bottom:4px;width:2px;border-radius:2px;background:linear-gradient(var(--line),transparent)}
+.trail .stage:last-child::before{display:none}
+.trail .stage>.orb{--s:28px}
+.trail .stage h5{margin:0;font-size:13.5px;font-weight:650;line-height:28px;color:var(--ink)}
+.trail .stage h5 span{font-weight:400;color:var(--muted);margin-left:6px}
+.trail .stage-body{grid-column:2;font-size:13px;color:var(--muted)}
+.trail .stage-body p{margin:0 0 4px}
+.trail .terms{display:flex;flex-wrap:wrap;line-height:1.9}
+.trail .terms .t{color:var(--ink);white-space:nowrap}
+.trail .terms .t+.t::before{content:"·";margin:0 7px;color:var(--muted)}
+.trail .terms .t small{font-size:10.5px;color:var(--muted);margin-left:3px}
+.trail .rows{margin:4px 0 2px;padding:0;list-style:none;display:block;border-radius:14px;background:var(--chip);border:1px solid var(--stroke-soft);overflow:hidden}
+.trail .rows .step{display:grid;grid-template-columns:minmax(70px,130px) minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:6px 12px;line-height:1.4}
+.trail .rows .step::before{content:none}
+.trail .rows .step+.step{border-top:1px solid var(--line)}
+.trail .rows .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trail .rows .what{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;text-decoration:none}
+.trail .rows a.what:hover{color:var(--link)}
+.trail .rows .n{color:var(--link);font-weight:600;white-space:nowrap;text-decoration:none}
+.trail .rows .n.none{color:var(--muted);font-weight:400}
+.trail .rows .wider{padding-left:26px;background:linear-gradient(90deg,var(--hi-soft),transparent)}
+.trail .rows .wider .where::before{content:"↳ "}
+.trail .rows .res{white-space:nowrap;color:var(--muted)}
+.trail .rows .used .res{color:var(--ink)}.trail .rows .res b{color:var(--link)}
+.trail .rows .mesh{margin-left:6px}
+.trail .rows .mesh i{font-style:normal;font-size:11px;color:var(--muted);background:none;border:0;padding:0}
+.trail .rows .mesh i+i::before{content:", "}
+.trail .rows .mesh::before{content:"MeSH ";font-size:10px;font-weight:700;color:var(--muted)}
+@media (max-width:560px){.trail .rows .step{grid-template-columns:minmax(0,1fr) auto}.trail .rows .where{display:none}}
+
+/* sources under an answer: grouped lists */
+.ai .sources{display:block;margin-top:16px}
+.ai .src-group+.src-group{margin-top:12px}
+.ai .src-group h4{margin:0 0 6px 2px;font-size:14px;font-weight:700;background:linear-gradient(90deg,var(--title-a),var(--title-b));
+  -webkit-background-clip:text;background-clip:text;color:transparent;width:max-content}
+.ai .src-list{border-radius:16px;background:var(--chip);border:1px solid var(--stroke-soft);overflow:hidden}
+.ai .src-list details.src{border:0;border-radius:0;background:none;box-shadow:none}
+.ai .src-list details.src+details.src{border-top:1px solid var(--line)}
+.ai .src-list details.src>summary{padding:10px 12px}
+.ai .src-list details.src.flash{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.ai .src small{white-space:normal}
+.ai .src .stype{font-weight:600;color:var(--title-a)}
+.ai .src .stype::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--title-b)}
+.ai .src .stype[data-kind=guide]::before{background:#3fae6a}.ai .src .stype[data-kind=rct]::before{background:#a78bfa}
+.ai .src .stype[data-kind=study]::before{background:#5fb8ff}
+
+/* §15.6 the sources page: a segmented profile switch, sources grouped in glass lists, one row per source */
+.pf-tabs{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:var(--glass);border:1px solid var(--stroke);width:max-content}
+.pf-tabs .pf-tab{border:0;box-shadow:none;background:none;padding:8px 18px;border-radius:999px;min-width:0;min-height:0;height:auto;aspect-ratio:auto}
+.pf-sources{display:block}
+.pf-group+.pf-group{margin-top:18px}
+.pf-group>header{display:flex;align-items:baseline;gap:8px;margin:0 4px 7px}
+.pf-group>header .title{font-size:15px;font-weight:700;background:linear-gradient(90deg,var(--title-a),var(--title-b));-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+.pf-group>header small{color:var(--muted);font-size:12.5px}
+.pf-list{border-radius:16px;background:var(--chip);border:1px solid var(--stroke-soft);overflow:hidden}
+.pf-list .src-card{padding:0;border:0;border-radius:0;background:none}
+.pf-list .src-card+.src-card{border-top:1px solid var(--line)}
+.pf-list .src-card>header{display:grid;grid-template-columns:32px minmax(0,1fr) auto auto;gap:12px;align-items:center;margin:0;padding:11px 14px}
+.pf-list .src-card .bubble{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--title-a);
+  background:radial-gradient(circle at 50% 75%,#fff 0 20%,transparent 60%),var(--btn);border:1px solid var(--stroke);
+  box-shadow:inset 0 1px 0 var(--hi),inset 0 -3px 6px rgba(0,0,0,.05),0 2px 6px rgba(0,0,0,.07)}
+.pf-list .src-card .who{min-width:0}
+.pf-list .src-card .who b{display:block;font-size:14.5px;font-weight:650;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-list .src-card .who small{display:block;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-list .src-card>header .switch{margin:0}
+.pf-list .src-card>header [data-delete]{font-size:12.5px}
+.pf-list .src-card.off .bubble,.pf-list .src-card.off .who{opacity:.45}
+.pf-list .src-card .more{padding:0 14px 12px 58px}
+.pf-list .src-card .more>summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--link);list-style:none;margin-bottom:6px}
+.pf-list .src-card .more>summary::-webkit-details-marker{display:none}
+.pf-list .src-card .more:not([open])>summary{margin-bottom:0}
+.pf-list .src-card .presets{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;border-radius:999px;background:var(--track);margin-bottom:8px}
+.pf-list .src-card .preset{padding:6px 12px;border:0;border-radius:999px;background:none;box-shadow:none;min-height:0;text-align:center}
+.pf-list .src-card .preset small{display:none}
+.pf-list .src-card .preset b{font-size:12.5px;font-weight:600}
+.pf-list .src-card .preset.on{color:#fff;background:var(--primary);box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+.pf-list .src-card .preset.on b{color:#fff}
+@media (max-width:560px){.pf-list .src-card .more{padding-left:14px}.pf-list .src-card>header{grid-template-columns:32px minmax(0,1fr) auto}
+  .pf-list .src-card>header [data-delete]{grid-column:2}}

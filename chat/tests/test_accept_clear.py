@@ -26,6 +26,8 @@ class TestClearSource:
         login(client)
         src = client.get("/api/profiles/evidence").json()["sources"]
         assert [s["kind"] for s in src][0] == "pubmed"
+        assert (src[0]["group"], src[0]["label"]) == ("research", "PubMed"), "every source has its group and name (§15.6)"
+        assert {s["label"]: s["group"] for s in src}["Farmacotherapeutisch Kompas"] == "medicines"
         assert [s["domain"] for s in src if s["kind"] == "website"] == [c["domain"] for c in profiles.SEED["evidence"][1:]]
 
     def test_add_defaults(self, client):
@@ -49,7 +51,7 @@ class TestClearSource:
                                      '> "apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin" [1]']}
         cid = new_chat(client, "evidence")
         evs = send(client, cid, "Is apixaban veilig bij nierfalen?")
-        step = [d["step"] for e, d in evs if e == "trail"][0]
+        step = [d["step"] for e, d in evs if e == "trail" and d["step"]["kind"] == "search"][0]
         assert step["mesh"] == ["Renal Insufficiency, Chronic"], "checked against MeSH; the made-up term is gone"
         assert "%22Renal+Insufficiency%2C+Chronic%22%5BMeSH+Terms%5D" in step["url"], "the link opens the exact search"
         searched = [r["path"] for r in pubmed.requests if r["path"].startswith("/esearch.fcgi?") and "db=pubmed" in r["path"]]

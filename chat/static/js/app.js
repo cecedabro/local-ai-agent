@@ -2,7 +2,7 @@
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
 import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions,
-  orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify } from "./stream.js";
+  orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify, animateTrail } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -316,7 +316,12 @@ async function send() {
     // E16: thinking, trail, and verify tracking
     const pre = aiDiv.querySelector(".pre");
     let thinking = "", th0 = null, thoughtSecs = null, report = null, steps = [];
-    const drawPre = (live) => { pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live); };
+    let trailAnim = { stop() {} };
+    const drawPre = (live) => {                     // §15.6: the current stage's drop moves while it researches
+      trailAnim.stop();
+      pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live);
+      trailAnim = live ? animateTrail(pre) : { stop() {} };
+    };
 
     // Clear #input, #file-chips and state.files
     $("#input").value = "";

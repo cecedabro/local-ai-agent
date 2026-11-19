@@ -493,3 +493,55 @@ The rules (§13.2 step 4) ask for a long, detailed answer in Markdown with `##` 
 then what the Dutch guidelines say, what the studies show, dosing and special groups (only when the sources
 cover them) and how strong the evidence is, each part built from verbatim quotes. The plan prompt asks for
 PubMed searches with MeSH headings and the 1–3 guideline sites that fit the question.
+
+## 15. Clear Source v3: the research flow
+
+The model is slow to trust but quick to read: Clear Source now reads every source on its own and keeps only what is
+quoted word for word. Four stages, the same four the drop shows (thinking, searching, reading, writing).
+
+### 15.1 Understand (thinking)
+The plan (§13.2 step 1) is an object `{"about": "<the question in one sentence>", "searches": [...]}` (the old list
+form still works). `parse_plan` reads both; `plan_about(text)` returns the about sentence (whitespace collapsed, ≤ 300
+characters, `""` when missing). The trail gets a step `{"kind": "plan", "about", "queries": [...], "mesh": [...]}`.
+
+### 15.2 Search (searching)
+- A PubMed search asks for `PUBMED_N` (8) articles. When it finds fewer than `MIN_FOUND` (3) and it used filters or
+  MeSH, it is tried once more without both; that trail step has `"broader": true`.
+- A website result on PubMed Central (`tools.pmc_id(url)`, e.g. `pmc.ncbi.nlm.nih.gov/articles/PMC123/`) is read
+  with `tools.pmc_text` (E-utilities `efetch db=pmc`: the abstract and body paragraphs) instead of the web page.
+- Every page the search opens is a trail step `{"kind": "open", "title", "url"}` (with `"error"` when it could not be
+  read). Up to `MAX_SOURCES` (20) candidates over all rounds.
+
+### 15.3 Bot checks
+`tools.looks_blocked(title, text)`: a "page" that is a bot check (reCAPTCHA, "Checking your browser", Cloudflare,
+NHG's "Beveiligingscontrole") makes `fetch_page` fail with "blocked by a bot check"; it never becomes a source.
+
+### 15.4 Read one by one (reading)
+Each new candidate is read on its own: `read_one(question, src, settings, complete)` sends `extract_messages` (the
+`EXTRACT_PROMPT`, the question, the source) and reads the reply with `parse_quotes` (`{"quotes": [...]}` or a list;
+strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4). A passage counts only when
+`verify.find_quote` finds it in the source. The trail step: `{"kind": "read", "n", "title", "url", "quotes": k,
+"status": "used" | "not relevant" | "error"}`. Used sources keep their `"passages"`.
+
+### 15.5 More rounds, writing and checking (writing)
+- `investigate(question, cfg, settings, complete, t, stop, out)` runs the stages and yields their events; fewer than
+  `MIN_USED` (3) useful sources after a round → one more round (`MAX_ROUNDS` = 2): `followup_messages` shows the model
+  the searches so far and asks for new ones; searches already done are skipped. `out["used"]` = the useful sources,
+  ordered (§14.2), max `MAX_USED` (10), numbered from 1; `out["trail"]` = every step.
+- The answer is written from the passages only (`evidence_messages` lists them under each source) and checked against
+  the full source texts. `public_sources` shows the first passage as the source's quote.
+- `verify.summary_sentences(answer)`: in an answer with headings, the sentences before the first heading and under a
+  summary heading (short answer, kort antwoord, summary, samenvatting, conclusion, strength, sterkte…) summarise the
+  quotes and are not listed as uncited.
+- Phases: `thinking` "Understanding the question…" → `searching` per search → `reading` "Reading i of k: <title>…"
+  → (`thinking` "Looking further with other words…" → …) → `writing` "Writing the answer from n sources…".
+
+### 15.6 The look (design round 13b)
+- The trail of a Clear Source answer shows the four stages, each with the drop (`stream.js trailHtml`); while it
+  researches, the current stage's drop moves (`animateTrail`). Searches and reads are rows; broader searches are
+  indented.
+- The opening summary sits in a box (`.short`); ✓ / ⚠ come right after the quote; numbers are plain and readable.
+- Sources under an answer are grouped lists: Guidelines, Studies, Other sources, each with its kind as a word.
+- The sources page groups the sources (`profiles.group_of`: guidelines, medicines, research, documents, websites)
+  with their names (`profiles.label_of`); each source is a row (a bubble with its letter, name, one line, switch);
+  its note and PubMed strictness open below it. Profile API sources carry `"group"` and `"label"`.

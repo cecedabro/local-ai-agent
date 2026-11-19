@@ -18,7 +18,17 @@ import httpx
 
 PUBMED = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 MAX_BYTES = 2_000_000          # a page larger than this is cut
-PAGE_CHARS = 6000              # text of one page handed to the model
+PAGE_CHARS = 8000              # text of one page handed to the model
+# Bot checks and consent walls instead of the page (SPEC §15.3): such a "page" is never a source.
+BOT_CHECK = re.compile(r"checking your browser|just a moment\.\.\.|verify (that )?you are (a )?human|are you a robot|"
+                       r"beveiligingscontrole|recaptcha|hcaptcha|attention required|access denied|"
+                       r"enable javascript and cookies|ddos protection", re.I)
+
+
+def looks_blocked(title: str, text: str) -> bool:
+    """True when a fetched page is a bot check rather than the page: the title matches BOT_CHECK, or the text is short
+    (under 1500 characters) and matches it."""
+    return bool(BOT_CHECK.search(title or "")) or (len(text or "") < 1500 and bool(BOT_CHECK.search(text or "")))
 ABSTRACT_CHARS = 1200
 UA = "Dewdrop/1.0 (private research assistant)"
 QUOTE_CHARS = 600              # the quote a source card shows (SPEC §12.4)
@@ -139,6 +149,8 @@ async def fetch_page(client: httpx.AsyncClient, url: str, resolve: Callable = so
             title, text = "", body.strip()
         else:
             title, text = html_text(body)
+        if looks_blocked(title, text):
+            raise ToolError("blocked by a bot check")
         return {"title": title or host, "url": url, "text": text[:PAGE_CHARS]}
     raise ToolError("too many redirects")
 
@@ -203,22 +215,14 @@ STUDY_TYPES = (
 
 
 def study_type(pub_types: list[str] | None) -> str | None:
-    r"""TODO (task F01). The study type label of a PubMed article from its publication types (SPEC §14.2).
-      types = the stripped strings of pub_types (None counts as [])
-      for (label, names) in STUDY_TYPES, in order: the first label for which a type equals one of its names wins;
-        for "Clinical trial" a type that starts with "Clinical Trial" also counts ("Clinical Trial, Phase III")
-      none -> None
-    Tests: test_step_clear.py::test_study_type
+    r"""The study type label of a PubMed article from its publication types (SPEC §14.2): the first label of
+    STUDY_TYPES with a matching type ("Clinical trial" also matches any type starting with "Clinical Trial"); none -> None.
     """
-    if pub_types is None:
-        return None
-    types = [t.strip() for t in pub_types]
+    types = [str(p).strip() for p in pub_types or []]
     for label, names in STUDY_TYPES:
-        for t in types:
-            if t in names:
+        for name in names:
+            if any(p == name or (label == "Clinical trial" and p.startswith(name)) for p in types):
                 return label
-            if label == "Clinical trial" and t.startswith("Clinical Trial"):
-                return "Clinical trial"
     return None
 
 
@@ -376,6 +380,32 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     order = {pid: i for i, pid in enumerate(ids)}
     results.sort(key=lambda x: order.get(x[0], 999999))
     return [r[1] for r in results]
+
+
+_PMC = re.compile(r"^https?://(?:pmc\.ncbi\.nlm\.nih\.gov|(?:www\.)?ncbi\.nlm\.nih\.gov/pmc)/articles/(PMC\d+)", re.I)
+
+
+def pmc_id(url: str) -> str | None:
+    r"""TODO (task F11). The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
+      m = _PMC.match(url or ""); return m.group(1).upper() when it matched, else None.
+    Tests: test_step_flow.py::test_pmc
+    """
+    raise NotImplementedError
+
+
+async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
+    r"""TODO (task F11). The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
+      digits = pmcid upper-cased without its "PMC"; r = GET PUBMED + "/efetch.fcgi" params {"db": "pmc", "id": digits,
+        "retmode": "xml"} (headers User-Agent UA, timeout 30); httpx.HTTPError -> ToolError(f"PubMed Central failed (<type name>)");
+        status != 200 -> ToolError(f"PubMed Central answered {status}"); ET.ParseError -> ToolError("PubMed Central failed (ParseError)")
+      art = root.find(".//article"); None -> ToolError("PubMed Central has no text for " + pmcid)
+      title = the itertext of art's .//article-title joined, whitespace collapsed, stripped ("" when missing)
+      text = every <p> inside art's <abstract> elements, then inside its <body> elements: each p's itertext joined, whitespace
+        collapsed (re.sub(r"\s+", " ", …)), stripped; the non-empty ones joined with " "; empty -> the same ToolError as above
+      return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/", "text": text[:PAGE_CHARS]}
+    Tests: test_step_flow.py::test_pmc
+    """
+    raise NotImplementedError
 
 
 # ------------------------------------------------------------------ the tools offered to the model

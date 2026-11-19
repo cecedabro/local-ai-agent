@@ -18,7 +18,7 @@ class TestProfileApi:
         assert p["profile"] == "evidence" and p["name"] == "Clear Source" and p["web"] is True and p["instructions"] == ""
         assert [(s["kind"], s["title"]) for s in p["sources"]] == [("pubmed", "PubMed")] + [("website", c["title"]) for c in profiles.SEED["evidence"][1:]]
         assert "rivm.nl" in [s["domain"] for s in p["sources"]]
-        assert set(p["sources"][0]) == {"id", "kind", "title", "domain", "note", "filters", "enabled", "created", "tokens"}
+        assert set(p["sources"][0]) == {"id", "kind", "title", "domain", "note", "filters", "enabled", "created", "tokens", "group", "label"}
         assert p["budget"]["max"] == 32768 and 0 < p["budget"]["used"] < 2000
         assert client.get("/api/profiles/general").json()["sources"] == []
         assert client.get("/api/profiles/nope").status_code == 404

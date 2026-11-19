@@ -41,7 +41,7 @@ async function main() {
   chrome = spawn(CHROME, ["--headless=new", "--no-sandbox", "--disable-gpu", `--remote-debugging-port=${dport}`,
     `--user-data-dir=${profile}`, "about:blank"], { stdio: "ignore" });
   const target = await waitFor(async () => (await (await fetch(`http://127.0.0.1:${dport}/json`)).json())
-    .find((t) => t.type === "page"), 20000, "Chromium");
+    .find((t) => t.type === "page"), 60000, "Chromium");
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   let id = 0; const pend = {}; const errors = [];
@@ -214,7 +214,10 @@ async function main() {
     await waitFor(() => ev(`!!${last(".trail .step.search")}`), 15000, "a live trail step while researching");
     await idle();
     const sum = await ev(`${last(".trail summary")}?.textContent||''`);
-    if (!/Searched 1 time/.test(sum)) throw new Error("trail summary: " + sum);
+    if (!/^Researched · \d+ search/.test(sum)) throw new Error("trail summary: " + sum);
+    if ((await ev(`${last(".trail")}.querySelectorAll('li.stage>.orb').length`)) !== 4) throw new Error("the trail has no four stages with a drop (§15.6)");
+    if (!(await ev(`!!${last(".bub .short .lbl")}`))) throw new Error("the opening summary is not in its box");
+    if (!(await ev(`!!${last("blockquote.q-ok p .q-mark")}`))) throw new Error("the ✓ is not right after the quote");
     if (!(await ev(`!!${last('.trail a[href^="https://pubmed.ncbi.nlm.nih.gov/?term="]')}`))) throw new Error("the PubMed search is not a link");
     if (!/Thought/.test(await ev(`${last(".thought summary")}?.textContent||''`))) throw new Error("no thinking block");
     if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
@@ -239,6 +242,9 @@ async function main() {
     const p = await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`);
     const lareb = p.sources.find((x) => x.domain === "lareb.nl");
     if (!lareb || !p.sources.some((x) => x.domain === "richtlijnendatabase.nl")) throw new Error("the Dutch guideline sites are not there by default");
+    const groups = await ev(`[...document.querySelectorAll('.pf-group')].map(g=>g.dataset.group)`);
+    if (JSON.stringify(groups.slice(0, 3)) !== '["guidelines","medicines","research"]') throw new Error("source groups: " + JSON.stringify(groups));
+    if ((await ev(`document.querySelector('.pf-group[data-group=medicines] .src-card b')?.textContent`)) !== "Farmacotherapeutisch Kompas") throw new Error("the sources do not show their names");
     await ev(`fetch('/api/profiles/evidence/sources/${lareb.id}',{method:'DELETE',headers:{'X-Coder':'1'}})`);
     await ev(`document.getElementById('add-defaults').click()`);
     await waitFor(() => ev(`/Added 1 source/.test(document.getElementById('pf-msg').textContent)`), 5000, "'Added 1 source.'");

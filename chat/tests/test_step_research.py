@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -59,7 +60,8 @@ class FakeTools:
         self.calls.append(("pubmed", q, filters))
         if "pubmed" in self.fail:
             raise tools.ToolError("PubMed answered 500")
-        return [{"pmid": str(i), "title": f"Trial {i}", "journal": "BMJ", "year": "2021", "abstract": f"Abstract {i} " + "x" * 5000,
+        return [{"pmid": str(i), "title": f"Trial {i}", "journal": "BMJ", "year": "2021",
+                 "abstract": f"Abstract {i} shows fewer bleeds with apixaban. " + "x" * 9000,
                  "url": f"https://pubmed.ncbi.nlm.nih.gov/{i}/"} for i in (1, 2)]
 
     async def web_search(self, client, searxng_url, q, site=None):
@@ -70,8 +72,12 @@ class FakeTools:
         self.calls.append(("page", url, allowed("www.rivm.nl") if allowed else None))
         return {"title": "Page " + url[-2:], "url": url, "text": "Page text of " + url}
 
+    def pmc_id(self, url):                                   # §15.3: no PubMed Central links here
+        return None
 
-def test_gather():
+
+def test_gather(monkeypatch):
+    monkeypatch.setattr(research, "MIN_FOUND", 0)           # broadening has its own test (test_step_clear.py)
     t = FakeTools()
     seen = []
     plan = [{"source": "pubmed", "query": "apixaban"}, {"source": "pubmed", "query": "apixaban again"},
@@ -86,7 +92,7 @@ def test_gather():
     assert trail[0] == {"kind": "search", "source": "PubMed", "query": "apixaban", "found": 2,
                         "url": "https://pubmed.ncbi.nlm.nih.gov/?term=apixaban", "mesh": [], "translation": ""}
     assert trail[2] == {"kind": "search", "source": "rivm.nl", "query": "griep", "found": 3, "url": None}
-    assert trail[3] == {"kind": "read", "title": "Page p1", "url": "https://www.rivm.nl/p1"}
+    assert trail[3] == {"kind": "open", "title": "Page p1", "url": "https://www.rivm.nl/p1"}
     assert seen == trail
     bad = FakeTools(fail=("pubmed",))
     sources, trail = asyncio.run(research.gather([{"source": "pubmed", "query": "q"}], cfg(), None, "", bad))
@@ -96,7 +102,7 @@ def test_gather():
 
 def test_gather_caps_sources():
     t = FakeTools()
-    plan = [{"source": "site:rivm.nl", "query": f"q{i}"} for i in range(8)]
+    plan = [{"source": "site:rivm.nl", "query": f"q{i}"} for i in range(12)]
 
     async def search(client, url, q, site=None):
         return [{"title": q + str(k), "url": f"https://www.rivm.nl/{q}/{k}", "snippet": ""} for k in range(2)]
@@ -110,7 +116,7 @@ def test_evidence_messages_and_public_sources():
     src = [{"n": 1, "title": "Trial", "url": "https://pubmed.ncbi.nlm.nih.gov/1/", "kind": "pubmed", "meta": "BMJ · 2021",
             "text": "Apixaban was superior. " + "y" * 900}]
     m = research.evidence_messages("Werkt apixaban?", src, cfg())
-    assert m[0]["role"] == "system" and "ONLY from the numbered sources" in m[0]["content"] and "Antwoord kort." in m[0]["content"]
+    assert m[0]["role"] == "system" and "ONLY from the passages of the numbered sources" in m[0]["content"] and "Antwoord kort." in m[0]["content"]
     assert m[1]["content"].startswith("Sources:\n\n[1] Trial (BMJ · 2021)\nApixaban was superior.")
     assert m[1]["content"].endswith("Question: Werkt apixaban?")
     pub = research.public_sources(src)[0]
@@ -149,9 +155,15 @@ def parse(chunks):
 
 
 def run(db, chat, stream, t, plan='[{"source": "pubmed", "query": "apixaban renal"}]', think=False):
-    async def complete(settings, messages):
-        assert messages[0]["content"].startswith("You plan literature searches")
-        return plan
+    async def complete(settings, messages):                  # the plan, one read per source, the follow-up (§15)
+        system = messages[0]["content"]
+        if system.startswith("You plan literature searches"):
+            return plan
+        if system.startswith("You read one source"):
+            m = re.search(r"(Abstract \d+ shows fewer bleeds with apixaban\.|Page text of \S+)", messages[1]["content"])
+            return json.dumps({"quotes": [m.group(1)] if m else []})
+        assert system.startswith("The searches below found too little")
+        return '{"searches": []}'
 
     async def go():
         return [x async for x in research.run_evidence(db, S(), chat, think, stream=stream, complete=complete, t=t)]
@@ -170,18 +182,19 @@ def test_run_evidence_events_and_storage(db):
         yield ("usage", {"prompt_tokens": 900, "completion_tokens": 30})
     evs = run(db, chat, stream, FakeTools(), think=True)
     phases = [(d["phase"], d["label"]) for e, d in evs if e == "phase"]
-    assert phases == [("reading", "Reading your question…"), ("thinking", "Choosing search terms…"),
-                      ("searching", 'Searching PubMed for "apixaban renal"…'), ("reading", "Reading 2 sources…"),
-                      ("summarising", "Building the answer from 2 sources…"), ("writing", "Writing the answer…")]
+    assert phases == [("thinking", "Understanding the question…"), ("searching", 'Searching PubMed for "apixaban renal"…'),
+                      ("reading", "Reading 1 of 2: Trial 1…"), ("reading", "Reading 2 of 2: Trial 2…"),
+                      ("thinking", "Looking further with other words…"), ("writing", "Writing the answer from 2 sources…")]
     names = [e for e, _ in evs]
     assert names.index("trail") < names.index("delta") and names[-2:] == ["verify", "done"]
     assert [d["text"] for e, d in evs if e == "thinking"] == ["even denken"]
     assert told["tools"] is None and "[1] Trial 1" in told["messages"][1]["content"], "no tools: the model only writes"
     done = evs[-1][1]
-    assert done["verify"]["ok"] is True and [s["n"] for s in done["sources"]] == [1, 2] and done["trail"][0]["found"] == 2
+    assert done["verify"]["ok"] is True and [s["n"] for s in done["sources"]] == [1, 2]
+    assert [s for s in done["trail"] if s["kind"] == "search"][0]["found"] == 2 and done["trail"][0]["kind"] == "plan"
     assert done["title"] == "Werkt apixaban bij nierfalen?"
     last = db.get_messages(chat["id"], "lisa")[-1]
-    assert last["role"] == "assistant" and last["verify"]["ok"] is True and last["trail"][0]["source"] == "PubMed"
+    assert last["role"] == "assistant" and last["verify"]["ok"] is True and last["trail"][1]["source"] == "PubMed"
     assert last["thinking"] == "even denken" and "text" not in last["sources"][0]
 
 

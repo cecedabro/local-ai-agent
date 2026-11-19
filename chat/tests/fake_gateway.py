@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +27,7 @@ class FakeGateway:
         self.search_results: list[dict] = []
         self.plan = '[{"source": "pubmed", "query": "apixaban renal"}]'   # Clear Source's planning call (SPEC §13.2)
         self.pubmed: list[dict] = []          # fake PubMed: [{"pmid", "title", "abstract", "journal", "year", "types"?}]
+        self.followup = '{"searches": []}'   # Clear Source's second round (SPEC §15.5): nothing new by default
         self.mesh: dict[str, list[str]] = {}  # fake MeSH: heading -> its terms (heading first), SPEC §14.1
         self._lock = threading.Lock()
         gw = self
@@ -116,7 +118,16 @@ class FakeGateway:
                     return
                 if not body.get("stream"):
                     first = ((body.get("messages") or [{}])[0].get("content") or "")
-                    reply = gw.plan if first.startswith("You plan literature searches") else gw.summary
+                    if first.startswith("You plan literature searches"):
+                        reply = gw.plan
+                    elif first.startswith("You read one source"):          # SPEC §15.4: quote the source's first sentence
+                        src = (body["messages"][1]["content"] or "").split("\n\n", 2)[-1]
+                        sent = re.split(r"(?<=[.!?])\s", src.strip(), maxsplit=1)[0]
+                        reply = json.dumps({"quotes": [sent] if len(sent.split()) >= 4 else []})
+                    elif first.startswith("The searches below found too little"):
+                        reply = gw.followup
+                    else:
+                        reply = gw.summary
                     out = json.dumps({"choices": [{"message": {"role": "assistant", "content": reply}}],
                                       "usage": {"prompt_tokens": 100, "completion_tokens": 20}}).encode()
                     self.send_response(200)

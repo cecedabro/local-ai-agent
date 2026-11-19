@@ -281,13 +281,34 @@ export function codeActions(root) {
 export function sourcesHtml(sources) {
   if (!sources || !sources.length) return "";
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
-  return '<div class="sources">' + sources.map((s) =>
-    `<details class="src" data-n="${Number(s.n)}"><summary><span class="n">${Number(s.n)}</span>` +
-    `<div><b>${escHtml(s.title || s.url)}</b><small>${s.type ? `<span class="stype">${escHtml(s.type)}</span>` : ""}` +
-    `${escHtml((s.type ? String(s.meta || "").replace(s.type, "").replace(/^\s*·\s*/, "") : s.meta) || host(s.url))}</small></div></summary>` +
-    `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
-    `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` +
-    "</div></details>").join("") + "</div>";
+  const groups = [["guide", "Guidelines"], ["study", "Studies"], ["other", "Other sources"]];
+  const groupOf = (s) => (s.site || s.type === "Guideline" ? "guide" : s.kind === "pubmed" ? "study" : "other");
+  const item = (s) => {
+    const kind = sourceKind(s);
+    const meta = (s.type ? String(s.meta || "").replace(s.type, "").replace(/^\s*·\s*/, "") : s.meta) || host(s.url);
+    return `<details class="src" data-n="${Number(s.n)}"><summary><span class="n">${Number(s.n)}</span>` +
+      `<div><b>${escHtml(s.title || s.url)}</b><small>${kind ? `<span class="stype" data-kind="${escHtml(kind[0])}">${escHtml(kind[1])}</span> · ` : ""}` +
+      `${escHtml(meta)}</small></div></summary>` +
+      `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
+      `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` +
+      "</div></details>";
+  };
+  const parts = groups.map(([g, name]) => {
+    const list = sources.filter((s) => groupOf(s) === g);
+    return list.length ? `<div class="src-group" data-group="${g}"><h4>${name}</h4><div class="src-list">${list.map(item).join("")}</div></div>` : "";
+  });
+  return '<div class="sources">' + parts.join("") + "</div>";
+}
+
+const SITE_KINDS = { "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Guideline", "thuisarts.nl": "Patient information",
+  "farmacotherapeutischkompas.nl": "Drug information", "kinderformularium.nl": "Drug information", "ge-bu.nl": "Drug review",
+  "lareb.nl": "Side effects" };
+
+/** A source's kind for the list under an answer: [css key, label] or null. */
+export function sourceKind(s) {
+  if (s.type) return [{ Guideline: "guide", "Meta-analysis": "review", "Systematic review": "review", RCT: "rct" }[s.type] || "study", s.type];
+  if (s.site) return ["guide", SITE_KINDS[s.site] || "Website"];
+  return null;
 }
 
 /** Turn "[n]" in the text of `el` into <a class="cite" href=URL>n</a> for the answer's sources (not inside code). */
@@ -426,7 +447,7 @@ export function flyFrom(el, from) {
 /** One trail step as a list item (search: "Searched PubMed for "x" · 5 found ↗"; read: "Read <title> ↗"). */
 export function trailStep(s) {
   const link = (url, text) => (url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>` : text);
-  if (s.kind === "read") return `<li class="step read">Read ${link(s.url, escHtml(s.title || s.url || "a page"))}</li>`;
+  if (s.kind === "read" || s.kind === "open") return `<li class="step read">Read ${link(s.url, escHtml(s.title || s.url || "a page"))}</li>`;
   const found = s.error ? `<span class="err">${escHtml(s.error)}</span>` : `${Number(s.found) || 0} found`;
   const mesh = (s.mesh || []).length ? `<span class="mesh" title="${escHtml(s.translation || "")}">` +
     s.mesh.map((m) => `<i>${escHtml(m)}</i>`).join("") + "</span>" : "";
@@ -434,15 +455,67 @@ export function trailStep(s) {
     `${s.url ? link(s.url, found) : found}${mesh}</li>`;
 }
 
+const STAGES = [["thinking", "Understanding the question"], ["searching", "Searching"], ["reading", "Reading the sources one by one"],
+  ["writing", "Writing the answer"]];
+
 /**
- * The trail under an answer: <details class="trail"><summary>Searched N times · read M pages</summary><ol>steps</ol></details>.
- * "" for no steps. Open while the answer is still being researched (`open`).
+ * The search trail under an answer (SPEC §13.3, §15.6): <details class="trail">. A Clear Source trail (it has "plan"
+ * steps) shows four stages, each with the drop doing that stage; other trails stay a plain list of steps. `open` while
+ * the answer is still being researched: the current stage's drop moves (animateTrail).
  */
 export function trailHtml(steps, open = false) {
   if (!steps || !steps.length) return "";
-  const n = steps.filter((s) => s.kind === "search").length, m = steps.filter((s) => s.kind === "read").length;
-  const sum = `Searched ${n} time${n === 1 ? "" : "s"}` + (m ? ` · read ${m} page${m === 1 ? "" : "s"}` : "");
-  return `<details class="trail"${open ? " open" : ""}><summary>${sum}</summary><ol>${steps.map(trailStep).join("")}</ol></details>`;
+  if (!steps.some((s) => s.kind === "plan")) {
+    const n = steps.filter((s) => s.kind === "search").length, m = steps.filter((s) => s.kind === "read" || s.kind === "open").length;
+    const sum = `Searched ${n} time${n === 1 ? "" : "s"}` + (m ? ` · read ${m} page${m === 1 ? "" : "s"}` : "");
+    return `<details class="trail"${open ? " open" : ""}><summary>${sum}</summary><ol>${steps.map(trailStep).join("")}</ol></details>`;
+  }
+  const link = (url, text, cls) => (url ? `<a class="${cls}" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`
+    : `<span class="${cls}">${text}</span>`);
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
+  const plans = steps.filter((s) => s.kind === "plan"), searches = steps.filter((s) => s.kind === "search");
+  const reads = steps.filter((s) => s.kind === "read" && s.status);
+  const used = reads.filter((s) => s.status === "used").length;
+  const terms = [];
+  for (const p of plans) {
+    for (const m of p.mesh || []) if (!terms.includes(m + "\u0000")) terms.push(m + "\u0000");
+    for (const q of p.queries || []) if (!terms.includes(q)) terms.push(q);
+  }
+  const about = plans.find((p) => p.about)?.about || "";
+  const body = [
+    (about ? `<p>${escHtml(about)}</p>` : "") + (terms.length ? `<div class="terms">${terms.map((t) => t.endsWith("\u0000")
+      ? `<span class="t">${escHtml(t.slice(0, -1))}<small>MeSH</small></span>` : `<span class="t">${escHtml(t)}</span>`).join("")}</div>` : ""),
+    searches.length ? `<ol class="rows">${searches.map((s) => {
+      const n = s.error ? escHtml(s.error) : `${Number(s.found) || 0} found`;
+      const mesh = (s.mesh || []).length ? `<span class="mesh">${s.mesh.map((m) => `<i>${escHtml(m)}</i>`).join("")}</span>` : "";
+      return `<li class="step search${s.broader ? " wider" : ""}"><span class="where">${s.broader ? "broader" : escHtml(s.source || "the web")}</span>` +
+        `<span class="what">${escHtml(s.query || "")}${mesh}</span>${link(s.url, n, s.error || !Number(s.found) ? "n none" : "n")}</li>`;
+    }).join("")}</ol>` : "",
+    reads.length ? `<ol class="rows">${reads.map((s) => {
+      const res = s.status === "used" ? `<b>${Number(s.quotes)}</b> quote${s.quotes === 1 ? "" : "s"}`
+        : s.status === "error" ? "could not read" : "not relevant";
+      return `<li class="step readone ${s.status === "used" ? "used" : "skip"}"><span class="where">${escHtml(host(s.url) || "")}</span>` +
+        `${link(s.url, escHtml(s.title || s.url || ""), "what")}<span class="res">${res}</span></li>`;
+    }).join("")}</ol>` : "",
+    open ? "" : `<p>From ${used} source${used === 1 ? "" : "s"}, every quote checked word for word.</p>`,
+  ];
+  const reached = open ? (reads.length ? 2 : searches.length ? 1 : 0) : 3;
+  const stages = STAGES.map(([phase, name], i) => {
+    if (i > reached) return "";
+    const now = open && i === reached;
+    const extra = i === 1 && searches.length ? `<span>${searches.length} search${searches.length === 1 ? "" : "es"}</span>`
+      : i === 2 && reads.length ? `<span>${reads.length} read · ${used} useful</span>` : "";
+    return `<li class="stage${now ? " now" : ""}">${orbHtml("", now ? phase : "idle")}<h5>${name}${extra}</h5>` +
+      `<div class="stage-body">${body[i]}</div></li>`;
+  }).join("");
+  const sum = open ? `${STAGES[reached][1]}…` : `Researched · ${searches.length} search${searches.length === 1 ? "" : "es"} · read ${reads.length} · used ${used}`;
+  return `<details class="trail staged"${open ? " open" : ""}><summary>${sum}</summary><ol class="stages">${stages}</ol></details>`;
+}
+
+/** Start the moving drop of the trail's current stage (clouds, radar); call after drawing a live trail. */
+export function animateTrail(root) {
+  const orb = root?.querySelector(".trail .stage.now .orb.live");
+  return orb ? startOrb(orb, { range: 30 }) : { stop() {} };
 }
 
 /** What the model thought: <details class="thought"><summary>Thought for N s</summary><div class="thought-text">…</div></details>. */
@@ -450,6 +523,27 @@ export function thoughtHtml(text, secs) {
   if (!text) return "";
   const t = secs == null ? "Thought" : `Thought for ${Math.max(1, Math.round(secs))} s`;
   return `<details class="thought"><summary>${t}</summary><div class="thought-text">${escHtml(text)}</div></details>`;
+}
+
+const SHORT = /short answer|kort antwoord|summary|samenvatting|in short|in het kort/i;
+
+/** Put a Clear Source answer's opening summary (the "Short answer" section, or the text before the first heading) in
+ *  <div class="short">: it summarises the quotes below it (SPEC §15.5). */
+export function shortBox(bub) {
+  if (!bub || bub.querySelector(":scope > .short")) return;
+  const kids = [...bub.children], isH = (el) => /^H[1-4]$/.test(el.tagName);
+  if (!kids.some(isH)) return;
+  let from = 0;
+  if (isH(kids[0])) { if (!SHORT.test(kids[0].textContent)) return; from = 1; }
+  const part = [];
+  for (let i = from; i < kids.length && !isH(kids[i]); i++) part.push(kids[i]);
+  if (!part.length) return;
+  const box = document.createElement("div");
+  box.className = "short";
+  box.innerHTML = `<div class="lbl">${from ? escHtml(kids[0].textContent) : "Short answer"} <span>· summary of the sources below</span></div>`;
+  part[0].before(box);
+  box.append(...part);
+  if (from) kids[0].remove();
 }
 
 const norm = (t) => String(t || "").replace(/[‘’]/g, "'").replace(/[“”„]/g, '"').replace(/[–—−]/g, "-").replace(/\s+/g, " ")
@@ -462,6 +556,7 @@ const norm = (t) => String(t || "").replace(/[‘’]/g, "'").replace(/[“”�
  */
 export function markVerify(bub, report) {
   if (!bub || !report) return;
+  shortBox(bub);
   const qs = report.quotes || [];
   const find = (text) => qs.find((q) => {
     const a = norm(q.text), b = norm(text).replace(/\s*\[\d+(\s*,\s*\d+)*\]\s*/g, " ").replace(/^["']|["']$/g, "").trim();
@@ -470,7 +565,9 @@ export function markVerify(bub, report) {
   const mark = (el, q) => {
     el.classList.add(q.ok ? "q-ok" : "q-bad");
     el.title = q.ok ? `Found word for word in source ${q.cites.join(", ")}` : `Not verified: ${q.why}`;
-    if (!el.querySelector(".q-mark")) el.insertAdjacentHTML("beforeend", `<span class="q-mark">${q.ok ? "✓" : "⚠"}</span>`);
+    if (el.querySelector(".q-mark")) return;
+    const last = el.matches("blockquote") ? [...el.querySelectorAll("p")].pop() || el : el;
+    last.insertAdjacentHTML("beforeend", `<span class="q-mark">${q.ok ? "✓" : "⚠ " + escHtml(q.why || "not verified")}</span>`);
   };
   bub.querySelectorAll("blockquote").forEach((el) => { const q = find(el.textContent); if (q) mark(el, q); });
   // inline quotes: wrap "…" text in a span when the report checked it

@@ -20,11 +20,11 @@ ANSWER = ("Go a bit lower than for search: around **150–200 ms**.\n\n```javasc
           "For the full results page keep **300 ms**.")
 
 
-EH_ANSWER = ("**Kort:** apixaban lijkt veiliger dan warfarine bij ernstige nierfunctiestoornis [1].\n\n"
+EH_ANSWER = ("## Kort antwoord\nApixaban lijkt veiliger dan warfarine bij een ernstig verminderde nierfunctie.\n\n## Onderzoek\n"
              '> "apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin" [1]\n\n'
              '> "apixaban is completely safe in every patient on dialysis" [2]\n\n'
              "Bij dialyse zijn er volgens de onderzoekers vooral observationele studies beschikbaar en geen trials.\n\n"
-             "Het bewijs is beperkt.")
+             "## Sterkte van het bewijs\nHet bewijs is beperkt.")
 LONG = "\n\n".join(f"Paragraph {i}: " + "the quick brown fox jumps over the lazy dog " * 4 for i in range(1, 15))
 CODE = "Here it is:\n\n```html page.html\n<!doctype html>\n<title>Hi</title>\n<p class=\"x\">Hello</p>\n```\n"
 

@@ -36,7 +36,7 @@ class TestEvidenceV2:
         cid = new_chat(client, "evidence")
         evs = send(client, cid, "Is apixaban veilig bij een eGFR onder 30?", mode="think")
         names = [e for e, _ in evs]
-        assert [d["phase"] for e, d in evs if e == "phase"][:3] == ["reading", "thinking", "searching"]
+        assert [d["phase"] for e, d in evs if e == "phase"][:3] == ["thinking", "searching", "reading"]
         assert "trail" in names and "verify" in names and names[-1] == "done"
         plan_call = [r for r in pubmed.chat_requests() if not r["body"].get("stream")][0]
         assert plan_call["body"]["messages"][0]["content"].startswith("You plan literature searches")
@@ -45,7 +45,7 @@ class TestEvidenceV2:
         assert any(r["path"].startswith("/esearch.fcgi") for r in pubmed.requests)
         done = evs[-1][1]
         assert [q["ok"] for q in done["verify"]["quotes"]] == [True, False], "the made-up quote is caught"
-        step = done["trail"][0]
+        step = [s for s in done["trail"] if s["kind"] == "search"][0]
         assert {k: step[k] for k in ("kind", "source", "query", "found", "mesh")} == \
             {"kind": "search", "source": "PubMed", "query": "apixaban renal", "found": 2, "mesh": []}
         assert step["url"].startswith("https://pubmed.ncbi.nlm.nih.gov/?term=%28apixaban+renal%29+AND+"), "the exact search (§14.1)"

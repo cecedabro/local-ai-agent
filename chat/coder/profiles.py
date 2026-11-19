@@ -20,19 +20,20 @@ SEED = {
          "note": "Prefer systematic reviews, meta-analyses, randomised trials and guidelines. Say how strong the evidence is.",
          "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 10, "humans": True,
                      "languages": [], "preset": "balanced"}},
-        {"kind": "website", "title": "richtlijnendatabase.nl", "domain": "richtlijnendatabase.nl",
+        {"kind": "website", "title": "richtlijnendatabase.nl", "domain": "richtlijnendatabase.nl", "group": "guidelines", "label": "Richtlijnendatabase",
          "note": "Dutch guidelines of the medical specialists (Federatie Medisch Specialisten)."},
-        {"kind": "website", "title": "farmacotherapeutischkompas.nl", "domain": "farmacotherapeutischkompas.nl",
+        {"kind": "website", "title": "farmacotherapeutischkompas.nl", "domain": "farmacotherapeutischkompas.nl", "group": "medicines",
+         "label": "Farmacotherapeutisch Kompas",
          "note": "Dutch drug information: indications, doses, contraindications, interactions (Zorginstituut)."},
-        {"kind": "website", "title": "kinderformularium.nl", "domain": "kinderformularium.nl",
+        {"kind": "website", "title": "kinderformularium.nl", "domain": "kinderformularium.nl", "group": "medicines", "label": "Kinderformularium",
          "note": "Dutch doses and safety of medicines for children."},
-        {"kind": "website", "title": "rivm.nl", "domain": "rivm.nl",
+        {"kind": "website", "title": "rivm.nl", "domain": "rivm.nl", "group": "guidelines", "label": "RIVM · LCI",
          "note": "The Dutch public health institute, with the LCI guidelines on infectious diseases and vaccination."},
-        {"kind": "website", "title": "lareb.nl", "domain": "lareb.nl",
+        {"kind": "website", "title": "lareb.nl", "domain": "lareb.nl", "group": "medicines", "label": "Lareb",
          "note": "The Dutch side effects centre: reported adverse reactions."},
-        {"kind": "website", "title": "ge-bu.nl", "domain": "ge-bu.nl",
+        {"kind": "website", "title": "ge-bu.nl", "domain": "ge-bu.nl", "group": "medicines", "label": "Geneesmiddelenbulletin",
          "note": "Geneesmiddelenbulletin: independent Dutch reviews of medicines."},
-        {"kind": "website", "title": "thuisarts.nl", "domain": "thuisarts.nl",
+        {"kind": "website", "title": "thuisarts.nl", "domain": "thuisarts.nl", "group": "guidelines", "label": "Thuisarts",
          "note": "The NHG's information for patients, based on the GP guidelines. Prefer professional sources."},
     ],
 }
@@ -105,6 +106,25 @@ def clean_filters(f: Any) -> dict:
             "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
         }
     return result
+
+
+GROUPS = ("guidelines", "medicines", "research", "documents", "websites")   # the sources page's sections, in order
+
+
+def group_of(src: dict) -> str:
+    r"""TODO (task F17). The sources page's group of a source (SPEC §15.6): kind "pubmed" -> "research"; kind "file" ->
+    "documents"; a website whose domain is the domain of a card in SEED["evidence"] -> that card's "group"; else "websites".
+    Tests: test_step_flow.py::test_groups_and_labels
+    """
+    raise NotImplementedError
+
+
+def label_of(src: dict) -> str:
+    r"""TODO (task F17). A source's name on the page (SPEC §15.6): a website whose domain is the domain of a card in
+    SEED["evidence"] -> that card's "label"; else src["title"] (or the domain, or "").
+    Tests: test_step_flow.py::test_groups_and_labels
+    """
+    raise NotImplementedError
 
 
 def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
@@ -228,6 +248,7 @@ def public(cfg: dict, settings: Any) -> dict:
             out["tokens"] = tokens(s.get("content", ""))
         else:
             out["tokens"] = 0
+        # TODO (task F17): out["group"], out["label"] = group_of(s), label_of(s)   (SPEC §15.6)
         sources_out.append(out)
     return {"profile": profile, "name": NAMES[profile], "instructions": cfg["instructions"],
             "web": cfg["web"], "sources": sources_out, "budget": budget(cfg, settings)}
