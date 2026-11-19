@@ -51,7 +51,7 @@ Rules for every task:
   accept: make chat-test
 - [x] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
   accept: node --check chat/static/js/profiles.js && make chat-test
-- [ ] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
+- [x] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
 - [ ] F20: Add a "## Clear Source, rounds 2 and 3" section to chat/README.md (see "F20 details")
   accept: grep -q "## Clear Source, rounds 2 and 3" chat/README.md && grep -q "read_one" chat/README.md && make chat-test

@@ -79,3 +79,8 @@
 - **Change** (`cardHtml`): Replaced the kind tag row with a bubble + who layout — `name = s.label || s.title`, desc is token count (file), preset name (pubmed), or domain (website); bubble is 📄 for files, first uppercase character otherwise. Wrapped pubmed filters/customise and note textarea in `<details class="more">` with "Strictness and note" (pubmed) or "Note" summary, open by default for pubmed.
 - **Change** (`draw`): Grouped sources by `s.group` (defaulting to "websites") using GROUPS array. Each group is a `<section class="pf-group">` with header showing title and enabled count, containing a `<div class="pf-list">` with the cards. Empty source list shows "No sources yet.".
 - `node --check chat/static/js/profiles.js` passes. `make chat-test` passes (153/153). `make check` passes (36/36).
+
+## Task F19 - browser tests verified
+- `make chat-browser-test` — all 14 browser tests passed. No code changes needed.
+- `make chat-test` — 153/153 passed. `make check` — 36/36 passed.
+- All acceptance commands pass cleanly. No blocking issues remain.
