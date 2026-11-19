@@ -366,11 +366,14 @@ def extract_messages(question: str, src: dict) -> list[dict]:
        {"role": "user", "content": f"Question: {question}\n\nSource: {src['title']} ({src.get('meta') or src['url']})\n\n{src['text']}"}]
     Tests: test_step_flow.py::test_extract_messages_and_parse_quotes
     """
-    raise NotImplementedError
+    return [
+        {"role": "system", "content": EXTRACT_PROMPT},
+        {"role": "user", "content": f"Question: {question}\n\nSource: {src['title']} ({src.get('meta') or src['url']})\n\n{src['text']}"},
+    ]
 
 
 def parse_quotes(text: str) -> list[str]:
-    r"""TODO (task F12). The passages in the model's reply (SPEC §15.4), [] when it has none.
+    r"""The passages in the model's reply (SPEC §15.4), [] when it has none.
       t = text stripped; a ``` fence -> its inside, stripped
       then t = from the first "{" to the last "}" when a "{" comes before any "[", else from the first "[" to the last "]"
       json.loads (ValueError -> []); items = obj["quotes"] (obj.get) for a dict, else obj; not a list -> []
@@ -378,11 +381,52 @@ def parse_quotes(text: str) -> list[str]:
         (len(re.findall(r"\w+", q)) >= 4) and is not kept already; stop at MAX_PASSAGES
     Tests: test_step_flow.py::test_extract_messages_and_parse_quotes
     """
-    raise NotImplementedError
+    t = text.strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
+    if fence:
+        t = fence.group(1).strip()
+    first_bracket = t.find("[")
+    last_bracket = t.rfind("]")
+    first_brace = t.find("{")
+    last_brace = t.rfind("}")
+    if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+        if first_brace != -1 and last_brace != -1:
+            t = t[first_brace:last_brace + 1]
+        else:
+            t = ""
+    elif first_bracket != -1 and last_bracket != -1:
+        t = t[first_bracket:last_bracket + 1]
+    else:
+        t = ""
+    try:
+        obj = json.loads(t)
+    except ValueError:
+        return []
+    if isinstance(obj, dict):
+        items = obj.get("quotes", obj)
+    else:
+        items = obj
+    if not isinstance(items, list):
+        return []
+    result = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        q = item.strip().strip('"“”').strip()
+        if len(re.findall(r"\w+", q)) < 4:
+            continue
+        if q in seen:
+            continue
+        seen.add(q)
+        result.append(q)
+        if len(result) >= MAX_PASSAGES:
+            break
+    return result
 
 
 async def read_one(question: str, src: dict, settings: Any, complete: Callable) -> tuple[list[str], dict]:
-    r"""TODO (task F12). Read one source: (passages, trail step), SPEC §15.4.
+    r"""Read one source: (passages, trail step), SPEC §15.4.
       step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
       reply = await complete(settings, extract_messages(question, src)); gateway.Busy or gateway.GatewayError ->
         return [], {**step, "quotes": 0, "status": "error"}
@@ -390,7 +434,13 @@ async def read_one(question: str, src: dict, settings: Any, complete: Callable) 
       return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
     Tests: test_step_flow.py::test_read_one
     """
-    raise NotImplementedError
+    step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
+    try:
+        reply = await complete(settings, extract_messages(question, src))
+    except (gateway.Busy, gateway.GatewayError):
+        return [], {**step, "quotes": 0, "status": "error"}
+    found = [q for q in parse_quotes(reply) if verify.find_quote(q, src["text"])]
+    return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
 
 
 def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]:

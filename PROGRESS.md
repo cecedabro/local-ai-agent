@@ -41,3 +41,9 @@
 - **`pmc_id`**: Uses `_PMC` regex to extract PMC IDs from URLs; returns uppercased "PMC" ID or None.
 - **`pmc_text`**: Fetches PMC article via E-utilities efetch (db=pmc, retmode=xml), extracts title from `<article-title>`, collects text from `<abstract>` and `<body>` `<p>` elements, returns `{"title", "url", "text"}` dict capped at `PAGE_CHARS`.
 - `make chat-test K="test_step_flow and pmc"` passes (2/2). `make check` passes (36/36).
+## Task F12 - `extract_messages`, `parse_quotes` and `read_one` implementation
+- **File**: `chat/coder/research.py` — filled in `extract_messages` (line ~363), `parse_quotes` (line ~372), and `read_one` (line ~384).
+- **Change** (`extract_messages`): Returns system message with EXTRACT_PROMPT and user message with question + source title/meta/text.
+- **Change** (`parse_quotes`): Strips fence/brace/bracket delimiters from text, parses JSON, extracts "quotes" from dict or uses object directly, filters to unique strings with 4+ words after stripping quotes, caps at MAX_PASSAGES.
+- **Change** (`read_one`): Calls complete with extract_messages, catches Busy/GatewayError returning error step, filters parse_quotes results through verify.find_quote for word-for-word verification.
+- `make chat-test K="test_step_flow and (test_extract_messages_and_parse_quotes or test_read_one)"` passes (2/2). `make check` passes (36/36).
