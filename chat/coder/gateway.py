@@ -97,14 +97,21 @@ def parse_line(line: str) -> list[tuple[str, Any]]:
 
 def merge_tool_calls(calls: dict[int, dict], fragments: list[dict]) -> None:
     for f in fragments:
-        c = calls.setdefault(int(f.get("index", 0)), {"id": "", "name": "", "arguments": ""})
+        idx = f.get("index")
+        if idx is None:
+            idx = len(calls)
+        c = calls.setdefault(int(idx), {"id": "", "name": "", "arguments": ""})
         if f.get("id"):
             c["id"] = f["id"]
         func = f.get("function") or {}
         if func.get("name"):
             c["name"] = func["name"]
+        elif f.get("name"):
+            c["name"] = f["name"]
         if func.get("arguments"):
             c["arguments"] += func["arguments"]
+        elif f.get("arguments"):
+            c["arguments"] = f["arguments"]
 
 
 async def stream_chat(settings: Any, messages: list[dict], think: bool, tools: list[dict] | None = None) -> AsyncIterator[tuple[str, Any]]:

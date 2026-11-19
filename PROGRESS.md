@@ -65,3 +65,9 @@
 - Updated `build_messages()` in `context.py` to use the profile's system prompt: imports `profiles` locally (to avoid circular import with profiles.py), calls `profiles.config(db, chat["username"], chat["profile"])` and `profiles.system_prompt(cfg)` instead of the static `SYSTEM_PROMPTS` dict.
 - All 18 acceptance tests pass: `make chat-test K="test_step_context or test_step_round2 or TestStream"`.
 - All project tests pass: `make check`.
+
+## Task B14 - tool calls fix (answer.py, gateway.py)
+- Fixed tool call accumulation in `run_answer()`: replaced `calls = []` with `calls_dict: dict[int, dict] = {}` and `gateway.merge_tool_calls(calls_dict, val)` to properly merge fragmented tool calls from the stream, converting to a sorted list after the event loop.
+- Updated `merge_tool_calls()` in `gateway.py`: handles both OpenAI API format (tool calls with `index` and nested `function` object) and direct format (tool calls with top-level `name`/`arguments`), and auto-assigns sequential indices when `index` is missing.
+- Resolves missing tool phase labels (e.g. "Searching the web for…") and broken tool rounds in both integration and step tests.
+- All acceptance commands pass: `make chat-test` (102 tests) and `make check` (36 tests).

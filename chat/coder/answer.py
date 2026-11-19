@@ -113,7 +113,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
             # Process events for this round
             said = ""
-            calls = []
+            calls_dict: dict[int, dict] = {}
             content_started = False
 
             async def events():
@@ -138,14 +138,16 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                     yield sse("delta", {"text": val})
                 elif tag == "usage":
                     usage = val
-                elif tag == "tool_calls":
-                    calls = list(val)
+                elif tag in ("tool_call", "tool_calls"):
+                    gateway.merge_tool_calls(calls_dict, val)
                 elif tag == "done":
                     stopped = True
                     break
                 if stop is not None and stop.is_set():
                     stopped = True
                     break
+
+            calls = [v for _, v in sorted(calls_dict.items())]
 
             # Handle tool calls for this round
             if calls and offer:
