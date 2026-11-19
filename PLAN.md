@@ -45,7 +45,7 @@ Rules for every task:
   accept: make chat-test
 - [x] E15: In chat/static/js/icons.js fill in `start` as its comment says
   accept: node --check chat/static/js/icons.js && make chat-test
-- [ ] E16: In chat/static/js/app.js show thinking, the search trail and the checker's marks (`TODO (task E16)`)
+- [x] E16: In chat/static/js/app.js show thinking, the search trail and the checker's marks (`TODO (task E16)`)
   accept: node --check chat/static/js/app.js && make chat-test && node --test chat/tests/js/stream.test.mjs
 - [ ] E17: In chat/static/js/profiles.js add PubMed strictness (design C) and fix the on/off switch (`TODO (task E17)`)
   accept: node --check chat/static/js/profiles.js && make chat-test

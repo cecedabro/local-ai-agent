@@ -2,7 +2,7 @@
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
 import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions,
-  orbHtml, startOrb, flyFrom } from "./stream.js";
+  orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -208,9 +208,10 @@ function drawMessage(m) {
   // assistant
   const div = document.createElement("div");
   div.className = "ai";
-  div.innerHTML = ORB + `<div class="content"><div class="bub">${md.render(m.content)}</div>${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
+  div.innerHTML = ORB + `<div class="content"><div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div><div class="bub">${md.render(m.content)}</div>${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
   $("#messages").appendChild(div);
   citeLinks(div.querySelector(".bub"), m.sources);
+  markVerify(div.querySelector(".bub"), m.verify);
   const meta2 = div.querySelector(".meta2");
   doneMeta(meta2, m.content, m.tokens, m.tps, m.stopped, () => {
     const lastU = $("#messages").querySelectorAll(".u .msg.user").item(-1);
@@ -301,7 +302,7 @@ async function send() {
     // Draw assistant message placeholder
     const aiDiv = document.createElement("div");
     aiDiv.className = "ai";
-    aiDiv.innerHTML = orbHtml() + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
+    aiDiv.innerHTML = orbHtml() + `<div class="content"><div class="pre"></div><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
     $("#messages").appendChild(aiDiv);
 
     const bub = aiDiv.querySelector(".bub");
@@ -311,6 +312,11 @@ async function send() {
     const tiny = document.createElement("span");
     tiny.innerHTML = orbHtml("tiny");
     const tinyEl = tiny.firstElementChild;
+
+    // E16: thinking, trail, and verify tracking
+    const pre = aiDiv.querySelector(".pre");
+    let thinking = "", th0 = null, thoughtSecs = null, report = null, steps = [];
+    const drawPre = (live) => { pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live); };
 
     // Clear #input, #file-chips and state.files
     $("#input").value = "";
@@ -357,9 +363,22 @@ async function send() {
         if (data.phase === "writing") {
           writeStart = performance.now();
         }
+      } else if (event === "thinking") {
+        th0 = th0 ?? performance.now();
+        thinking += data.text;
+        drawPre(true);
+      } else if (event === "trail") {
+        steps.push(data.step);
+        drawPre(true);
+      } else if (event === "verify") {
+        report = data.report;
       } else if (event === "delta") {
         full += data.text;
         typewriter.push(data.text);
+        if (th0 != null && thoughtSecs == null) {
+          thoughtSecs = (performance.now() - th0) / 1000;
+          drawPre(true);
+        }
       } else if (event === "done" || event === "error") {
         finished = { event, data };
       }
@@ -382,6 +401,10 @@ async function send() {
           bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
         }
         doneMeta(meta, full, data.tokens, data.tps, false, () => text);
+      }
+      drawPre(false);
+      if (report || data.verify) {
+        markVerify(bub, report || data.verify);
       }
       if (data.stopped) {
         meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
