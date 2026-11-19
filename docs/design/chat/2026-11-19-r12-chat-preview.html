@@ -15,20 +15,20 @@
 :root{--bg1:#bfe8ff;--bg2:#e9f7ff;--bg3:#f6fbff;--ink:#0b1f33;--muted:#5f7488;--glass:rgba(255,255,255,.72);--stroke:rgba(255,255,255,.9);
   --line:rgba(11,31,51,.08);--chip:rgba(11,31,51,.05);--accent:#0a84ff;--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);
   --glow:rgba(10,132,255,.35);--user1:rgba(170,230,255,.55);--user2:rgba(110,200,245,.28);--userInk:#0b1f33;
-  --d-core:rgba(255,255,255,.95);--d-mid:rgba(214,226,234,.34);--d-edge:rgba(120,140,158,.5);--d-rim:rgba(255,255,255,.9);--d-glow:rgba(60,90,120,.18);
+  --d-core:rgba(255,255,255,.95);--d-mid:rgba(170,228,255,.38);--d-edge:rgba(80,170,230,.55);--d-rim:rgba(255,255,255,.85);--d-glow:rgba(34,160,230,.22);
   --c1:#7fd6f5;--c2:#9fe3c4;--c3:#b9c8f5;--c5:#d6f3ff;--dot:#22c3ee;--w-top:rgba(140,215,250,.4);--w-deep:rgba(40,140,220,.55);
   --eh:#14b8a6;--eh-soft:rgba(20,184,166,.15);--eh-glow:rgba(20,184,166,.45);--eh-ink:#0f766e;--ok:#16a34a;--ok-soft:rgba(22,163,74,.12);
   --c4:#cfeaff;--fadec:rgba(240,250,255,1)}
 :root[data-theme=dark]{--bg1:#14456e;--bg2:#0b2236;--bg3:#061220;--ink:#e8f2fb;--muted:#8fa6bd;--glass:rgba(16,30,48,.72);--stroke:rgba(255,255,255,.12);
   --line:rgba(255,255,255,.08);--chip:rgba(255,255,255,.06);--accent:#4cc2ff;--glow:rgba(76,194,255,.35);
   --user1:#1c8f9f;--user2:#16786a;--userInk:#fff;
-  --d-core:rgba(220,240,255,.9);--d-mid:rgba(140,170,195,.28);--d-edge:rgba(170,200,225,.45);--d-rim:rgba(200,230,255,.45);--d-glow:rgba(80,180,255,.25);
+  --d-core:rgba(150,240,255,.95);--d-mid:rgba(40,170,220,.5);--d-edge:#0b3b5e;--d-rim:rgba(150,220,255,.35);--d-glow:rgba(60,200,255,.32);
   --c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a;--c5:#3b6f99;--dot:#5fd0ff;--w-top:rgba(90,200,250,.32);--w-deep:rgba(20,120,210,.55);
   --eh:#2dd4bf;--eh-soft:rgba(45,212,191,.14);--eh-glow:rgba(45,212,191,.5);--eh-ink:#99f6e4;--ok:#4ade80;--ok-soft:rgba(74,222,128,.12);--c4:#1d3a55}
 :root[data-theme=blossom]{--bg1:#ffd1e3;--bg2:#fff0f6;--bg3:#fff8fb;--ink:#3b1830;--muted:#8a5a75;--glass:rgba(255,255,255,.75);--stroke:rgba(255,255,255,.95);
   --line:rgba(120,40,90,.1);--chip:rgba(190,60,130,.06);--accent:#e1468f;--primary:linear-gradient(180deg,#ffb8dc 0%,#f472b6 48%,#e1468f 52%,#f580be 100%);
   --glow:rgba(236,72,153,.35);--user1:rgba(255,200,228,.6);--user2:rgba(244,140,190,.25);--userInk:#3b1830;
-  --d-core:rgba(255,255,255,.97);--d-mid:rgba(255,205,226,.42);--d-edge:rgba(228,128,174,.55);--d-rim:rgba(255,255,255,.95);--d-glow:rgba(225,110,165,.28);
+  --d-core:rgba(255,255,255,.97);--d-mid:rgba(255,214,232,.55);--d-edge:rgba(232,128,176,.6);--d-rim:rgba(255,255,255,.9);--d-glow:rgba(255,190,220,.45);
   --c1:#f9a8d4;--c2:#fcd5e5;--c3:#d8c4fb;--c5:#ffe4ef;--c4:#ffe4ef;--dot:#ec4899;--w-top:rgba(255,190,222,.4);--w-deep:rgba(226,104,160,.5);
   --ok:#e5488f;--ok-soft:rgba(229,72,143,.12)}
 /* EvidenceHunt colour: turquoise in light and dark, a bright deep rose in Blossom (green would clash with pink) */
@@ -117,12 +117,13 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transf
    A phase fades its layer in (opacity) and only that layer's animations run. */
 .dd{--s:44px;position:relative;display:inline-block;flex:none;width:var(--s);height:var(--s);border-radius:50%;overflow:hidden;
   isolation:isolate;transform:translateZ(0);transition:width .5s cubic-bezier(.3,.9,.3,1),height .5s cubic-bezier(.3,.9,.3,1);
-  background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 46%,var(--d-edge) 100%);
-  box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.08),0 3px 12px var(--d-glow)}
+  background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 42%,var(--d-edge) 100%);
+  box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.10),0 3px 12px var(--d-glow)}
 .dd>span{position:absolute;inset:0;display:block;opacity:0;transition:opacity .45s;border-radius:50%}
-.dd .shine{opacity:1;z-index:9;background:radial-gradient(38% 24% at 34% 22%,rgba(255,255,255,.95),transparent 72%),
-  radial-gradient(10% 7% at 70% 76%,rgba(255,255,255,.7),transparent 80%)}
-.dd .pool{opacity:1;z-index:1;background:radial-gradient(34% 12% at 50% 84%,#fff,transparent 80%)}
+.dd .shine{opacity:1;z-index:9;background:radial-gradient(40% 26% at 35% 22%,rgba(255,255,255,.92),transparent 72%)}
+.dd .pool{opacity:1;z-index:8;left:18%;right:18%;top:auto;bottom:9%;height:22%;border-radius:50%;
+  background:radial-gradient(closest-side,#fff,transparent);animation:glint 5s ease-in-out infinite}
+@keyframes glint{50%{transform:scaleX(1.15);opacity:.7}}
 /* thinking: four soft clouds, each drifting to a new random spot (Web Animations, transform only) */
 .dd .clouds{z-index:2}
 .dd .clouds i{position:absolute;left:5%;top:5%;width:90%;height:90%;border-radius:50%;will-change:transform}
@@ -226,7 +227,7 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transf
   <div class="note">
     <b>Round 12:</b> searching, reading and summarising are round 3's, unchanged, now inside the drop. No more
     breathing. Thinking moves further and faster but stays eased. The water has three waves and sloshes gently.
-    "ready" is pink in Blossom.</div>
+    "ready" is pink in Blossom. The drop has the colours of the current chat.</div>
   <div class="note"><b>Why it was laggy:</b> in the app the clouds sat in one layer and the orb was only 28 px, so the movement
     was tiny and blurry. Now every cloud, beam, line and particle is its own GPU layer that only moves
     (transform) or fades (opacity), never repaints, and the drop is 44 px while it works, settling back to
