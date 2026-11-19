@@ -68,3 +68,4 @@
 - **File**: `chat/coder/profiles.py` — implemented `group_of` (line ~114, pubmed→research, file→documents, SEED card domain→card group, else websites) and `label_of` (line ~123, SEED card domain→card label, else title/domain/""); wired into `public` function (line ~283).
 - **File**: `chat/coder/app.py:468` — wired `group_of`/`label_of` into `_source_json`.
 - `make chat-test K="groups_and_labels"` passes (1/1). `make chat-test K="seeds_evidence or dutch_guidelines"` passes (2/2). `make check` passes (36/36).
+- **Task F16 re-verified**: `summary_sentences` (verify.py:135) and `check` integration (verify.py:199) were already implemented. `make chat-test K="test_step_verify or summary_sentences"` passes (9/9). `make check` passes (36/36). No changes needed.

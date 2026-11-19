@@ -45,7 +45,7 @@ Rules for every task:
   accept: make chat-test K="investigate"
 - [~] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`) — skipped: agent made no changes
   accept: make chat-test K="test_step_research or test_step_clear or TestEvidenceV2 or mesh_in_a_real_answer"
-- [ ] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
+- [x] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
   accept: make chat-test K="test_step_verify or summary_sentences"
 - [ ] F17: In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json)
   accept: make chat-test
