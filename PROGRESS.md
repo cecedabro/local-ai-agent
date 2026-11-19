@@ -63,3 +63,14 @@ All 128 chat tests pass. `make check` passes (36/36).
 ## Task E15 - Wire icon picker in chat/static/js/icons.js (2026-11-19)
 
 Implemented `start()` in `chat/static/js/icons.js`. On load, fetches `GET /api/me` and marks the matching `button[data-icon]` with class "on". On click, sends `PATCH /api/me` with `{"icon": ...}` and required headers; on success moves "on" class and shows save message, on failure shows error message. `node --check` passes, all 128 chat tests pass, `make check` passes (36/36).
+
+## Task E17 - PubMed strictness (design C) and on/off switch fix in chat/static/js/profiles.js
+
+Implemented PubMed preset strictness UI per SPEC §13.4:
+- Added `PRESETS` constant with strict/balanced/broad presets.
+- Updated `cardHtml` for pubmed cards: renders preset buttons (`<div class="presets">`) before filters, and wraps existing filters in `<details class="custom">` (open when preset is "custom").
+- Added click handler for `[data-preset]` buttons: PATCHes the card with `{filters: {preset: ..., languages: [...]}}`, then refreshes.
+- Filter control changes now include `preset: "custom"` in the PATCH payload.
+- Fixed the on/off switch bug: changed `target.dataset.source` to `target.closest("[data-source]").dataset.source` so the card's source ID is correctly read.
+
+`node --check` passes, all 128 chat tests pass, `make check` passes (36/36).

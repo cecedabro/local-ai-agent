@@ -47,7 +47,7 @@ Rules for every task:
   accept: node --check chat/static/js/icons.js && make chat-test
 - [x] E16: In chat/static/js/app.js show thinking, the search trail and the checker's marks (`TODO (task E16)`)
   accept: node --check chat/static/js/app.js && make chat-test && node --test chat/tests/js/stream.test.mjs
-- [ ] E17: In chat/static/js/profiles.js add PubMed strictness (design C) and fix the on/off switch (`TODO (task E17)`)
+- [x] E17: In chat/static/js/profiles.js add PubMed strictness (design C) and fix the on/off switch (`TODO (task E17)`)
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [ ] E18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "E18 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
