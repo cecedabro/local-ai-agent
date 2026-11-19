@@ -74,3 +74,8 @@ Implemented PubMed preset strictness UI per SPEC §13.4:
 - Fixed the on/off switch bug: changed `target.dataset.source` to `target.closest("[data-source]").dataset.source` so the card's source ID is correctly read.
 
 `node --check` passes, all 128 chat tests pass, `make check` passes (36/36).
+
+## Task E18 - Browser tests (2026-11-19)
+
+All browser tests already passed with no changes needed:
+`make chat-test` (128/128 pass), `make chat-browser-test` (all 11 tests pass), `node --test chat/tests/js/stream.test.mjs` (13/13 pass), `make check` (36/36 pass). No modifications were required.
