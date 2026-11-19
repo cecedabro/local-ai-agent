@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from coder import profiles
 from test_accept_core import H, client, gw, invite_user, login, make_client, new_chat, send  # noqa: F401
 from test_step_profiles import pdf_bytes
 
@@ -15,7 +16,8 @@ class TestProfileApi:
         login(client)
         p = client.get("/api/profiles/evidence").json()
         assert p["profile"] == "evidence" and p["name"] == "Clear Source" and p["web"] is True and p["instructions"] == ""
-        assert [(s["kind"], s["title"]) for s in p["sources"]] == [("pubmed", "PubMed"), ("website", "rivm.nl")]
+        assert [(s["kind"], s["title"]) for s in p["sources"]] == [("pubmed", "PubMed")] + [("website", c["title"]) for c in profiles.SEED["evidence"][1:]]
+        assert "rivm.nl" in [s["domain"] for s in p["sources"]]
         assert set(p["sources"][0]) == {"id", "kind", "title", "domain", "note", "filters", "enabled", "created", "tokens"}
         assert p["budget"]["max"] == 32768 and 0 < p["budget"]["used"] < 2000
         assert client.get("/api/profiles/general").json()["sources"] == []
@@ -34,7 +36,7 @@ class TestProfileApi:
         login(client)
         r = client.patch("/api/profiles/evidence", json={"instructions": "Antwoord in het Nederlands.", "web": False}, headers=H)
         assert r.status_code == 200 and r.json()["instructions"] == "Antwoord in het Nederlands." and r.json()["web"] is False
-        assert len(r.json()["sources"]) == 2, "the seed cards stay"
+        assert len(r.json()["sources"]) == len(profiles.SEED["evidence"]), "the seed cards stay"
         for bad in ({}, {"web": "yes"}, {"instructions": "x" * 4001}, {"instructions": 5}):
             assert client.patch("/api/profiles/evidence", json=bad, headers=H).status_code == 400, bad
         assert client.get("/api/profiles/evidence").json()["web"] is False

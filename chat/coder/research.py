@@ -14,14 +14,19 @@ import httpx
 
 from . import answer, context, gateway, profiles, tools, verify
 
-MAX_SEARCHES = 6
-MAX_SOURCES = 10
+MAX_SEARCHES = 7
+MAX_SOURCES = 12
 SOURCE_CHARS = 4000
 PAGES_PER_SEARCH = 2
+PUBMED_WEB = "https://pubmed.ncbi.nlm.nih.gov/?term="
 PLAN_PROMPT = (
-    "You plan literature searches for a medical question. Answer with JSON only: a list of at most 6 objects "
-    '{"source": "pubmed" | "site:<domain>" | "web", "query": "<search terms>"}. Use English medical terms '
-    "(MeSH words) for PubMed and the site's own language for websites. Use only these sources: {sources}.")
+    "You plan literature searches for a medical question. Answer with JSON only: a list of at most 7 objects "
+    '{"source": "pubmed" | "site:<domain>" | "web", "query": "<search terms>", "mesh": ["<MeSH heading>", ...]}. '
+    "PubMed: 1 to 3 searches with English search terms, and in \"mesh\" up to 4 official MeSH headings for the main "
+    'concepts (for example "Renal Insufficiency, Chronic" or "Pregnancy"); leave out drugs too new for MeSH. '
+    "Websites: choose the 1 to 3 sites that fit the question best (drugs: farmacotherapeutischkompas.nl; children's "
+    "doses: kinderformularium.nl; infections and vaccination: rivm.nl; specialist care: richtlijnendatabase.nl; side "
+    "effects: lareb.nl) and search them in Dutch with a few key words, no mesh. Use only these sources: {sources}.")
 NO_EVIDENCE = {
     "nl": "Ik heb in de bronnen die ik doorzocht geen betrouwbaar bewijs gevonden voor deze vraag. Ik geef daarom "
           "geen antwoord uit eigen kennis. Probeer de vraag specifieker te stellen of voeg een bron toe.",
@@ -32,11 +37,18 @@ _DUTCH = {"de", "het", "een", "is", "bij", "van", "en", "niet", "wat", "hoe", "w
           "wordt", "mag", "kan", "helpt", "tegen", "tijdens", "patiënten", "dosis"}
 RULES = (
     "You are Clear Source. Answer ONLY from the numbered sources below; never use your own knowledge. "
-    "Answer in the language of the question. Structure: first a short answer of one or two sentences; then the "
-    "reasoning, built from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
-    '> "exact words from the source" [2]; every other claim also ends with its [n]; finally one line on how strong '
-    "the evidence is. Quote exactly, never change numbers or words. If the sources do not answer the question, "
-    "say so plainly instead of answering.")
+    "Answer in the language of the question, in Markdown. Write a long, detailed answer under these ## headings "
+    "(in Dutch: Kort antwoord, Nederlandse richtlijnen, Onderzoek, Dosering en bijzondere groepen, Sterkte van het "
+    "bewijs), and leave out a part the sources do not cover:\n"
+    "## Short answer: two or three sentences.\n"
+    "## Dutch guidelines: what the guideline sources say.\n"
+    "## Studies: what the studies show, with their numbers (effects, doses, groups, follow-up).\n"
+    "## Dosing and special groups: children, pregnancy, kidney or liver function, the elderly, interactions.\n"
+    "## Strength of the evidence: the study types, their size and limitations.\n"
+    "Build every part from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
+    '> "exact words from the source" [2], and explain each quote in your own words; every claim ends with its [n]. '
+    "Quote exactly, never change numbers or words, never add facts that are not in the sources. If the sources do "
+    "not answer the question, say so plainly instead of answering.")
 
 
 def looks_dutch(text: str) -> bool:
@@ -108,6 +120,9 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         query = str(item.get("query", "")).strip()[:200]
         if source not in allowed or not query:
             continue
+        # TODO (task F04): MeSH (SPEC §14.1). Only for a "pubmed" item whose "mesh" is a list: heads = [str(m).strip()[:80]
+        #   for each m whose str(m).strip() is not empty][:4]; when heads is not empty the dict also gets "mesh": heads.
+        #   Other sources never get "mesh". Tests: test_step_clear.py::test_parse_plan_mesh
         result.append({"source": source, "query": query})
         if len(result) >= MAX_SEARCHES:
             break
@@ -133,112 +148,51 @@ def label(step: dict) -> str:
 
 async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: Any = tools,
                  on_step: Callable[[dict], Any] | None = None) -> tuple[list[dict], list[dict]]:
-    r"""Run the plan: (sources, trail), SPEC §13.2 step 2. `t` has pubmed_search, web_search and fetch_page (tools or fakes).
-      pub = the enabled pubmed card (or None). add(title, url, kind, meta, text): skip when MAX_SOURCES reached or the url is
-        already a source; else append {"n": len(sources)+1, "title": title or url, "url", "kind", "meta", "text": text[:SOURCE_CHARS]}
+    r"""TODO (task F05). Run the plan: (sources, trail), SPEC §13.2 step 2 and §14.1-14.2. `t` has mesh_check,
+    pubmed_search, web_search and fetch_page (tools or fakes). Rewrite the function; keep the rules of §13.2 step 2:
+      pub = the first enabled pubmed card of cfg["sources"] (or None)
+      add(title, url, kind, meta, text, type_=None, site=None): skip when MAX_SOURCES sources exist or the url is already
+        a source; else append {"n": len(sources)+1, "title": title or url, "url", "kind", "meta", "text": text[:SOURCE_CHARS],
+        "type": type_, "site": site}   (every source has the keys "type" and "site")
       step(s): append s to trail; call on_step(s) when given (await it when it returns a coroutine)
-      for each {"source", "query"} in plan:
-        pubmed: res = await t.pubmed_search(client, q, pub["filters"] or None); tools.ToolError e -> step {"kind": "search",
-          "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)} and continue; else step {"kind": "search",
-          "source": "PubMed", "query": q, "found": len(res), "url": "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(q)}
-          and add(a["title"], a["url"], "pubmed", " · ".join of the non-empty journal and year, a["abstract"]) per result
-        site:<d> or web: res = await t.web_search(client, searxng_url, q, site=d or None); ToolError -> the error step with
-          "source": d or "the web"; else step {"kind": "search", "source": d or "the web", "query": q, "found": len(res), "url": None};
-          then for the first PAGES_PER_SEARCH results: page = await t.fetch_page(client, r["url"], allowed=a function
-          lambda h: tools._within(h, d) for a site, None for web) (ToolError -> skip); step {"kind": "read", "title": page["title"],
-          "url": page["url"]}; add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"])
-    Tests: test_step_research.py::test_gather, ::test_gather_caps_sources
+      for each item {"source", "query" (q), "mesh"?} of the plan:
+        pubmed: mesh = await t.mesh_check(client, item["mesh"]) when the item has a non-empty "mesh", else [] (no call)
+          info = {}; res = await t.pubmed_search(client, q, pub["filters"] or None (None without a card), mesh=mesh, info=info)
+          tools.ToolError e -> step {"kind": "search", "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)}, next item
+          else step {"kind": "search", "source": "PubMed", "query": q, "found": len(res),
+                     "url": PUBMED_WEB + quote_plus(info.get("term") or q), "mesh": mesh, "translation": info.get("translation", "")}
+          per article a: meta = " · ".join of the non-empty a.get("type"), a.get("journal"), a.get("year");
+            add(a["title"], a["url"], "pubmed", meta, a.get("abstract", ""), type_=a.get("type"))
+        "site:<d>" or "web" (d = None for web): res = await t.web_search(client, searxng_url, q, site=d)
+          ToolError -> the error step with "source": d or "the web"; else step {"kind": "search", "source": d or "the web",
+          "query": q, "found": len(res), "url": None}
+          for the first PAGES_PER_SEARCH results r (stop when MAX_SOURCES sources exist): page = await t.fetch_page(client,
+            r["url"], allowed=(lambda h: tools._within(h, d)) for a site, None for web) (ToolError -> skip it);
+            step {"kind": "read", "title": page["title"], "url": page["url"]};
+            add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=d)
+    Tests: test_step_research.py::test_gather, ::test_gather_caps_sources, test_step_clear.py::test_gather_mesh_types_and_sites
     """
-    sources: list[dict] = []
-    trail: list[dict] = []
-    pub = None
-    for s in cfg.get("sources", []):
-        if s.get("enabled", True) and s["kind"] == "pubmed":
-            pub = s
-            break
+    raise NotImplementedError
 
-    def add(title: str, url: str, kind: str, meta: str, text: str) -> None:
-        if len(sources) >= MAX_SOURCES:
-            return
-        if any(s["url"] == url for s in sources):
-            return
-        sources.append({"n": len(sources) + 1, "title": title or url, "url": url, "kind": kind,
-                         "meta": meta, "text": text[:SOURCE_CHARS]})
 
-    for item in plan:
-        source = item["source"]
-        query = item["query"]
+RANKS = {"Guideline": 1, "Meta-analysis": 2, "Systematic review": 2, "RCT": 3}
 
-        if source == "pubmed":
-            if len(sources) >= MAX_SOURCES:
-                continue
-            try:
-                res = await t.pubmed_search(client, query, pub["filters"] if pub else None)
-            except tools.ToolError as e:
-                step = {"kind": "search", "source": "PubMed", "query": query, "found": 0, "url": None, "error": str(e)}
-                trail.append(step)
-                if on_step:
-                    ret = on_step(step)
-                    if asyncio.iscoroutine(ret):
-                        await ret
-                continue
-            step = {"kind": "search", "source": "PubMed", "query": query, "found": len(res),
-                    "url": "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(query)}
-            trail.append(step)
-            if on_step:
-                ret = on_step(step)
-                if asyncio.iscoroutine(ret):
-                    await ret
-            for a in res:
-                if len(sources) >= MAX_SOURCES:
-                    break
-                meta_parts = []
-                if a.get("journal"):
-                    meta_parts.append(a["journal"])
-                if a.get("year"):
-                    meta_parts.append(a["year"])
-                add(a["title"], a["url"], "pubmed", " · ".join(meta_parts), a["abstract"])
 
-        elif source.startswith("site:") or source == "web":
-            if len(sources) >= MAX_SOURCES:
-                continue
-            domain = source.removeprefix("site:") if source.startswith("site:") else None
-            try:
-                res = await t.web_search(client, searxng_url, query, site=domain)
-            except tools.ToolError as e:
-                step = {"kind": "search", "source": domain if domain else "the web", "query": query,
-                        "found": 0, "url": None, "error": str(e)}
-                trail.append(step)
-                if on_step:
-                    ret = on_step(step)
-                    if asyncio.iscoroutine(ret):
-                        await ret
-                continue
-            step = {"kind": "search", "source": domain if domain else "the web", "query": query,
-                    "found": len(res), "url": None}
-            trail.append(step)
-            if on_step:
-                ret = on_step(step)
-                if asyncio.iscoroutine(ret):
-                    await ret
-            for r in res[:PAGES_PER_SEARCH]:
-                if len(sources) >= MAX_SOURCES:
-                    break
-                allowed = (lambda h, d=domain: tools._within(h, d)) if source.startswith("site:") else None
-                try:
-                    page = await t.fetch_page(client, r["url"], allowed=allowed)
-                except tools.ToolError:
-                    continue
-                page_step = {"kind": "read", "title": page["title"], "url": page["url"]}
-                trail.append(page_step)
-                if on_step:
-                    ret = on_step(page_step)
-                    if asyncio.iscoroutine(ret):
-                        await ret
-                add(page["title"], page["url"], "page",
-                    urlsplit(page["url"]).hostname or "", page["text"])
+def rank(src: dict) -> int:
+    r"""TODO (task F06). A source's group for `order` (SPEC §14.2), lower comes first:
+      kind "page" -> 0 when src.get("site") (a page of a guideline website card), else 5 (a web page)
+      anything else (PubMed) -> RANKS.get(src.get("type") or "", 4)
+    Tests: test_step_clear.py::test_order
+    """
+    raise NotImplementedError
 
-    return sources, trail
+
+def order(sources: list[dict]) -> list[dict]:
+    r"""TODO (task F06). The sources sorted by rank (a stable sort: the same rank keeps its order), as new dicts
+    ({**s, "n": i + 1}) numbered from 1; the input list and its dicts stay unchanged.
+    Tests: test_step_clear.py::test_order
+    """
+    raise NotImplementedError
 
 
 def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dict]:
@@ -262,6 +216,7 @@ def public_sources(sources: list[dict]) -> list[dict]:
     """
     result = []
     for s in sources:
+        # TODO (task F07): also "type" (s.get("type"), None when missing), SPEC §14.2. Tests: test_step_clear.py::test_public_sources_type
         out = {k: s[k] for k in ("n", "title", "url", "kind", "meta")}
         out["quote"] = tools._cut(s.get("text", ""))
         result.append(out)
@@ -315,6 +270,9 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     except (gateway.Busy, gateway.GatewayError):
         plan_text = ""                                  # the question itself becomes the PubMed search
     plan = parse_plan(plan_text, cfg, question)
+    # TODO (task F07): search the guideline sites first so PubMed cannot crowd them out (SPEC §14.2): sort the plan
+    #   (sorted, stable) by 0 for "site:…" items, 1 for "pubmed", 2 for "web".
+    #   Tests: test_step_clear.py::test_run_evidence_sites_first_and_ordered
 
     sources: list[dict] = []
     trail: list[dict] = []
@@ -338,6 +296,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
                     src["n"] = len(sources) + 1
                     sources.append(src)
 
+    # TODO (task F07): sources = order(sources) here, before anything uses them (the answer, the checker, done).
     lang = "nl" if looks_dutch(question) else "en"
 
     if not sources:

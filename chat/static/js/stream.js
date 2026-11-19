@@ -283,7 +283,8 @@ export function sourcesHtml(sources) {
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   return '<div class="sources">' + sources.map((s) =>
     `<details class="src" data-n="${Number(s.n)}"><summary><span class="n">${Number(s.n)}</span>` +
-    `<div><b>${escHtml(s.title || s.url)}</b><small>${escHtml(s.meta || host(s.url))}</small></div></summary>` +
+    `<div><b>${escHtml(s.title || s.url)}</b><small>${s.type ? `<span class="stype">${escHtml(s.type)}</span>` : ""}` +
+    `${escHtml((s.type ? String(s.meta || "").replace(s.type, "").replace(/^\s*·\s*/, "") : s.meta) || host(s.url))}</small></div></summary>` +
     `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
     `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` +
     "</div></details>").join("") + "</div>";
@@ -427,8 +428,10 @@ export function trailStep(s) {
   const link = (url, text) => (url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>` : text);
   if (s.kind === "read") return `<li class="step read">Read ${link(s.url, escHtml(s.title || s.url || "a page"))}</li>`;
   const found = s.error ? `<span class="err">${escHtml(s.error)}</span>` : `${Number(s.found) || 0} found`;
+  const mesh = (s.mesh || []).length ? `<span class="mesh" title="${escHtml(s.translation || "")}">` +
+    s.mesh.map((m) => `<i>${escHtml(m)}</i>`).join("") + "</span>" : "";
   return `<li class="step search">Searched ${escHtml(s.source || "the web")} for <b>"${escHtml(s.query || "")}"</b> · ` +
-    `${s.url ? link(s.url, found) : found}</li>`;
+    `${s.url ? link(s.url, found) : found}${mesh}</li>`;
 }
 
 /**

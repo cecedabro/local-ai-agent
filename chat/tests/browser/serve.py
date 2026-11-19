@@ -76,7 +76,10 @@ def main() -> None:
     handler.do_POST = slow_post
     import coder.tools as tools_mod
     tools_mod.PUBMED = gw.url                     # PubMed's E-utilities, faked by the gateway
+    gw.plan = '[{"source": "pubmed", "query": "apixaban renal", "mesh": ["chronic kidney disease"]}]'   # SPEC §14.1
+    gw.mesh = {"Renal Insufficiency, Chronic": ["Renal Insufficiency, Chronic", "Chronic Kidney Disease"]}
     gw.pubmed = [{"pmid": "101", "title": "Apixaban in chronic kidney disease", "journal": "Kidney Int", "year": "2022",
+                  "types": ["Journal Article", "Meta-Analysis"],
                   "abstract": "In patients with eGFR 15-29, apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin."},
                  {"pmid": "102", "title": "DOACs in dialysis", "journal": "BMJ", "year": "2021",
                   "abstract": "Evidence in patients on dialysis is limited to observational studies."}]

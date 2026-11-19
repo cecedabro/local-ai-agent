@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import threading
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -24,7 +25,8 @@ class FakeGateway:
         self.busy_left = 0
         self.search_results: list[dict] = []
         self.plan = '[{"source": "pubmed", "query": "apixaban renal"}]'   # Clear Source's planning call (SPEC §13.2)
-        self.pubmed: list[dict] = []          # fake PubMed: [{"pmid", "title", "abstract", "journal", "year"}]
+        self.pubmed: list[dict] = []          # fake PubMed: [{"pmid", "title", "abstract", "journal", "year", "types"?}]
+        self.mesh: dict[str, list[str]] = {}  # fake MeSH: heading -> its terms (heading first), SPEC §14.1
         self._lock = threading.Lock()
         gw = self
 
@@ -33,17 +35,31 @@ class FakeGateway:
                 pass
 
             def do_GET(self) -> None:
-                if self.path.startswith("/esearch.fcgi") or self.path.startswith("/efetch.fcgi"):
+                if self.path.startswith(("/esearch.fcgi", "/efetch.fcgi", "/esummary.fcgi")):
                     with gw._lock:
                         gw.requests.append({"path": self.path, "body": None, "headers": dict(self.headers)})
-                    if self.path.startswith("/esearch"):
-                        body = json.dumps({"esearchresult": {"idlist": [a["pmid"] for a in gw.pubmed]}}).encode()
+                    q = parse_qs(urlsplit(self.path).query)
+                    heads = list(gw.mesh)
+                    if q.get("db") == ["mesh"] and self.path.startswith("/esearch"):
+                        term = q.get("term", [""])[0].lower()
+                        ids = [str(i) for i, h in enumerate(heads) if any(f'"{t.lower()}"' in term for t in gw.mesh[h])]
+                        body = json.dumps({"esearchresult": {"idlist": ids}}).encode()
+                        ctype = "application/json"
+                    elif self.path.startswith("/esummary"):
+                        ids = q.get("id", [""])[0].split(",")
+                        res = {"uids": ids, **{i: {"ds_meshterms": gw.mesh[heads[int(i)]]} for i in ids if i.isdigit() and int(i) < len(heads)}}
+                        body = json.dumps({"result": res}).encode()
+                        ctype = "application/json"
+                    elif self.path.startswith("/esearch"):
+                        body = json.dumps({"esearchresult": {"idlist": [a["pmid"] for a in gw.pubmed], "count": str(len(gw.pubmed)),
+                                                             "querytranslation": q.get("term", [""])[0]}}).encode()
                         ctype = "application/json"
                     else:
                         arts = "".join(
                             f"<PubmedArticle><MedlineCitation><PMID>{a['pmid']}</PMID><Article><Journal><Title>{a.get('journal', '')}</Title>"
                             f"<JournalIssue><PubDate><Year>{a.get('year', '')}</Year></PubDate></JournalIssue></Journal>"
                             f"<ArticleTitle>{a['title']}</ArticleTitle><Abstract><AbstractText>{a['abstract']}</AbstractText></Abstract>"
+                            f"<PublicationTypeList>{''.join(f'<PublicationType>{t}</PublicationType>' for t in a.get('types', []))}</PublicationTypeList>"
                             f"</Article></MedlineCitation></PubmedArticle>" for a in gw.pubmed)
                         body = f"<?xml version='1.0'?><PubmedArticleSet>{arts}</PubmedArticleSet>".encode()
                         ctype = "text/xml"

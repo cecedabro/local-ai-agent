@@ -43,3 +43,5 @@ chat/tests/test_step_verify.py
 chat/tests/test_step_research.py
 chat/tests/test_accept_evidence.py
 chat/static/icons/
+chat/tests/test_step_clear.py
+chat/tests/test_accept_clear.py

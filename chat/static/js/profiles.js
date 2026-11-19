@@ -311,6 +311,11 @@ async function start() {
     }
     refresh();
   });
+  // TODO (task F09): the #add-defaults button (SPEC §14.3). On click: POST /api/profiles/${state.profile}/defaults with
+  //   api(…, { method: "POST" }); not ok -> say("That did not work, try again.", true); ok -> data = await res.json() and
+  //   say(`Added ${data.added} source${data.added === 1 ? "" : "s"}.`) when data.added > 0, else
+  //   say("You already have all the default sources."); then refresh(). Errors (catch) -> say(String(e), true).
+  //   Judge: make chat-browser-test ("round 5: the Dutch guideline sources and the add-defaults button").
   $("#add-doc").addEventListener("change", async () => {
     const files = $("#add-doc").files;
     for (const file of files) {

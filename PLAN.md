@@ -1,67 +1,51 @@
-# PLAN: EvidenceHunt v2
+# PLAN: Clear Source, round 2
 
-The model is never trusted to stay within the evidence; the app enforces it (chat/SPEC.md §13): a checker that
-finds every quote word for word in its source, research done by the app (the model only plans the searches and
-writes from numbered excerpts, "nothing found" means no answer), the search trail and the thinking block for every
-profile, PubMed strictness (design C) and the app icon picker. Small steps: every task names one file and a few
-functions; the steps are in their docstrings or TODO comments (`grep -n "task Exx" <file>`). Each task has its own test.
+Clear Source (the research profile, id `evidence`) gets better searches and answers (chat/SPEC.md §14): PubMed searches
+use MeSH headings that the app checks against PubMed's MeSH database, every PubMed source gets its study type, the
+sources are ordered guidelines first, the Dutch guideline sites are default sources (with a button to add them back),
+and the trail shows the exact PubMed search. Small steps: every task names one file and a few functions; the steps are
+in their docstrings or TODO comments (`grep -n "task Fxx" <file>`). Each task has its own test.
 
 Rules for every task:
 - Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
-- Only change what the task names. Don't refactor, rename or move other code.
-- Never read a whole large file (`chat/coder/app.py` ~1000 lines, `chat/static/js/app.js` ~700): `grep -n`, then `sed -n 'a,bp'`.
+- Only change what the task names. Don't refactor, rename or move other code. Remove the TODO comment you fill in.
+- Never read a whole large file (`chat/coder/app.py` ~1050 lines, `chat/coder/tools.py` ~560): `grep -n`, then `sed -n 'a,bp'`.
 - Python: only the packages in `chat/requirements.txt`.
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/stream.js`, `chat/static/vendor/`,
-  `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, and in `chat/coder/tools.py` the functions
-  `html_text`, `is_public` and `fetch_page`.
+  `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, the constants `PLAN_PROMPT`, `RULES`, `RANKS`,
+  `STUDY_TYPES` and `SEED`, and in `chat/coder/tools.py` the functions `html_text`, `is_public` and `fetch_page`.
 
-- [x] E01: In chat/coder/verify.py fill in `normalize` as its docstring says
-  accept: make chat-test K="test_step_verify and normalize"
-- [x] E02: In chat/coder/verify.py fill in `find_quote` as its docstring says
-  accept: make chat-test K="test_step_verify and find_quote"
-- [x] E03: In chat/coder/verify.py fill in `cites_in`, `_strip_marks`, `quotes` and `sentences` as their docstrings say
-  accept: make chat-test K="test_step_verify and (quotes or sentences)"
-- [x] E04: In chat/coder/verify.py fill in `check` as its docstring says
-  accept: make chat-test K="test_step_verify"
-- [x] E05: In chat/coder/db.py add the new message fields and the user icon (`TODO (task E05)`)
-  accept: make chat-test K="test_step_research and db_fields or test_step_profiles or test_step_round2"
-- [x] E06: In chat/coder/tools.py fill in `trail_step` as its docstring says
-  accept: make chat-test K="test_step_research and trail_step"
-- [x] E07: In chat/coder/research.py fill in `looks_dutch`, `enabled_sources`, `plan_messages` and `label` as their docstrings say
-  accept: make chat-test K="test_step_research and helpers"
-- [x] E08: In chat/coder/research.py fill in `parse_plan` as its docstring says
-  accept: make chat-test K="test_step_research and parse_plan"
-- [x] E09: In chat/coder/research.py fill in `gather` as its docstring says
-  accept: make chat-test K="test_step_research and gather"
-- [x] E10: In chat/coder/research.py fill in `evidence_messages` and `public_sources` as their docstrings say
-  accept: make chat-test K="test_step_research and evidence_messages"
-- [x] E11: In chat/coder/research.py fill in `run_evidence` as its docstring says
-  accept: make chat-test K="test_step_research"
-- [x] E12: In chat/coder/answer.py do `TODO (task E12)` (EvidenceHunt's pipeline; thinking and trail for every profile)
-  accept: make chat-test K="test_step_answer or test_step_round2 or test_step_profiles or TestStream or TestEvidenceV2"
-- [x] E13: In chat/coder/profiles.py add PubMed strictness and in chat/coder/app.py clean the filters of a source PATCH (`TODO (task E13)`)
-  accept: make chat-test K="test_presets or TestProfileApi"
-- [x] E14: In chat/coder/app.py add the app icon to /api/me and the routes /manifest.json and /apple-touch-icon.png (`TODO (task E14)`)
+- [ ] F01: In chat/coder/tools.py fill in `study_type` as its docstring says
+  accept: make chat-test K="test_step_clear and study_type"
+- [ ] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
+  accept: make chat-test K="test_step_clear and (pubmed_term_mesh or pubmed_search_mesh) or test_step_tools"
+- [ ] F03: In chat/coder/tools.py fill in `mesh_check` as its docstring says
+  accept: make chat-test K="test_step_clear and mesh_check"
+- [ ] F04: In chat/coder/research.py keep the MeSH headings in `parse_plan` (`TODO (task F04)`)
+  accept: make chat-test K="parse_plan"
+- [ ] F05: In chat/coder/research.py rewrite `gather` as its docstring says
+  accept: make chat-test K="gather"
+- [ ] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
+  accept: make chat-test K="test_step_clear and order"
+- [ ] F07: In chat/coder/research.py do the three `TODO (task F07)` comments (public_sources and run_evidence)
+  accept: make chat-test K="test_step_clear and not seed or test_step_research or TestEvidenceV2"
+- [ ] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
   accept: make chat-test
-- [x] E15: In chat/static/js/icons.js fill in `start` as its comment says
-  accept: node --check chat/static/js/icons.js && make chat-test
-- [x] E16: In chat/static/js/app.js show thinking, the search trail and the checker's marks (`TODO (task E16)`)
-  accept: node --check chat/static/js/app.js && make chat-test && node --test chat/tests/js/stream.test.mjs
-- [x] E17: In chat/static/js/profiles.js add PubMed strictness (design C) and fix the on/off switch (`TODO (task E17)`)
+- [ ] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
   accept: node --check chat/static/js/profiles.js && make chat-test
-- [x] E18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "E18 details")
+- [ ] F10: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F10 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [x] E19: Add a "## EvidenceHunt v2" section to chat/README.md (see "E19 details")
-  accept: grep -q "## EvidenceHunt v2" chat/README.md && grep -q "verify.py" chat/README.md && make chat-test
+- [ ] F11: Add a "## Clear Source, round 2" section to chat/README.md (see "F11 details")
+  accept: grep -q "## Clear Source, round 2" chat/README.md && grep -q "mesh_check" chat/README.md && make chat-test
 
-## E18 details
+## F10 details
 `make chat-browser-test` drives a real headless Chromium against the app (chat/tests/browser/run.mjs; serve.py fakes the
-model, SearXNG and PubMed: an EvidenceHunt question gets one real quote and one made-up quote). It prints one
-`ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run again, repeat. Console errors on the page also
-fail a check: read them in the FAIL line.
+model, SearXNG, PubMed and MeSH). It prints one `ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run
+again, repeat. Console errors on the page also fail a check: read them in the FAIL line.
 
-## E19 details
-Append to `chat/README.md` a section `## EvidenceHunt v2` (6-10 lines): the app does the research (the model only plans
-the searches, `chat/coder/research.py`), nothing found means no answer, the checker (`chat/coder/verify.py`) finds every
-quote word for word in its source and marks it ✓ or ⚠ in the page, sentences without a source are listed, the search
-trail and the thinking block, PubMed strictness (Strict / Balanced / Broad), and the app icon picker on the account page.
+## F11 details
+Append to `chat/README.md` a section `## Clear Source, round 2` (6-10 lines): MeSH headings from the plan are checked
+by `tools.mesh_check` against PubMed's MeSH database and combined with the words (`pubmed_term`); the trail shows the
+headings and links to the exact PubMed search; `tools.study_type` labels every PubMed source; `research.order` puts the
+guideline sites first, then the strongest studies; the Dutch guideline sites are default sources and the profiles page
+can add missing ones back; answers are always detailed, under headings, built from quotes.

@@ -445,3 +445,51 @@ searching` (its label) and a `trail` event `{"step": {...}}` → `phase reading`
 - Each user picks an app icon: `PATCH /api/me {"icon": "aero" | "blossom"}` (default: `blossom` when their
   theme is Blossom, else `aero`), shown by `GET /api/me`. `GET /manifest.json` and `GET /apple-touch-icon.png`
   serve the signed-in user's icon (no session: aero); the pages link those two URLs.
+
+## 14. Clear Source, round 2: MeSH, Dutch guidelines, study types, detailed answers
+
+### 14.1 MeSH (PubMed's medical subject headings)
+- The plan (§13.2 step 1) may give a PubMed search a `"mesh": ["<English MeSH heading>", …]` list (max 4).
+  `parse_plan` keeps it (strings, stripped, ≤ 80 characters, empty ones dropped) only for PubMed items and only
+  when non-empty.
+- `tools.mesh_check(client, terms)` checks the model's terms against PubMed's MeSH database and returns the
+  official headings that exist, in the order asked, each once: one `esearch` (`db=mesh`) for all terms
+  (`"<term>"[MeSH Terms]` joined by ` OR `) and one `esummary` (`db=mesh`) of the ids found; a term counts when
+  it equals (case-insensitive) one of a record's `ds_meshterms` (its heading or an entry term); the record's
+  heading (`ds_meshterms[0]`) is returned. Made-up terms vanish. Any failure → `[]` (the search goes on
+  without MeSH).
+- `tools.pubmed_term(query, filters, mesh)`: with headings, the first part becomes
+  `(("<h1>"[MeSH Terms] AND "<h2>"[MeSH Terms]) OR (<query>))`: the headings for precision, the words for
+  what MeSH does not cover (new drugs, for example).
+- `tools.pubmed_search(..., mesh=None, info=None)`: when `info` is a dict, it gets `"term"` (the search
+  sent), `"translation"` (PubMed's `querytranslation`) and `"count"` (all hits, int).
+- The trail step of a PubMed search gets `"mesh"` (the headings used, a list) and `"translation"`; its `url`
+  opens PubMed with the exact term that was sent. The page shows the headings as chips.
+
+### 14.2 Study types and the order of sources
+- `tools.study_type(pub_types)` → one label from PubMed's publication types, the first that applies:
+  Practice Guideline/Guideline → `"Guideline"`, Meta-Analysis → `"Meta-analysis"`, Systematic Review →
+  `"Systematic review"`, Randomized Controlled Trial → `"RCT"`, Clinical Trial (any phase) → `"Clinical trial"`,
+  Observational Study → `"Observational study"`, Review → `"Review"`, Case Reports → `"Case report"`; else
+  `None`. `pubmed_search` gives every article `"type"` (from all its publication types).
+- A PubMed source gets `"type"` and `meta` = type · journal · year (the non-empty ones); a page from a website
+  card gets `"site": "<domain>"` (web pages `None`).
+- `research.order(sources)`: guidelines first, then the strongest studies: website-card pages (Dutch guideline
+  sites), PubMed guidelines, meta-analyses and systematic reviews, RCTs, other PubMed, web pages; stable within
+  a group; renumbered from 1. The answer is written from the ordered list; the page shows each source's type as
+  a badge.
+
+### 14.3 Default sources: Dutch guidelines
+- A new Clear Source profile starts with PubMed and these website cards (`profiles.SEED`): richtlijnendatabase.nl
+  (medical specialists' guidelines), farmacotherapeutischkompas.nl, kinderformularium.nl, rivm.nl (incl. the
+  LCI guidelines), lareb.nl, ge-bu.nl, thuisarts.nl (NHG's patient information). NHG's own guideline site and
+  GGZ-standaarden cannot be read by the app (a bot check and a JavaScript-only site), so they are not included.
+- `POST /api/profiles/<profile>/defaults` (X-Coder header) adds the default cards the user does not have yet
+  (PubMed by kind, websites by domain) and returns `{"added": n, "sources": [...]}`. The profiles page has a
+  button `#add-defaults` for it.
+
+### 14.4 Always detailed answers
+The rules (§13.2 step 4) ask for a long, detailed answer in Markdown with `##` headings: a short answer first,
+then what the Dutch guidelines say, what the studies show, dosing and special groups (only when the sources
+cover them) and how strong the evidence is, each part built from verbatim quotes. The plan prompt asks for
+PubMed searches with MeSH headings and the 1–3 guideline sites that fit the question.

@@ -45,8 +45,10 @@ class TestEvidenceV2:
         assert any(r["path"].startswith("/esearch.fcgi") for r in pubmed.requests)
         done = evs[-1][1]
         assert [q["ok"] for q in done["verify"]["quotes"]] == [True, False], "the made-up quote is caught"
-        assert done["trail"][0] == {"kind": "search", "source": "PubMed", "query": "apixaban renal", "found": 2,
-                                    "url": "https://pubmed.ncbi.nlm.nih.gov/?term=apixaban+renal"}
+        step = done["trail"][0]
+        assert {k: step[k] for k in ("kind", "source", "query", "found", "mesh")} == \
+            {"kind": "search", "source": "PubMed", "query": "apixaban renal", "found": 2, "mesh": []}
+        assert step["url"].startswith("https://pubmed.ncbi.nlm.nih.gov/?term=%28apixaban+renal%29+AND+"), "the exact search (§14.1)"
         msg = client.get(f"/api/chats/{cid}").json()["messages"][-1]
         assert msg["verify"]["ok"] is False and msg["trail"] == done["trail"] and msg["thinking"] == "eerst zoeken"
         assert [s["n"] for s in msg["sources"]] == [1, 2] and "text" not in msg["sources"][0]

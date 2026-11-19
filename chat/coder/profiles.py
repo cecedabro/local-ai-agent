@@ -19,9 +19,21 @@ SEED = {
         {"kind": "pubmed", "title": "PubMed",
          "note": "Prefer systematic reviews, meta-analyses, randomised trials and guidelines. Say how strong the evidence is.",
          "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 10, "humans": True,
-                     "languages": []}},
+                     "languages": [], "preset": "balanced"}},
+        {"kind": "website", "title": "richtlijnendatabase.nl", "domain": "richtlijnendatabase.nl",
+         "note": "Dutch guidelines of the medical specialists (Federatie Medisch Specialisten)."},
+        {"kind": "website", "title": "farmacotherapeutischkompas.nl", "domain": "farmacotherapeutischkompas.nl",
+         "note": "Dutch drug information: indications, doses, contraindications, interactions (Zorginstituut)."},
+        {"kind": "website", "title": "kinderformularium.nl", "domain": "kinderformularium.nl",
+         "note": "Dutch doses and safety of medicines for children."},
         {"kind": "website", "title": "rivm.nl", "domain": "rivm.nl",
-         "note": "The Dutch public health institute: use it for Dutch advice and guidelines."},
+         "note": "The Dutch public health institute, with the LCI guidelines on infectious diseases and vaccination."},
+        {"kind": "website", "title": "lareb.nl", "domain": "lareb.nl",
+         "note": "The Dutch side effects centre: reported adverse reactions."},
+        {"kind": "website", "title": "ge-bu.nl", "domain": "ge-bu.nl",
+         "note": "Geneesmiddelenbulletin: independent Dutch reviews of medicines."},
+        {"kind": "website", "title": "thuisarts.nl", "domain": "thuisarts.nl",
+         "note": "The NHG's information for patients, based on the GP guidelines. Prefer professional sources."},
     ],
 }
 CITE = ("When you use a search result or page, cite it with its number in square brackets, like [1], right after "
@@ -93,6 +105,14 @@ def clean_filters(f: Any) -> dict:
             "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
         }
     return result
+
+
+def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
+    r"""TODO (task F08). The cards of SEED[profile] (SEED.get(profile, [])) this user does not have yet, in SEED's order
+    (SPEC §14.3): the pubmed card when no source has kind "pubmed"; a website card when no source of kind "website"
+    has its domain. Tests: test_step_clear.py::test_seed_and_missing_defaults
+    """
+    raise NotImplementedError
 
 
 def config(db: Any, username: str, profile: str) -> dict:

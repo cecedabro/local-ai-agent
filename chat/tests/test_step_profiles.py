@@ -91,10 +91,10 @@ def test_helpers():
 # ---------------------------------------------------------------- B08 profiles: config (seeding), system prompt, budget
 def test_seed_prompt_budget(db):
     cfg = profiles.config(db, "lisa", "evidence")
-    assert [(s["kind"], s["title"]) for s in cfg["sources"]] == [("pubmed", "PubMed"), ("website", "rivm.nl")]
+    assert [(s["kind"], s["title"]) for s in cfg["sources"]] == [("pubmed", "PubMed")] + [("website", c["title"]) for c in profiles.SEED["evidence"][1:]]
     assert cfg["sources"][0]["filters"]["types"] == ["systematic_review", "meta_analysis", "rct", "guideline"]
     db.delete_source(cfg["sources"][1]["id"], "lisa")
-    assert len(profiles.config(db, "lisa", "evidence")["sources"]) == 1, "seeded only once"
+    assert len(profiles.config(db, "lisa", "evidence")["sources"]) == len(profiles.SEED["evidence"]) - 1, "seeded only once"
     assert profiles.config(db, "lisa", "general")["sources"] == [], "General starts empty"
     db.set_profile_settings("lisa", "general", instructions="Answer briefly.")
     db.add_source("lisa", "general", "website", "thuisarts.nl", domain="thuisarts.nl", note="Patient advice")

@@ -189,7 +189,48 @@ def _within(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
-def pubmed_term(query: str, filters: dict | None) -> str:
+# PubMed publication types -> the label shown on a source (SPEC §14.2), strongest first.
+STUDY_TYPES = (
+    ("Guideline", ("Practice Guideline", "Guideline")),
+    ("Meta-analysis", ("Meta-Analysis",)),
+    ("Systematic review", ("Systematic Review",)),
+    ("RCT", ("Randomized Controlled Trial",)),
+    ("Clinical trial", ("Clinical Trial",)),          # also "Clinical Trial, Phase III" etc.: a prefix match
+    ("Observational study", ("Observational Study",)),
+    ("Review", ("Review",)),
+    ("Case report", ("Case Reports",)),
+)
+
+
+def study_type(pub_types: list[str] | None) -> str | None:
+    r"""TODO (task F01). The study type label of a PubMed article from its publication types (SPEC §14.2).
+      types = the stripped strings of pub_types (None counts as [])
+      for (label, names) in STUDY_TYPES, in order: the first label for which a type equals one of its names wins;
+        for "Clinical trial" a type that starts with "Clinical Trial" also counts ("Clinical Trial, Phase III")
+      none -> None
+    Tests: test_step_clear.py::test_study_type
+    """
+    raise NotImplementedError
+
+
+async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list[str]:
+    r"""TODO (task F03). The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
+      want = per term: str(term).strip(); skip empty ones, ones longer than 80 characters, ones with a '"', and ones
+        already in want (case-insensitive); keep at most 8. want empty -> return [] without any request.
+      r = GET PUBMED + "/esearch.fcgi" params {"db": "mesh", "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
+          "retmode": "json", "retmax": 20} (headers User-Agent UA, timeout 20); status != 200 -> []
+      ids = r.json()["esearchresult"]["idlist"]; none -> []
+      r = GET PUBMED + "/esummary.fcgi" params {"db": "mesh", "id": ",".join(ids), "retmode": "json"} (same headers, timeout);
+          status != 200 -> []; res = r.json()["result"]; records = [res[uid]["ds_meshterms"] (a list) for uid in res["uids"]]
+      httpx.HTTPError, ValueError, KeyError, TypeError or AttributeError anywhere -> return [] (never raise)
+      out: for each t in want: the first record that has t among its terms (case-insensitive) -> its heading record[0],
+        added once (skip it when it is already in out); a term without a record is dropped.
+    Tests: test_step_clear.py::test_mesh_check
+    """
+    raise NotImplementedError
+
+
+def pubmed_term(query: str, filters: dict | None, mesh: list[str] | None = None) -> str:
     """The PubMed search term for `query` with a source card's filters (SPEC §12.1).
 
     TODO (task B02). parts = [f"({query.strip()})"], then, only when present (filters may be None):
@@ -199,6 +240,9 @@ def pubmed_term(query: str, filters: dict | None) -> str:
       languages -> "(" + " OR ".join(LANGS[x] for each known x) + ")"
     Return " AND ".join(parts). Unknown types/languages are skipped.
     """
+    # TODO (task F02): with `mesh` (a non-empty list of headings) the first part becomes
+    #   '((' + ' AND '.join(f'"{m}"[MeSH Terms]' for m in mesh) + ') OR (' + query.strip() + '))'   (SPEC §14.1)
+    #   Tests: test_step_clear.py::test_pubmed_term_mesh
     parts = [f"({query.strip()})"]
     if filters:
         types = filters.get("types")
@@ -219,7 +263,8 @@ def pubmed_term(query: str, filters: dict | None) -> str:
     return " AND ".join(parts)
 
 
-async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | None = None, n: int = 5) -> list[dict]:
+async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | None = None, n: int = 5,
+                        mesh: list[str] | None = None, info: dict | None = None) -> list[dict]:
     """PubMed via E-utilities: [{"pmid", "title", "journal", "year", "types", "abstract", "url"}], most relevant first.
 
     TODO (task B02). Tests: test_step_tools.py::test_pubmed_search
@@ -235,6 +280,12 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
          types = the PublicationType texts (max 4); url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
       4. sort the results in the order of `ids` (PubMed's ranking), return them.
     """
+    # TODO (task F02), SPEC §14.1-14.2. Tests: test_step_clear.py::test_pubmed_search_mesh_info_and_type
+    #   1. term = pubmed_term(query, filters, mesh) and send that term.
+    #   2. after reading esearchresult (call it esr): when `info` is a dict, set info["term"] = term,
+    #      info["translation"] = str(esr.get("querytranslation") or ""), info["count"] = int(esr.get("count") or len(ids))
+    #      (a count that is not a number -> len(ids)); do this before the "no ids -> []" return.
+    #   3. per article: all_types = every PublicationType text; "types" stays all_types[:4]; add "type": study_type(all_types).
     try:
         r = await client.get(
             PUBMED + "/esearch.fcgi",

@@ -55,7 +55,7 @@ class FakeTools:
         self.calls = []
         self.fail = fail
 
-    async def pubmed_search(self, client, q, filters=None):
+    async def pubmed_search(self, client, q, filters=None, n=5, mesh=None, info=None):
         self.calls.append(("pubmed", q, filters))
         if "pubmed" in self.fail:
             raise tools.ToolError("PubMed answered 500")
@@ -80,11 +80,11 @@ def test_gather():
     assert [s["n"] for s in sources] == [1, 2, 3, 4], "numbered in order, duplicates by URL once"
     assert sources[0]["kind"] == "pubmed" and sources[0]["meta"] == "BMJ · 2021" and len(sources[0]["text"]) == research.SOURCE_CHARS
     assert sources[2] == {"n": 3, "title": "Page p1", "url": "https://www.rivm.nl/p1", "kind": "page", "meta": "www.rivm.nl",
-                          "text": "Page text of https://www.rivm.nl/p1"}
+                          "text": "Page text of https://www.rivm.nl/p1", "type": None, "site": "rivm.nl"}
     assert ("pubmed", "apixaban", {"types": ["rct"]}) in t.calls, "the card's filters are used"
     assert ("web", "griep", "rivm.nl") in t.calls and ("page", "https://www.rivm.nl/p3", True) not in t.calls, "top 2 pages only"
     assert trail[0] == {"kind": "search", "source": "PubMed", "query": "apixaban", "found": 2,
-                        "url": "https://pubmed.ncbi.nlm.nih.gov/?term=apixaban"}
+                        "url": "https://pubmed.ncbi.nlm.nih.gov/?term=apixaban", "mesh": [], "translation": ""}
     assert trail[2] == {"kind": "search", "source": "rivm.nl", "query": "griep", "found": 3, "url": None}
     assert trail[3] == {"kind": "read", "title": "Page p1", "url": "https://www.rivm.nl/p1"}
     assert seen == trail
@@ -189,7 +189,7 @@ def test_run_evidence_nothing_found(db):
     chat = evidence_chat(db, "Wat is de dosis van een niet-bestaand middel bij kinderen?")
     t = FakeTools()
 
-    async def nothing(client, q, filters=None):
+    async def nothing(client, q, filters=None, **kw):
         return []
     t.pubmed_search = nothing
 

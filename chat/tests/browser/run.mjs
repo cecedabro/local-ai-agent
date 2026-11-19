@@ -4,6 +4,7 @@
 //   round 2: phases, code blocks + download, scroll freeze + "Latest", stop, folders (chat/SPEC.md §11)
 //   round 3: the profiles page (notes, filters, a website, a document, the budget bar), sources under answers
 //   round 4: Clear Source's trail, thinking and checked quotes; PubMed strictness (C); the app icon picker
+//   round 5: MeSH chips in the trail, study-type badges, the Dutch guideline sources and #add-defaults
 //   passkey: add a passkey on /account (Chromium's virtual authenticator), sign out, sign in with it
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -50,7 +51,7 @@ async function main() {
     if (j.method === "Runtime.exceptionThrown") errors.push(j.params.exceptionDetails.exception?.description || j.params.exceptionDetails.text);
     if (j.method === "Runtime.consoleAPICalled" && j.params.type === "error") errors.push(j.params.args.map((a) => a.value ?? a.description).join(" "));
     if (j.method === "Page.javascriptDialogOpening") {         // prompt() gets "Work", confirm() is accepted
-      const promptText = /Website/.test(j.params.message) ? "thuisarts.nl" : "Work";
+      const promptText = /Website/.test(j.params.message) ? "nvk.nl" : "Work";
       ws.send(JSON.stringify({ id: ++id, method: "Page.handleJavaScriptDialog", params: { accept: true, promptText } }));
     }
   };
@@ -169,7 +170,7 @@ async function main() {
     await go("/profiles");
     await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "two profile tabs");
     await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
-    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===2`), 5000, "the seeded PubMed and rivm.nl cards");
+    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===8`), 5000, "the seeded PubMed and 7 Dutch guideline cards");
     if (!(await ev(`document.querySelector('.pf-tab[data-profile=evidence]').getAttribute('aria-selected')==='true'`))) throw new Error("the open tab is not aria-selected");
     if (!(await ev(`document.querySelectorAll('#budget-bar i').length>=1 && /tokens/.test(document.getElementById('budget-text').textContent)`))) throw new Error("no budget bar");
     await ev(`(()=>{const t=document.querySelector('.src-card[data-kind=pubmed] [data-note]');t.value='Alleen RCTs en reviews';t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
@@ -180,7 +181,7 @@ async function main() {
     if (pub.note !== "Alleen RCTs en reviews") throw new Error("the note was not saved: " + JSON.stringify(pub.note));
     if (!pub.filters.types.includes("review")) throw new Error("the filter was not saved: " + JSON.stringify(pub.filters));
     await ev(`document.getElementById('add-website').click()`);
-    await waitFor(() => ev(`[...document.querySelectorAll('.src-card b')].some(b=>b.textContent==='thuisarts.nl')`), 5000, "the thuisarts.nl card");
+    await waitFor(() => ev(`[...document.querySelectorAll('.src-card b')].some(b=>b.textContent==='nvk.nl')`), 5000, "the nvk.nl card");
     const doc = join(data, "richtlijn.md");
     (await import("node:fs")).writeFileSync(doc, "# Richtlijn\n" + "Vitamine D advies. ".repeat(300));
     const node = await cmd("DOM.querySelector", { nodeId: (await cmd("DOM.getDocument")).root.nodeId, selector: "#add-doc" });
@@ -219,6 +220,31 @@ async function main() {
     if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
     if (!(await ev(`!!${last("blockquote.q-bad")}`))) throw new Error("the made-up quote is not flagged");
     if (!/no source/.test(await ev(`${last(".verify-note summary")}?.textContent||''`))) throw new Error("no note about sentences without a source");
+  });
+
+  await check("round 5: Clear Source: MeSH headings in the trail, study types on the sources", async () => {
+    const chips = await ev(`[...(${last(".trail")}?.querySelectorAll('.mesh i')||[])].map(i=>i.textContent)`);
+    if (JSON.stringify(chips) !== '["Renal Insufficiency, Chronic"]') throw new Error("MeSH chips: " + JSON.stringify(chips));
+    const href = await ev(`${last('.trail a[href^="https://pubmed.ncbi.nlm.nih.gov/?term="]')}?.href||''`);
+    if (!href.includes("MeSH")) throw new Error("the PubMed link is not the exact search: " + href);
+    const badge = await ev(`${last(".sources details.src .stype")}?.textContent||''`);
+    if (badge !== "Meta-analysis") throw new Error("study type badge: " + JSON.stringify(badge));
+  });
+
+  await check("round 5: the Dutch guideline sources and the add-defaults button", async () => {
+    await go("/profiles");
+    await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "profile tabs");
+    await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
+    await waitFor(() => ev(`!!document.querySelector('.src-card[data-kind=website]')`), 5000, "the website cards");
+    const p = await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`);
+    const lareb = p.sources.find((x) => x.domain === "lareb.nl");
+    if (!lareb || !p.sources.some((x) => x.domain === "richtlijnendatabase.nl")) throw new Error("the Dutch guideline sites are not there by default");
+    await ev(`fetch('/api/profiles/evidence/sources/${lareb.id}',{method:'DELETE',headers:{'X-Coder':'1'}})`);
+    await ev(`document.getElementById('add-defaults').click()`);
+    await waitFor(() => ev(`/Added 1 source/.test(document.getElementById('pf-msg').textContent)`), 5000, "'Added 1 source.'");
+    await waitFor(async () => (await ev(`fetch('/api/profiles/evidence').then(r=>r.json())`)).sources.some((x) => x.domain === "lareb.nl"), 5000, "lareb.nl back");
+    await ev(`document.getElementById('add-defaults').click()`);
+    await waitFor(() => ev(`/already have/.test(document.getElementById('pf-msg').textContent)`), 5000, "'You already have all the default sources.'");
   });
 
   await check("round 4: PubMed strictness (design C) and the app icon picker", async () => {
