@@ -73,3 +73,9 @@
 ## Task F17 - verified complete
 - `group_of` (profiles.py:114) and `label_of` (profiles.py:132) implemented and wired into `public` (profiles.py:283) and `_source_json` (app.py:468).
 - No TODO comments remain for F17. Both `make check` (36/36) and `make chat-test` (153 passed) pass.
+
+## Task F18 - profiles page source grouping and row layout (SPEC §15.6)
+- **File**: `chat/static/js/profiles.js` — `cardHtml` (lines 98-150) and `draw` (lines 153-177).
+- **Change** (`cardHtml`): Replaced the kind tag row with a bubble + who layout — `name = s.label || s.title`, desc is token count (file), preset name (pubmed), or domain (website); bubble is 📄 for files, first uppercase character otherwise. Wrapped pubmed filters/customise and note textarea in `<details class="more">` with "Strictness and note" (pubmed) or "Note" summary, open by default for pubmed.
+- **Change** (`draw`): Grouped sources by `s.group` (defaulting to "websites") using GROUPS array. Each group is a `<section class="pf-group">` with header showing title and enabled count, containing a `<div class="pf-list">` with the cards. Empty source list shows "No sources yet.".
+- `node --check chat/static/js/profiles.js` passes. `make chat-test` passes (153/153). `make check` passes (36/36).

@@ -49,7 +49,7 @@ Rules for every task:
   accept: make chat-test K="test_step_verify or summary_sentences"
 - [x] F17: In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json)
   accept: make chat-test
-- [ ] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
+- [x] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [ ] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
