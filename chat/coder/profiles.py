@@ -55,16 +55,10 @@ def domain_of(url: str) -> str | None:
     return host
 
 
-# TODO (task E13): PubMed strictness, design C (SPEC §13.4). Tests: test_accept_evidence.py::TestStrictnessAndIcon::test_presets
-#   1. Add a module constant
-#      PRESETS = {"strict": {"types": ["systematic_review", "meta_analysis", "guideline"], "years": 10, "humans": True},
-#                 "balanced": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 15, "humans": True},
-#                 "broad": {"types": [], "years": None, "humans": False}}
-#   2. clean_filters: preset = f.get("preset") when it is one of PRESETS or "custom", else None; for a PRESETS key use
-#      base = {**f, **PRESETS[preset]} instead of f for types/years/humans (languages always from f); the result gets
-#      "preset": preset only when preset is set.
-#   3. In chat/coder/app.py, PATCH /api/profiles/{profile}/sources/{id}: the filters it stores must go through
-#      profiles.clean_filters (today the raw body is stored: a bug).
+PRESETS = {"strict": {"types": ["systematic_review", "meta_analysis", "guideline"], "years": 10, "humans": True},
+           "balanced": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 15, "humans": True},
+           "broad": {"types": [], "years": None, "humans": False}}
+
 
 def clean_filters(f: Any) -> dict:
     """Keep only the known PubMed filter values (SPEC §12.1); `f` that is not a dict counts as {}:
@@ -73,12 +67,32 @@ def clean_filters(f: Any) -> dict:
     """
     if not isinstance(f, dict):
         f = {}
-    return {
-        "types": [t for t in FILTER_TYPES if t in f.get("types", [])],
-        "years": f["years"] if isinstance(f.get("years"), int) and 1 <= f["years"] <= 50 else None,
-        "humans": bool(f.get("humans")),
-        "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
-    }
+    preset = f.get("preset")
+    if preset in PRESETS:
+        base = {**f, **PRESETS[preset]}
+        result = {
+            "types": [t for t in FILTER_TYPES if t in base.get("types", [])],
+            "years": base["years"] if isinstance(base.get("years"), int) and 1 <= base["years"] <= 50 else None,
+            "humans": bool(base.get("humans")),
+            "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
+            "preset": preset,
+        }
+    elif preset == "custom":
+        result = {
+            "types": [t for t in FILTER_TYPES if t in f.get("types", [])],
+            "years": f["years"] if isinstance(f.get("years"), int) and 1 <= f["years"] <= 50 else None,
+            "humans": bool(f.get("humans")),
+            "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
+            "preset": "custom",
+        }
+    else:
+        result = {
+            "types": [t for t in FILTER_TYPES if t in f.get("types", [])],
+            "years": f["years"] if isinstance(f.get("years"), int) and 1 <= f["years"] <= 50 else None,
+            "humans": bool(f.get("humans")),
+            "languages": [x for x in FILTER_LANGS if x in f.get("languages", [])],
+        }
+    return result
 
 
 def config(db: Any, username: str, profile: str) -> dict:

@@ -39,7 +39,7 @@ Rules for every task:
   accept: make chat-test K="test_step_research"
 - [x] E12: In chat/coder/answer.py do `TODO (task E12)` (EvidenceHunt's pipeline; thinking and trail for every profile)
   accept: make chat-test K="test_step_answer or test_step_round2 or test_step_profiles or TestStream or TestEvidenceV2"
-- [ ] E13: In chat/coder/profiles.py add PubMed strictness and in chat/coder/app.py clean the filters of a source PATCH (`TODO (task E13)`)
+- [x] E13: In chat/coder/profiles.py add PubMed strictness and in chat/coder/app.py clean the filters of a source PATCH (`TODO (task E13)`)
   accept: make chat-test K="test_presets or TestProfileApi"
 - [ ] E14: In chat/coder/app.py add the app icon to /api/me and the routes /manifest.json and /apple-touch-icon.png (`TODO (task E14)`)
   accept: make chat-test

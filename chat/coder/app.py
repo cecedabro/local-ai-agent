@@ -498,6 +498,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
         if "filters" in body:
             if src.get("kind") != "pubmed":
                 return JSONResponse({"error": "Filters only for pubmed"}, status_code=400)
+            clean = profiles.clean_filters(body["filters"])
+            body = {**body, "filters": clean}
         if app.state.db.update_source(source_id, username,
                                         **{k: v for k, v in body.items() if k in updatable}):
             return JSONResponse(_source_json(app.state.db.get_source(source_id, username)))
