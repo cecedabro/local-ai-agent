@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<defs>
-<radialGradient id="body" cx=".5" cy=".72" r=".62"><stop offset="0" stop-color="#ffffff"/><stop offset=".14" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".45" stop-color="#a6e3ff"/><stop offset="1" stop-color="#3fa6e6"/></radialGradient>
-<radialGradient id="hl" cx=".36" cy=".26" r=".32"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-<radialGradient id="pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-</defs>
-<circle cx="32" cy="32" r="29" fill="url(#body)"/>
-<ellipse cx="32" cy="50" rx="13" ry="5" fill="url(#pool)" opacity=".9"/>
-<ellipse cx="24" cy="19" rx="15" ry="10" fill="url(#hl)"/>
-<circle cx="32" cy="32" r="28.5" fill="none" stroke="#fff" stroke-opacity=".7"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs>
+<radialGradient id="fb" cx=".5" cy=".55" r=".55"><stop offset="0" stop-color="#c9d4dd" stop-opacity=".10"/><stop offset=".72" stop-color="#c9d4dd" stop-opacity=".22"/><stop offset=".93" stop-color="#3d4f5e" stop-opacity=".55"/><stop offset="1" stop-color="#3d4f5e" stop-opacity=".8"/></radialGradient>
+<radialGradient id="fc" cx=".5" cy=".82" r=".42"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".55" stop-color="#ffffff" stop-opacity=".35"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+<radialGradient id="ft" cx=".5" cy=".08" r=".7"><stop offset="0" stop-color="#2a3a48" stop-opacity=".35"/><stop offset=".5" stop-color="#2a3a48" stop-opacity="0"/></radialGradient>
+<radialGradient id="fh" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<clipPath id="fk"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+<circle cx="32" cy="32" r="28" fill="url(#fb)"/>
+<g clip-path="url(#fk)"><circle cx="32" cy="32" r="28" fill="url(#ft)"/>
+<ellipse cx="32" cy="47.400000000000006" rx="19.599999999999998" ry="11.76" fill="url(#fc)"/></g>
+<circle cx="32" cy="32" r="26.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3"/>
+<ellipse cx="21.92" cy="20.240000000000002" rx="8.4" ry="4.760000000000001" transform="rotate(-32 21.92 20.240000000000002)" fill="url(#fh)"/>
+<circle cx="18.0" cy="18.0" r="1.54" fill="#fff"/>
+<ellipse cx="43.76" cy="46.0" rx="2.8000000000000003" ry="1.4000000000000001" transform="rotate(-40 43.76 46.0)" fill="#fff" opacity=".7"/><circle cx="32" cy="32" r="29.2" fill="none" stroke="#5b6f80" stroke-opacity=".55" stroke-width="1.6"/></svg>

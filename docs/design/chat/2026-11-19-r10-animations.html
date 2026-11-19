@@ -1,0 +1,272 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dewdrop animations · round 10</title><style>
+/* Coder chat: colour tokens per theme. <html data-theme=light|dark|blossom>. Human-owned (chat/SPEC.md §9).
+   Everything else in chat/static/css/ uses only these variables. */
+:root{color-scheme:light;
+--ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--bg:#dff2ff;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#a6ec7e 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#8fb8ff 0,transparent 70%),
+  linear-gradient(160deg,#dff2ff,#ecfffa 55%,#e6f9d8);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.7),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.46);--tile-top:rgba(255,255,255,.75);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.7);--chip:rgba(255,255,255,.65);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(244,250,255,.85) 48%,rgba(222,238,250,.8) 52%,rgba(240,248,255,.9) 100%);
+--stroke:rgba(255,255,255,.85);--stroke-soft:rgba(255,255,255,.7);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(11,31,51,.09);--track:rgba(11,31,51,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 38%);
+--shadow:0 10px 30px rgba(30,90,140,.13),0 1px 2px rgba(30,90,140,.08);
+--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);--glow:rgba(10,132,255,.35);
+--fill:linear-gradient(90deg,#34d399,#22c3ee 55%,#0a84ff);--bar-top:#5ad1ff;--bar-bottom:#0a84ff;
+--title-a:#0a4e7c;--title-b:#0d86c6;--gloss:1;--panel:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.3));
+--num:linear-gradient(90deg,#0a84ff,#22c3ee 50%,#2fb36b);
+--t1:rgba(90,190,255,.30);--t2:rgba(110,225,140,.30);--t3:rgba(255,200,90,.30);
+--t4:rgba(170,140,255,.28);--t5:rgba(70,220,200,.30);--t6:rgba(255,130,170,.26)}
+:root[data-theme=dark]{color-scheme:dark;
+--ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
+--ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
+--bg:#06121f;
+--scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),
+  linear-gradient(160deg,#071624,#06131d 55%,#07170f);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(120,200,255,.12),transparent 70%);
+--bar:rgba(10,22,36,.55);--glass:rgba(22,36,54,.45);--tile-top:rgba(255,255,255,.06);--bubble:rgba(255,255,255,.08);
+--field:rgba(0,0,0,.25);--chip:rgba(255,255,255,.08);
+--btn:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.09) 48%,rgba(255,255,255,.04) 52%,rgba(255,255,255,.08) 100%);
+--stroke:rgba(255,255,255,.14);--stroke-soft:rgba(255,255,255,.09);--hi:rgba(255,255,255,.18);--hi-soft:rgba(255,255,255,.07);
+--line:rgba(255,255,255,.08);--track:rgba(255,255,255,.08);
+--sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 35%);
+--shadow:0 12px 34px rgba(0,0,0,.35);
+--primary:linear-gradient(180deg,#7fd3ff 0%,#2a9ff0 48%,#0b78d6 52%,#2aa4f2 100%);--glow:rgba(76,194,255,.35);
+--fill:linear-gradient(90deg,#2ee59d,#22c3ee 55%,#3b9cff);--bar-top:#7fe3ff;--bar-bottom:#2a7fe0;
+--title-a:#ffffff;--title-b:#8fd8ff;--gloss:.3;--panel:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));
+--num:linear-gradient(90deg,#6cc4ff,#5ee0f0 50%,#5fe0a0);
+--t1:rgba(90,190,255,.16);--t2:rgba(110,225,140,.14);--t3:rgba(255,200,90,.13);
+--t4:rgba(170,140,255,.16);--t5:rgba(70,220,200,.14);--t6:rgba(255,130,170,.13)}
+
+
+/* ---------------------------------------------------------------- Blossom (pink) theme */
+:root[data-theme=blossom]{color-scheme:light;
+--ink:#3a1028;--muted:#8a5a74;--link:#d0367f;--accent:#ec4899;
+--ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#a08090;
+--bg:#ffeef6;
+--scene:radial-gradient(42vmax 38vmax at 6% 2%,#ffb3d9 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#ffd6c2 0,transparent 70%),
+  radial-gradient(30vmax 26vmax at 55% 45%,#ffe3f1 0,transparent 70%),
+  radial-gradient(50vmax 40vmax at 72% 100%,#e3c8ff 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 92%,#ffc1d6 0,transparent 70%),
+  linear-gradient(160deg,#fff0f7,#fff6f2 55%,#f6edff);
+--scene-top:radial-gradient(60vmax 30vmax at 50% -5%,rgba(255,255,255,.75),transparent 70%);
+--bar:rgba(255,255,255,.5);--glass:rgba(255,255,255,.5);--bubble:rgba(255,255,255,.8);
+--field:rgba(255,255,255,.72);--chip:rgba(255,255,255,.68);
+--btn:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(255,246,251,.88) 48%,rgba(252,228,240,.82) 52%,rgba(255,244,250,.92) 100%);
+--stroke:rgba(255,255,255,.88);--stroke-soft:rgba(255,255,255,.72);--hi:rgba(255,255,255,.95);--hi-soft:rgba(255,255,255,.6);
+--line:rgba(58,16,40,.09);--track:rgba(58,16,40,.08);
+--shadow:0 10px 30px rgba(170,50,110,.13),0 1px 2px rgba(170,50,110,.08);
+--primary:linear-gradient(180deg,#ffb8dc 0%,#f472b6 48%,#e1468f 52%,#f580be 100%);--glow:rgba(236,72,153,.35);
+--fill:linear-gradient(90deg,#f9a8d4,#ec4899 55%,#a855f7);
+--title-a:#8d1d55;--title-b:#e1468f}
+
+
+/* Dewdrop: the orb and its phases. Human-owned. Markup (chat/SPEC.md §9):
+     <span class="orb" data-phase="idle|waiting|thinking|searching|reading|summarising|writing|compressing"><i></i><i></i><i></i><i></i></span>
+   <i>1 = clouds (thinking), <i>2 = water (writing; its height follows --fill, 0–1, set by app.js),
+   <i>3 = little bubbles in the water, <i>4 = the light pooled at the bottom of the drop.
+   Size: --s. Only transform and opacity animate, so it stays smooth.
+   The welcome screen uses .orb.marble: the drifting cloud marble. */
+.orb{--s:30px;
+  --d-core:rgba(255,255,255,.95);--d-mid:rgba(170,228,255,.38);--d-edge:rgba(80,170,230,.55);--d-glow:rgba(34,160,230,.22);--d-rim:rgba(255,255,255,.85);
+  --w-top:rgba(140,215,250,.34);--w-deep:rgba(40,140,220,.5);--c1:#bfe9ff;--c2:#d9f5e6;--c3:#e3dcff;
+  position:relative;display:inline-block;flex:none;width:var(--s);height:var(--s);border-radius:50%;overflow:hidden;isolation:isolate;vertical-align:middle;
+  transform:translateZ(0);
+  background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 42%,var(--d-edge) 100%);
+  box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.10),0 3px 12px var(--d-glow)}
+:root[data-theme=dark] .orb{--d-core:rgba(150,240,255,.95);--d-mid:rgba(40,170,220,.5);--d-edge:#0b3b5e;--d-glow:rgba(60,200,255,.32);--d-rim:rgba(150,220,255,.35);
+  --w-top:rgba(90,200,250,.3);--w-deep:rgba(20,120,210,.52);--c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a}
+/* Blossom: rose quartz, pink water, a white glow (never blue) */
+:root[data-theme=blossom] .orb{--d-core:rgba(255,255,255,.97);--d-mid:rgba(255,214,232,.55);--d-edge:rgba(232,128,176,.6);--d-glow:rgba(255,190,220,.45);
+  --d-rim:rgba(255,255,255,.9);--w-top:rgba(255,190,222,.36);--w-deep:rgba(226,104,160,.48);--c1:#ffd6ea;--c2:#ffe4f0;--c3:#ead9ff}
+/* the drop's own shine, on top of everything */
+.orb::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:6;
+  background:radial-gradient(40% 26% at 35% 22%,rgba(255,255,255,.92),transparent 72%)}
+.orb i{position:absolute;display:block}
+
+/* 4: pooled light at the bottom, softly glinting */
+.orb i:nth-child(4){left:18%;right:18%;bottom:9%;height:22%;border-radius:50%;z-index:5;
+  background:radial-gradient(closest-side,#fff,transparent);animation:orb-glint 5s ease-in-out infinite}
+@keyframes orb-glint{50%{transform:scaleX(1.15);opacity:.7}}
+
+/* 1: clouds, only while thinking (the drop clouds over softly) */
+.orb i:nth-child(1){inset:-10%;border-radius:50%;opacity:0;transition:opacity .6s;
+  background:radial-gradient(38% 34% at 30% 35%,var(--c1),transparent 70%),radial-gradient(36% 32% at 70% 45%,var(--c3),transparent 70%),
+    radial-gradient(40% 34% at 45% 72%,var(--c2),transparent 70%)}
+.orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]) i:nth-child(1){
+  opacity:.85;animation:orb-cloud 7s ease-in-out infinite}
+@keyframes orb-cloud{0%,100%{transform:rotate(0) scale(1)}33%{transform:rotate(25deg) scale(1.08) translate3d(4%,-3%,0)}66%{transform:rotate(-15deg) scale(.95) translate3d(-4%,3%,0)}}
+.orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]){
+  animation:orb-breath 3.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes orb-breath{0%,100%{transform:scale(.97)}50%{transform:scale(1.03)}}
+
+/* 2: water. Its body starts below the waves (no darker band); two wave strips slide at different
+   speeds with a bright waterline; it rises with --fill and drains when the phase ends. */
+.orb i:nth-child(2){left:0;right:0;top:0;height:100%;z-index:2;transform:translate3d(0,100%,0);
+  transition:transform 1.4s cubic-bezier(.33,0,.2,1);
+  background:linear-gradient(180deg,transparent 0 9%,var(--w-top) 9%,var(--w-deep))}
+.orb[data-phase=writing] i:nth-child(2){transform:translate3d(0,calc((1 - var(--fill,.15)) * 100%),0)}
+.orb i:nth-child(2)::before,.orb i:nth-child(2)::after{content:"";position:absolute;left:0;width:200%;top:0;height:10%;
+  background-repeat:repeat-x;background-size:50% 100%;animation:orb-wave 4.2s linear infinite}
+.orb i:nth-child(2)::before{opacity:.7;animation-duration:6.5s;animation-direction:reverse;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q12.5 1 25 5 T50 5 T75 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.22)'/%3E%3C/svg%3E")}
+.orb i:nth-child(2)::after{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.16)'/%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5' fill='none' stroke='white' stroke-opacity='0.95' stroke-width='0.9'/%3E%3C/svg%3E")}
+@keyframes orb-wave{to{transform:translate3d(-50%,0,0)}}
+/* 3: little bubbles rising inside the water (only while writing) */
+.orb i:nth-child(3){left:0;right:0;bottom:0;height:200%;z-index:3;opacity:0;transition:opacity .5s;
+  background:radial-gradient(circle at 30% 80%,transparent 0 1.3%,rgba(255,255,255,.9) 1.6% 2.2%,transparent 2.6%),
+    radial-gradient(circle at 62% 62%,transparent 0 1%,rgba(255,255,255,.85) 1.3% 1.8%,transparent 2.2%),
+    radial-gradient(circle at 45% 92%,transparent 0 1.1%,rgba(255,255,255,.85) 1.4% 2%,transparent 2.4%)}
+.orb[data-phase=writing] i:nth-child(3){opacity:1;animation:orb-bubbles 3.6s linear infinite}
+@keyframes orb-bubbles{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+
+/* waiting in line: the drop asleep, grey and slowly breathing */
+.orb[data-phase=waiting]{filter:grayscale(1);animation:orb-sleep 4s ease-in-out infinite}
+@keyframes orb-sleep{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:.8;transform:scale(1)}}
+
+/* the welcome screen: the dewdrop itself, clouds drifting slowly inside it, breathing */
+.orb.marble{animation:orb-breath 6s cubic-bezier(.45,0,.55,1) infinite}
+.orb.marble i:nth-child(1){opacity:.8;animation:orb-cloud 12s ease-in-out infinite}
+/* the tiny writing drop fills too (JS sets data-phase="writing" and --fill on it) */
+.orb.tiny i:nth-child(2)::before,.orb.tiny i:nth-child(2)::after{height:16%}
+
+@media (prefers-reduced-motion:reduce){.orb,.orb *,.orb i::before,.orb i::after{animation:none!important}}
+
+/* today's extra phases (chat.css) */
+.orb[data-phase=searching]::before{content:"";position:absolute;inset:0;border-radius:50%;z-index:4;
+  background:conic-gradient(from 0deg,transparent 0 70%,rgba(255,255,255,.75) 98%,transparent);animation:spin 1.6s linear infinite}
+.orb[data-phase=reading] i:nth-child(1){animation-duration:3.5s}
+@keyframes spin{to{transform:rotate(360deg)}}
+*{box-sizing:border-box}
+body{margin:0;padding:22px 16px 60px;font:15px/1.5 -apple-system,system-ui,sans-serif;color:#e8f2fb;
+  background:radial-gradient(120% 70% at 10% 0%,#14456e 0%,#0b2236 55%,#061220 100%);min-height:100vh}
+:root[data-theme=light] body{color:#0b1f33;background:radial-gradient(120% 70% at 10% 0%,#bfe8ff 0%,#e9f7ff 55%,#f6fbff 100%)}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:30px 0 4px}p.s{margin:0 0 14px;color:#9fb6c9;font-size:13.5px}
+.bar{display:flex;gap:8px;margin:10px 0 0}.bar button{font:600 13px system-ui;padding:6px 12px;border-radius:99px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.cell{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 8px 12px;border-radius:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);text-align:center}
+:root[data-theme=light] .cell{background:rgba(255,255,255,.7);border-color:rgba(11,31,51,.08)}
+.cell .orb{--s:64px;--fill:.55}.cell b{font-size:14px}.cell small{color:#9fb6c9;font-size:12px;line-height:1.35}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:2px 8px;border-radius:99px;background:#34d39933;color:#5eead4}.tag.no{background:#f8717133;color:#fca5a5}
+/* ---------------- thinking options */
+/* T1 stronger clouds: thicker, more colour, faster swirl */
+.t1[data-phase=thinking] i:nth-child(1){opacity:1;inset:-25%;animation:t1swirl 4s linear infinite;
+  background:radial-gradient(34% 30% at 30% 35%,#d9f1ff,transparent 70%),radial-gradient(36% 30% at 70% 40%,#c9b8ff,transparent 70%),
+  radial-gradient(40% 34% at 45% 72%,#bff5df,transparent 70%),radial-gradient(30% 28% at 60% 60%,#ffffff,transparent 70%)}
+@keyframes t1swirl{to{transform:rotate(360deg)}}
+/* T2 clouds + a breathing halo ring around the drop */
+.t2-wrap{position:relative;display:inline-grid;place-items:center}
+.t2-wrap::before,.t2-wrap::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:2px solid #7fd3ff;opacity:0;animation:t2ring 2.4s ease-out infinite}
+.t2-wrap::after{animation-delay:1.2s}
+@keyframes t2ring{0%{transform:scale(.85);opacity:.7}100%{transform:scale(1.35);opacity:0}}
+.t2[data-phase=thinking] i:nth-child(1){opacity:1;animation:orb-cloud 3.5s ease-in-out infinite}
+/* T3 inner light: a soft light moving inside the cloud, like thoughts */
+.t3[data-phase=thinking] i:nth-child(1){opacity:1;animation:orb-cloud 5s ease-in-out infinite}
+.t3[data-phase=thinking]::before{content:"";position:absolute;width:40%;height:40%;left:30%;top:30%;border-radius:50%;z-index:4;
+  background:radial-gradient(circle,#fff 0,rgba(255,255,255,.6) 30%,transparent 70%);animation:t3light 2.6s ease-in-out infinite}
+@keyframes t3light{0%{transform:translate3d(-40%,-30%,0) scale(.7);opacity:.3}50%{transform:translate3d(40%,20%,0) scale(1.1);opacity:1}100%{transform:translate3d(-40%,-30%,0) scale(.7);opacity:.3}}
+/* ---------------- reading options */
+/* R1 scan line top to bottom */
+.r1[data-phase=reading]::before{content:"";position:absolute;left:0;right:0;top:0;height:28%;z-index:4;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.75),transparent);animation:r1scan 1.6s ease-in-out infinite}
+@keyframes r1scan{0%{transform:translate3d(0,-110%,0)}100%{transform:translate3d(0,400%,0)}}
+/* R2 ripples, like a drop touching a page */
+.r2-wrap{position:relative;display:inline-grid;place-items:center}
+.r2-wrap i.rp{position:absolute;inset:-4px;border-radius:50%;border:1.5px solid #bfefff;opacity:0;animation:r2rip 1.8s ease-out infinite}
+.r2-wrap i.rp:nth-of-type(2){animation-delay:.6s}.r2-wrap i.rp:nth-of-type(3){animation-delay:1.2s}
+@keyframes r2rip{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+.r2[data-phase=reading] i:nth-child(1){opacity:.6}
+/* R3 lines of text sliding through the drop */
+.r3[data-phase=reading]::before{content:"";position:absolute;inset:18% 12%;z-index:4;border-radius:6px;opacity:.85;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.85) 0 3px,transparent 3px 9px);
+  -webkit-mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);animation:r3lines 1.2s linear infinite}
+@keyframes r3lines{to{transform:translate3d(0,-9px,0)}}
+/* ---------------- searching alternative: orbiting sparkle */
+.s2-wrap{position:relative;display:inline-grid;place-items:center}
+.s2-wrap .sat{position:absolute;inset:-10px;animation:spin 1.4s linear infinite}
+.s2-wrap .sat::before{content:"";position:absolute;left:50%;top:0;width:9px;height:9px;margin-left:-4px;border-radius:50%;background:#fff;box-shadow:0 0 10px #7fd3ff,0 0 4px #fff}
+/* ---------------- message pop-in options */
+.chatbox{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-height:120px;padding:10px;border-radius:16px;background:rgba(255,255,255,.04)}
+.msg{max-width:80%;padding:9px 14px;border-radius:20px;border-bottom-right-radius:7px;color:#fff;
+  background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,#1c8f9f,#16786a);box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+.m1{animation:m1 .35s cubic-bezier(.2,.8,.2,1) both}@keyframes m1{from{transform:translate3d(0,14px,0);opacity:0}to{transform:none;opacity:1}}
+.m2{transform-origin:100% 100%;animation:m2 .5s cubic-bezier(.3,1.6,.5,1) both}@keyframes m2{0%{transform:scale(.4);opacity:0}60%{opacity:1}100%{transform:none}}
+.m3{transform-origin:100% 100%;animation:m3 .55s cubic-bezier(.2,.9,.2,1) both}@keyframes m3{0%{transform:translate3d(30px,26px,0) scale(.7);opacity:0;border-radius:50%}100%{transform:none;opacity:1}}
+/* ---------------- profile options */
+.phone{border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:#0c1a2a}
+.ptop{display:flex;align-items:center;gap:8px;padding:10px 12px;font-weight:650;font-size:14px}
+.ptop .ttl{flex:1;opacity:.9}.pbtn{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border-radius:99px;border:1px solid rgba(255,255,255,.18);font-size:13px}
+.pbtn .orb{--s:20px}.pbody{height:70px;padding:8px 12px;font-size:12.5px;color:#9fb6c9}
+.pcomp{margin:0 10px 10px;padding:10px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.14);font-size:13px;color:#9fb6c9}
+.eh .pbtn{border-color:#34d399;background:#34d39922;color:#a7f3d0}.eh .pcomp{border-color:#34d39999;box-shadow:0 0 0 3px #34d39922}
+.eh .orb{--d-mid:rgba(150,240,200,.45);--d-edge:rgba(40,170,120,.6);--d-glow:rgba(52,211,153,.35)}
+.strip{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;font-weight:650;color:#a7f3d0;background:linear-gradient(90deg,#065f46cc,#047857aa)}
+.p3 .phone{background:linear-gradient(180deg,#06281f,#0c1a2a 60%)}
+</style></head><body>
+<h1>Dewdrop animations</h1><p class="s">Live demo on the real orb stylesheet. Tap a theme to compare.</p>
+<div class="bar"><button onclick="document.documentElement.dataset.theme='dark'">Dark</button><button onclick="document.documentElement.dataset.theme='light'">Light</button><button onclick="document.documentElement.dataset.theme='blossom'">Blossom</button></div>
+
+<h2>1 · What the chat uses today</h2><p class="s">Green = sent by the app. Red = in the stylesheet but never used.</p>
+<div class="grid">
+<div class="cell"><span class="orb " data-phase="idle"><i></i><i></i><i></i><i></i></span><b>Idle</b><small>still drop</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="waiting"><i></i><i></i><i></i><i></i></span><b>Waiting</b><small>asleep, grey: another chat or loop has the model</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="reading"><i></i><i></i><i></i><i></i></span><b>Reading</b><small>same clouds as thinking, a bit faster: hard to tell apart</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="thinking"><i></i><i></i><i></i><i></i></span><b>Thinking</b><small>soft clouds: barely visible, as you noticed</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="searching"><i></i><i></i><i></i><i></i></span><b>Searching</b><small>radar sweep over the clouds</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="writing"><i></i><i></i><i></i><i></i></span><b>Writing</b><small>water filling, waves, bubbles</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="compressing"><i></i><i></i><i></i><i></i></span><b>Compressing</b><small>clouds (rare: long chats)</small><span class="tag">USED</span></div>
+<div class="cell"><span class="orb " data-phase="summarising"><i></i><i></i><i></i><i></i></span><b>Summarising</b><small>never sent; would be EvidenceHunt's "building the answer"</small><span class="tag no">NOT USED</span></div>
+</div>
+
+<h2>2 · Thinking: options</h2><p class="s">All transform/opacity only, so they stay smooth.</p>
+<div class="grid">
+<div class="cell"><span class="orb " data-phase="thinking"><i></i><i></i><i></i><i></i></span><b>Now</b><small>for comparison</small></div>
+<div class="cell"><span class="orb t1" data-phase="thinking"><i></i><i></i><i></i><i></i></span><b>T1 · Swirl</b><small>thick, colourful clouds turning round</small></div>
+<div class="cell"><span class="t2-wrap"><span class="orb t2" data-phase="thinking"><i></i><i></i><i></i><i></i></span></span><b>T2 · Halo</b><small>clouds + rings breathing out</small></div>
+<div class="cell"><span class="orb t3" data-phase="thinking"><i></i><i></i><i></i><i></i></span><b>T3 · Inner light</b><small>a light drifting through the cloud</small></div>
+</div>
+
+<h2>3 · Reading: options</h2><p class="s">Its own look, so you can tell it from thinking.</p>
+<div class="grid">
+<div class="cell"><span class="orb " data-phase="reading"><i></i><i></i><i></i><i></i></span><b>Now</b><small>clouds, faster</small></div>
+<div class="cell"><span class="orb r1" data-phase="reading"><i></i><i></i><i></i><i></i></span><b>R1 · Scan</b><small>a light line scanning top to bottom</small></div>
+<div class="cell"><span class="r2-wrap"><i class="rp"></i><i class="rp"></i><i class="rp"></i><span class="orb r2" data-phase="reading"><i></i><i></i><i></i><i></i></span></span><b>R2 · Ripples</b><small>the drop touches the page: rings go out</small></div>
+<div class="cell"><span class="orb r3" data-phase="reading"><i></i><i></i><i></i><i></i></span><b>R3 · Lines</b><small>lines of text sliding through the drop</small></div>
+</div>
+
+<h2>4 · Searching: alternative</h2>
+<div class="grid">
+<div class="cell"><span class="orb " data-phase="searching"><i></i><i></i><i></i><i></i></span><b>Now · Radar</b><small>sweep over the clouds</small></div>
+<div class="cell"><span class="s2-wrap"><span class="sat"></span><span class="orb " data-phase="thinking"><i></i><i></i><i></i><i></i></span></span><b>S2 · Orbit</b><small>a spark circling the drop</small></div>
+</div>
+
+<h2>5 · Your message appearing</h2><p class="s">Tap "replay" to see them again.</p>
+<div class="bar"><button onclick="replay()">replay</button></div>
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+<div><b>M1 · Rise</b><div class="chatbox" id="b1"></div></div>
+<div><b>M2 · Bubble pop</b><div class="chatbox" id="b2"></div></div>
+<div><b>M3 · From the send button</b><div class="chatbox" id="b3"></div></div>
+</div>
+
+<h2>6 · Which profile am I in?</h2><p class="s">EvidenceHunt gets its own colour (green, "medical"). General stays blue.</p>
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))">
+<div class="eh"><b>P1 · Green accents</b><div class="phone"><div class="ptop"><span>☰</span><span class="ttl">Vitamine D…</span><span class="pbtn"><span class="orb " data-phase="idle"><i></i><i></i><i></i><i></i></span>EvidenceHunt</span></div>
+<div class="pbody">Green chip, green drop, green composer edge.</div><div class="pcomp">Ask EvidenceHunt…</div></div></div>
+<div class="eh"><b>P2 · Banner</b><div class="phone"><div class="ptop"><span>☰</span><span class="ttl">Vitamine D…</span><span class="pbtn"><span class="orb " data-phase="idle"><i></i><i></i><i></i><i></i></span>EvidenceHunt</span></div>
+<div class="strip">✚ EvidenceHunt · answers only from sources</div><div class="pbody">A thin strip under the top bar.</div><div class="pcomp">Ask EvidenceHunt…</div></div></div>
+<div class="eh p3"><b>P3 · Tinted chat</b><div class="phone"><div class="ptop"><span>☰</span><span class="ttl">Vitamine D…</span><span class="pbtn"><span class="orb " data-phase="idle"><i></i><i></i><i></i><i></i></span>EvidenceHunt</span></div>
+<div class="pbody">The whole background takes a green tint.</div><div class="pcomp">Ask EvidenceHunt…</div></div></div>
+</div>
+<script>
+function replay(){[["b1","m1"],["b2","m2"],["b3","m3"]].forEach(([id,c],k)=>{const b=document.getElementById(id);b.innerHTML="";
+  ["Hoi! Helpt vitamine D tegen een winterdip?","En hoeveel per dag?"].forEach((t,i)=>setTimeout(()=>{const d=document.createElement("div");d.className="msg "+c;d.textContent=t;b.appendChild(d)},300+i*900))})}
+replay();
+</script></body></html>

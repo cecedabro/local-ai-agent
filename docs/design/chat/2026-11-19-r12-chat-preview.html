@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-profile="general" data-eh="rose">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dewdrop · chat preview (round 12)</title>
+<style>
+/* Round 12: round 11 with the round-3 searching, reading and summarising taken over exactly (now inside the
+   drop), no breathing, livelier thinking clouds, wavier water, turquoise EvidenceHunt and a pink "model ready"
+   in Blossom.
+   Round 11: the chat exactly as it will look. The round-3 phases (thinking clouds drifting, radar with
+   sources appearing, reading lines, summarising particles, water) on the real dewdrop; your message flies
+   out of the send button (M3); EvidenceHunt gets a glowing profile button, a thin strip and its own
+   placeholder. Only transform and opacity animate, every moving layer has its own GPU layer. */
+:root{--bg1:#bfe8ff;--bg2:#e9f7ff;--bg3:#f6fbff;--ink:#0b1f33;--muted:#5f7488;--glass:rgba(255,255,255,.72);--stroke:rgba(255,255,255,.9);
+  --line:rgba(11,31,51,.08);--chip:rgba(11,31,51,.05);--accent:#0a84ff;--primary:linear-gradient(180deg,#92ddff 0%,#33aef6 48%,#0d8be6 52%,#36b4f7 100%);
+  --glow:rgba(10,132,255,.35);--user1:rgba(170,230,255,.55);--user2:rgba(110,200,245,.28);--userInk:#0b1f33;
+  --d-core:rgba(255,255,255,.95);--d-mid:rgba(170,228,255,.38);--d-edge:rgba(80,170,230,.55);--d-rim:rgba(255,255,255,.85);--d-glow:rgba(34,160,230,.22);
+  --c1:#7fd6f5;--c2:#9fe3c4;--c3:#b9c8f5;--c5:#d6f3ff;--dot:#22c3ee;--w-top:rgba(140,215,250,.4);--w-deep:rgba(40,140,220,.55);
+  --eh:#14b8a6;--eh-soft:rgba(20,184,166,.15);--eh-glow:rgba(20,184,166,.45);--eh-ink:#0f766e;--ok:#16a34a;--ok-soft:rgba(22,163,74,.12);
+  --c4:#cfeaff;--fadec:rgba(240,250,255,1)}
+:root[data-theme=dark]{--bg1:#14456e;--bg2:#0b2236;--bg3:#061220;--ink:#e8f2fb;--muted:#8fa6bd;--glass:rgba(16,30,48,.72);--stroke:rgba(255,255,255,.12);
+  --line:rgba(255,255,255,.08);--chip:rgba(255,255,255,.06);--accent:#4cc2ff;--glow:rgba(76,194,255,.35);
+  --user1:#1c8f9f;--user2:#16786a;--userInk:#fff;
+  --d-core:rgba(150,240,255,.95);--d-mid:rgba(40,170,220,.5);--d-edge:#0b3b5e;--d-rim:rgba(150,220,255,.35);--d-glow:rgba(60,200,255,.32);
+  --c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a;--c5:#3b6f99;--dot:#5fd0ff;--w-top:rgba(90,200,250,.32);--w-deep:rgba(20,120,210,.55);
+  --eh:#2dd4bf;--eh-soft:rgba(45,212,191,.14);--eh-glow:rgba(45,212,191,.5);--eh-ink:#99f6e4;--ok:#4ade80;--ok-soft:rgba(74,222,128,.12);--c4:#1d3a55}
+:root[data-theme=blossom]{--bg1:#ffd1e3;--bg2:#fff0f6;--bg3:#fff8fb;--ink:#3b1830;--muted:#8a5a75;--glass:rgba(255,255,255,.75);--stroke:rgba(255,255,255,.95);
+  --line:rgba(120,40,90,.1);--chip:rgba(190,60,130,.06);--accent:#e1468f;--primary:linear-gradient(180deg,#ffb8dc 0%,#f472b6 48%,#e1468f 52%,#f580be 100%);
+  --glow:rgba(236,72,153,.35);--user1:rgba(255,200,228,.6);--user2:rgba(244,140,190,.25);--userInk:#3b1830;
+  --d-core:rgba(255,255,255,.97);--d-mid:rgba(255,214,232,.55);--d-edge:rgba(232,128,176,.6);--d-rim:rgba(255,255,255,.9);--d-glow:rgba(255,190,220,.45);
+  --c1:#f9a8d4;--c2:#fcd5e5;--c3:#d8c4fb;--c5:#ffe4ef;--c4:#ffe4ef;--dot:#ec4899;--w-top:rgba(255,190,222,.4);--w-deep:rgba(226,104,160,.5);
+  --ok:#e5488f;--ok-soft:rgba(229,72,143,.12)}
+/* EvidenceHunt colour: turquoise in light and dark, a bright deep rose in Blossom (green would clash with pink) */
+:root[data-theme=blossom]{--eh:#d9367a;--eh-soft:rgba(217,54,122,.12);--eh-glow:rgba(217,54,122,.4);--eh-ink:#b0225f}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--ink);
+  background:radial-gradient(120% 70% at 10% 0%,var(--bg1) 0%,var(--bg2) 55%,var(--bg3) 100%) fixed}
+button{font:inherit;cursor:pointer;color:inherit}
+.page{max-width:1180px;margin:0 auto;padding:18px 16px 60px;display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:24px}
+@media (max-width:900px){.page{grid-template-columns:minmax(0,1fr)}}
+h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.lead{margin:0 0 12px;color:var(--muted);font-size:13.5px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.ctl button{padding:5px 12px;border-radius:99px;border:1px solid var(--stroke);background:var(--glass);font-size:13px;font-weight:600}
+.ctl button.on{color:#fff;background:var(--primary);border-color:transparent}
+
+/* ------------------------------------------------------------------ the phone */
+.phone{position:relative;height:780px;border-radius:38px;overflow:hidden;border:1px solid var(--stroke);
+  background:radial-gradient(120% 70% at 10% 0%,var(--bg1) 0%,var(--bg2) 55%,var(--bg3) 100%);
+  box-shadow:0 30px 70px rgba(10,40,80,.25),inset 0 1px 0 rgba(255,255,255,.4);display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:8px;padding:14px 12px 8px}
+.iconbtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--stroke);background:var(--glass);display:grid;place-items:center}
+.top .title{flex:1;min-width:0;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.9}
+.profile{display:inline-flex;align-items:center;gap:7px;padding:4px 12px 4px 5px;border-radius:99px;border:1px solid var(--stroke);
+  background:var(--glass);font-weight:650;font-size:13.5px;transition:border-color .4s,box-shadow .4s,color .4s}
+.profile .dd{--s:24px}
+.badge{position:relative;display:inline-flex;align-items:center;gap:7px;padding:3px 11px 3px 9px;border-radius:99px;font-size:12px;font-weight:650;
+  color:var(--ok);background:var(--ok-soft);border:1px solid color-mix(in srgb,var(--ok) 30%,transparent)}
+.badge i{position:relative;width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.badge i::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid var(--ok);animation:halo 3s cubic-bezier(.22,.61,.36,1) infinite}
+@keyframes halo{0%{transform:scale(1);opacity:.6}75%,100%{transform:scale(2.6);opacity:0}}
+/* EvidenceHunt: glowing outline on the profile button */
+[data-profile=evidence] .profile{border-color:var(--eh);color:var(--eh-ink);box-shadow:0 0 0 3px var(--eh-soft),0 0 18px var(--eh-glow)}
+/* the thin strip under the top bar */
+.strip{display:flex;align-items:center;justify-content:center;gap:8px;height:0;overflow:hidden;opacity:0;font-size:12px;font-weight:650;
+  color:var(--eh-ink);transition:height .4s cubic-bezier(.3,.9,.3,1),opacity .4s}
+.strip span{display:inline-flex;align-items:center;gap:6px;padding:3px 12px;border-radius:99px;background:var(--eh-soft);
+  border:1px solid color-mix(in srgb,var(--eh) 35%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.strip i{width:7px;height:7px;border-radius:50%;background:var(--eh);box-shadow:0 0 8px var(--eh)}
+[data-profile=evidence] .strip{height:30px;opacity:1}
+
+.thread{flex:1;overflow:hidden;padding:6px 14px 10px;display:flex;flex-direction:column;gap:16px;justify-content:flex-end}
+.u{align-self:flex-end;max-width:80%;padding:9px 15px;border-radius:22px;border-bottom-right-radius:8px;color:var(--userInk);
+  background:linear-gradient(180deg,var(--user1),var(--user2));border:1px solid var(--stroke);box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 4px 14px rgba(20,120,200,.1)}
+:root[data-theme=dark] .u{background:radial-gradient(120% 140% at 20% 0%,rgba(140,255,230,.3),transparent 60%),linear-gradient(160deg,var(--user1),var(--user2));
+  border-color:rgba(255,255,255,.4);text-shadow:0 1px 1px rgba(0,50,60,.2)}
+/* M3: your message flies out of the send button: set from JS as --dx/--dy (the send button's offset) */
+.u.fly{transform-origin:100% 100%;animation:fly .55s cubic-bezier(.2,.9,.2,1) both}
+@keyframes fly{0%{transform:translate3d(var(--dx),var(--dy),0) scale(.18);opacity:0;border-radius:50%}
+  35%{opacity:1}100%{transform:none;opacity:1}}
+.ai{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start}
+.ai .slot{width:44px;height:44px;display:grid;place-items:center}
+.ai .bub{font-size:14.5px;line-height:1.6}
+.ai .bub p{margin:0 0 8px}
+.label{font-size:12.5px;font-weight:600;color:var(--muted);margin-top:8px;min-height:20px}
+.shimmer{background:linear-gradient(90deg,var(--muted) 30%,var(--accent) 50%,var(--muted) 70%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+[data-profile=evidence] .shimmer{background-image:linear-gradient(90deg,var(--muted) 30%,var(--eh) 50%,var(--muted) 70%)}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
+.meta{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:4px;opacity:0;transition:opacity .5s}
+.meta.on{opacity:1}.meta b{color:var(--accent);font-weight:600}
+.srcs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.src{display:flex;gap:7px;align-items:center;padding:5px 9px;border-radius:12px;background:var(--chip);border:1px solid var(--line);font-size:11.5px}
+.src .n{width:17px;height:17px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:10px;font-weight:700;background:var(--primary)}
+.cite{display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:10px;font-weight:700;color:#fff;background:var(--primary);vertical-align:2px}
+.w{opacity:0;animation:win .3s ease-out forwards}@keyframes win{to{opacity:1}}
+
+.dock{padding:0 10px 14px}
+.composer{border-radius:22px;padding:8px 10px;background:var(--glass);border:1px solid var(--stroke);
+  box-shadow:0 10px 30px rgba(10,40,80,.12),inset 0 1px 0 rgba(255,255,255,.6);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  transition:border-color .4s,box-shadow .4s}
+[data-profile=evidence] .composer{border-color:color-mix(in srgb,var(--eh) 55%,transparent);box-shadow:0 0 0 3px var(--eh-soft),0 10px 30px rgba(10,40,80,.12)}
+.ph{color:var(--muted);padding:4px 6px 8px;font-size:15px}
+.cbar{display:flex;align-items:center;gap:8px}
+.seg{display:flex;padding:3px;border-radius:99px;background:var(--chip);border:1px solid var(--line)}
+.seg span{display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg span.on{color:#fff;background:var(--primary);box-shadow:0 3px 10px var(--glow)}
+.seg svg{width:13px;height:13px}
+.send{position:relative;margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;color:#fff;background:var(--primary);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 4px 14px var(--glow);display:grid;place-items:center;font-size:17px;font-weight:700;overflow:hidden}
+/* the Aero gloss on the top half of the ball (send and stop) */
+.send::after{content:"";position:absolute;left:8%;right:8%;top:4%;height:46%;border-radius:50% 50% 45% 45%/60% 60% 40% 40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,.1));pointer-events:none}
+.send .arrow,.send .sq{transition:opacity .25s,transform .35s cubic-bezier(.3,1.4,.5,1)}
+/* stop: the same glossy ball, a white glass square in the middle (no black block) */
+.send .sq{position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px;border-radius:3.5px;opacity:0;transform:scale(.4);
+  background:linear-gradient(180deg,#fff 0%,#eaf6ff 55%,#cfe9fb 100%);box-shadow:0 1px 2px rgba(0,40,80,.3),inset 0 1px 0 #fff}
+:root[data-theme=blossom] .send .sq{background:linear-gradient(180deg,#fff 0%,#fff0f6 55%,#ffd6e8 100%);box-shadow:0 1px 2px rgba(120,20,70,.3),inset 0 1px 0 #fff}
+.send.stop .arrow{opacity:0;transform:scale(.4)}
+.send.stop .sq{opacity:1;transform:none}
+.send.stop{animation:stopglow 1.8s ease-in-out infinite}
+@keyframes stopglow{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 4px 22px var(--glow)}}
+
+/* ------------------------------------------------------------------ the dewdrop and its phases
+   Layers: .clouds (thinking), .radar (searching), .read (reading), .sum (summarising), .water (writing), .shine.
+   A phase fades its layer in (opacity) and only that layer's animations run. */
+.dd{--s:44px;position:relative;display:inline-block;flex:none;width:var(--s);height:var(--s);border-radius:50%;overflow:hidden;
+  isolation:isolate;transform:translateZ(0);transition:width .5s cubic-bezier(.3,.9,.3,1),height .5s cubic-bezier(.3,.9,.3,1);
+  background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 42%,var(--d-edge) 100%);
+  box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.10),0 3px 12px var(--d-glow)}
+.dd>span{position:absolute;inset:0;display:block;opacity:0;transition:opacity .45s;border-radius:50%}
+.dd .shine{opacity:1;z-index:9;background:radial-gradient(40% 26% at 35% 22%,rgba(255,255,255,.92),transparent 72%)}
+.dd .pool{opacity:1;z-index:8;left:18%;right:18%;top:auto;bottom:9%;height:22%;border-radius:50%;
+  background:radial-gradient(closest-side,#fff,transparent);animation:glint 5s ease-in-out infinite}
+@keyframes glint{50%{transform:scaleX(1.15);opacity:.7}}
+/* thinking: four soft clouds, each drifting to a new random spot (Web Animations, transform only) */
+.dd .clouds{z-index:2}
+.dd .clouds i{position:absolute;left:5%;top:5%;width:90%;height:90%;border-radius:50%;will-change:transform}
+.dd .clouds i:nth-child(odd){mix-blend-mode:normal}
+.dd .clouds i:nth-child(1){background:radial-gradient(circle,var(--c1) 0,var(--c1) 22%,transparent 66%)}
+.dd .clouds i:nth-child(2){background:radial-gradient(circle,var(--c3) 0,var(--c3) 22%,transparent 66%)}
+.dd .clouds i:nth-child(3){background:radial-gradient(circle,var(--c2) 0,var(--c2) 22%,transparent 66%)}
+.dd .clouds i:nth-child(4){background:radial-gradient(circle,var(--c5) 0,var(--c5) 22%,transparent 66%)}
+.dd[data-phase=thinking] .clouds{opacity:1}
+/* searching, reading, summarising: round 3 (coder-design-round3 §3) exactly, inside the drop. Sizes that were in
+   px at 72-88 px are in % of the drop now, so they look the same at 44 px; the drop's rim and shine lie on top. */
+.dd .radar{z-index:3}
+.dd .radar .beam{position:absolute;inset:0;border-radius:50%;will-change:transform;
+  background:conic-gradient(from 0deg,transparent 0 280deg,color-mix(in srgb,var(--dot) 16%,transparent) 310deg,color-mix(in srgb,var(--dot) 85%,transparent) 360deg)}
+.dd .radar .ring{position:absolute;border-radius:50%;border:1px solid color-mix(in srgb,var(--dot) 30%,transparent)}
+.dd .radar .blip{position:absolute;width:7%;height:7%;margin:-3.5%;border-radius:50%;background:var(--dot);box-shadow:0 0 6px var(--dot);opacity:0;z-index:4;will-change:transform,opacity}
+.dd[data-phase=searching] .radar{opacity:1}
+/* reading: lines move by transform only; the top and bottom fade into the drop (round 3 used an overlay in the card colour) */
+.dd .read{z-index:3;-webkit-mask:linear-gradient(180deg,transparent 4%,#000 30%,#000 70%,transparent 96%);mask:linear-gradient(180deg,transparent 4%,#000 30%,#000 70%,transparent 96%)}
+.dd .read .lines{position:absolute;left:22%;right:22%;top:0;height:200%;will-change:transform;
+  background:repeating-linear-gradient(180deg,color-mix(in srgb,var(--dot) 50%,transparent) 0 2px,transparent 2px 9px);animation:lines3 7.2s linear infinite paused}
+@keyframes lines3{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+.dd .read .beam{position:absolute;left:10%;right:10%;top:50%;height:25%;margin-top:-12.5%;z-index:6;will-change:transform;
+  background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c2) 75%,transparent),transparent);animation:glide3 3.4s cubic-bezier(.45,0,.55,1) infinite alternate paused}
+@keyframes glide3{from{transform:translate3d(0,-100%,0)}to{transform:translate3d(0,100%,0)}}
+.dd[data-phase=reading] .read{opacity:1}
+.dd[data-phase=reading] .read *{animation-play-state:running}
+/* summarising: the bright core, three particles drawn in (round 3: 8 px core, 5 px particles, from 26 px out) */
+.dd .sum{z-index:4}
+.dd .sum em{position:absolute;left:50%;top:50%;width:11%;height:11%;margin:-5.5%;border-radius:50%;background:radial-gradient(circle,#fff,var(--dot));box-shadow:0 0 10px var(--dot)}
+.dd .sum b{position:absolute;left:50%;top:50%;width:7%;height:7%;margin:-3.5%;border-radius:50%;background:var(--c2);will-change:transform,opacity;
+  animation:inward 2.2s cubic-bezier(.5,0,.75,0) infinite paused}
+.dd .sum b:nth-of-type(2){animation-delay:.73s;background:var(--c3)}.dd .sum b:nth-of-type(3){animation-delay:1.46s;background:var(--c1)}
+@keyframes inward{0%{transform:rotate(0) translateX(calc(var(--s) * .36)) scale(1);opacity:0}15%{opacity:1}
+  100%{transform:rotate(300deg) translateX(0) scale(.3);opacity:0}}
+.dd[data-phase=summarising] .sum{opacity:1}
+.dd[data-phase=summarising] .sum *{animation-play-state:running}
+/* writing: the water (round 9, F4 without the band), round 12: three taller waves at different speeds and the
+   water gently sloshing (a small tilt back and forth); its level follows --fill */
+.dd .water{z-index:5;opacity:1;overflow:hidden}
+.dd .water .body{position:absolute;left:-15%;right:-15%;top:0;height:100%;will-change:transform;transform:translate3d(0,100%,0);
+  transition:transform 1.2s cubic-bezier(.33,0,.2,1)}
+.dd .water .slosh{position:absolute;inset:0;will-change:transform;transform-origin:50% 0;animation:slosh 3.2s ease-in-out infinite paused}
+@keyframes slosh{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.dd .water .deep{position:absolute;left:0;right:0;top:7%;bottom:0;background:linear-gradient(180deg,var(--w-top),var(--w-deep))}
+.dd[data-phase=writing] .water .body{transform:translate3d(0,calc((1 - var(--fill,.15))*100%),0)}
+.dd .water .wave{position:absolute;left:0;top:0;width:200%;height:16%;will-change:transform;background-repeat:repeat-x;background-size:50% 100%;
+  animation:wave 3.4s linear infinite paused;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 16' preserveAspectRatio='none'%3E%3Cpath d='M0 8 Q12.5 2 25 8 T50 8 T75 8 T100 8 V16 H0Z' fill='rgba(255,255,255,0.22)'/%3E%3Cpath d='M0 8 Q12.5 2 25 8 T50 8 T75 8 T100 8' fill='none' stroke='white' stroke-opacity='0.95' stroke-width='1.1'/%3E%3C/svg%3E")}
+.dd .water .wave.b{top:2%;opacity:.55;animation-duration:5.4s;animation-direction:reverse}
+.dd .water .wave.c{top:4%;opacity:.35;animation-duration:7.6s;height:12%}
+@keyframes wave{to{transform:translate3d(-50%,0,0)}}
+.dd[data-phase=writing] .water *{animation-play-state:running}
+/* waiting: asleep, grey */
+.dd[data-phase=waiting]{filter:grayscale(1);animation:sleep 4s ease-in-out infinite}
+@keyframes sleep{0%,100%{opacity:.45}50%{opacity:.85}}
+@media (prefers-reduced-motion:reduce){.dd,.dd *{animation:none!important}}
+
+/* gallery */
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.cell{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px 10px;border-radius:18px;background:var(--glass);border:1px solid var(--stroke);text-align:center}
+.cell .dd{--s:72px}.cell b{font-size:13px}.cell small{font-size:11.5px;color:var(--muted);line-height:1.3}
+.note{font-size:13px;color:var(--muted);background:var(--glass);border:1px solid var(--stroke);border-radius:16px;padding:10px 14px;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="page">
+<div>
+  <h1>Dewdrop · the chat</h1>
+  <p class="lead">Exactly how it will look on your phone. Plays by itself; tap Replay to see it again.</p>
+  <div class="ctl" id="themes"><button data-t="light" class="on">Aero light</button><button data-t="dark">Dark</button><button data-t="blossom">Blossom</button></div>
+  <div class="ctl" id="profiles"><button data-p="general" class="on">General</button><button data-p="evidence">EvidenceHunt</button><button id="replay">↻ Replay</button></div>
+
+  <div class="phone" id="phone">
+    <div class="top">
+      <span class="iconbtn">☰</span>
+      <span class="title" id="ttl">Vitamine D in de winter</span>
+      <span class="badge"><i></i>ready</span>
+      <span class="profile"><span class="dd" data-phase="idle"><span class="pool"></span><span class="shine"></span></span><span id="pname">General</span></span>
+    </div>
+    <div class="strip"><span><i></i>EvidenceHunt · answers only from sources</span></div>
+    <div class="thread" id="thread"></div>
+    <div class="dock">
+      <div class="composer">
+        <div class="ph" id="ph">Message Dewdrop…</div>
+        <div class="cbar">
+          <span style="color:var(--muted);font-size:18px;padding:0 4px">📎</span>
+          <div class="seg"><span class="on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Quick</span>
+            <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>Think</span></div>
+          <span class="send" id="send" title="Send"><span class="arrow">↑</span><span class="sq"></span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div>
+  <h2>Every phase on its own</h2>
+  <p class="lead">The round-3 phases, now inside the real dewdrop. Each loops here; in the chat they follow the server's steps.</p>
+  <div class="gal" id="gal"></div>
+  <div class="note">
+    <b>Round 12:</b> searching, reading and summarising are round 3's, unchanged, now inside the drop. No more
+    breathing. Thinking moves further and faster but stays eased. The water has three waves and sloshes gently.
+    "ready" is pink in Blossom. The drop has the colours of the current chat. While an answer comes, Send turns
+    into a glossy Stop (the same glass ball, a white glass square).</div>
+  <div class="note"><b>Why it was laggy:</b> in the app the clouds sat in one layer and the orb was only 28 px, so the movement
+    was tiny and blurry. Now every cloud, beam, line and particle is its own GPU layer that only moves
+    (transform) or fades (opacity), never repaints, and the drop is 44 px while it works, settling back to
+    28 px under the answer when it's done.
+  </div>
+  <div class="note">
+    <b>EvidenceHunt</b> shows on three places: the glowing profile button top right, the thin strip under
+    the top bar and the composer's edge with "Ask EvidenceHunt…". Turquoise in Aero light and Dark, a bright deep rose in Blossom.
+  </div>
+</div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- the dewdrop: build, phases
+const PHASES = [["idle", "Idle", "still"], ["waiting", "Waiting", "asleep, grey: another chat has the model"],
+  ["reading", "Reading", "round 3: lines drifting up, soft beam"], ["thinking", "Thinking", "clouds moving about, eased"],
+  ["searching", "Searching", "round 3: sources appear as the beam passes"], ["summarising", "Summarising", "round 3: particles drawn in"],
+  ["writing", "Writing", "the water rises, waves and sloshes"]];
+function dewdrop(size) {
+  const d = document.createElement("span");
+  d.className = "dd";
+  d.style.setProperty("--s", size + "px");
+  d.innerHTML = '<span class="pool"></span><span class="clouds"><i></i><i></i><i></i><i></i></span>' +
+    '<span class="radar"><span class="ring" style="inset:22%"></span><span class="ring" style="inset:40%"></span><span class="beam"></span></span>' +
+    '<span class="read"><span class="lines"></span><span class="beam"></span></span>' +
+    '<span class="sum"><em></em><b></b><b></b><b></b></span>' +
+    '<span class="water"><span class="body"><span class="slosh"><span class="deep"></span><span class="wave c"></span><span class="wave b"></span><span class="wave"></span></span></span></span><span class="shine"></span>';
+  d.dataset.phase = "idle";
+  return d;
+}
+// clouds: each cloud drifts to a random spot, forever (Web Animations, transform only); paused unless thinking
+function drift(el) {
+  let x = 0, y = 0, sc = 1;
+  const go = () => {
+    // round 12: further (±45%), faster (1.5–2.6 s) and with more size change, so you see the clouds really
+    // move about; the easing stays soft, so it never jumps
+    const nx = (Math.random() * 2 - 1) * 45, ny = (Math.random() * 2 - 1) * 45, s = .7 + Math.random() * .6;
+    const a = el.animate([{ transform: `translate3d(${x}%,${y}%,0) scale(${sc})` }, { transform: `translate3d(${nx}%,${ny}%,0) scale(${s})` }],
+      { duration: 1500 + Math.random() * 1100, easing: "cubic-bezier(.45,0,.55,1)", fill: "forwards" });
+    x = nx; y = ny; sc = s; a.onfinish = go;
+  };
+  go();
+}
+// radar: the beam angle is known from time, so a source is drawn exactly when the beam reaches it
+const T = 2400;
+function radar(d, onFound) {
+  const beam = d.querySelector(".radar .beam"), box = d.querySelector(".radar");
+  const anim = beam.animate([{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }], { duration: T, iterations: Infinity });
+  const t0 = performance.now();
+  let n = 0;
+  const timer = setInterval(() => {
+    if (d.dataset.phase !== "searching") return;
+    if (n >= 8) { box.querySelectorAll(".blip").forEach((b) => b.remove()); n = 0; }
+    const a = Math.random() * 360, r = 14 + Math.random() * 28;
+    const x = 50 + r * Math.sin(a * Math.PI / 180), y = 50 - r * Math.cos(a * Math.PI / 180);
+    const now = (performance.now() - t0) % T, wait = (a / 360 * T - now + T) % T;
+    setTimeout(() => {
+      const b = document.createElement("span");
+      b.className = "blip"; b.style.left = x + "%"; b.style.top = y + "%";
+      box.appendChild(b);
+      b.animate([{ opacity: 1, transform: "scale(1.7)" }, { opacity: .85, transform: "scale(1)", offset: .12 }, { opacity: .3, transform: "scale(1)" }],
+        { duration: T, iterations: Infinity });
+      n++; onFound && onFound(n);
+    }, wait);
+  }, 1000);
+  return { anim, timer };
+}
+function setPhase(d, p) {
+  d.dataset.phase = p;
+}
+
+// gallery
+const gal = document.getElementById("gal");
+for (const [p, name, why] of PHASES) {
+  const c = document.createElement("div");
+  c.className = "cell";
+  const d = dewdrop(72);
+  c.append(d);
+  c.insertAdjacentHTML("beforeend", `<b>${name}</b><small>${why}</small>`);
+  gal.append(c);
+  d.querySelectorAll(".clouds i").forEach(drift);
+  radar(d);
+  setPhase(d, p);
+  if (p === "writing") {
+    let f = .1;
+    setInterval(() => { f = f > .8 ? .1 : f + .14; d.style.setProperty("--fill", f.toFixed(2)); }, 900);
+  }
+}
+
+// ---------------------------------------------------------------- the conversation
+const thread = document.getElementById("thread"), send = document.getElementById("send");
+const ASK = { general: "Helpt vitamine D in de winter?", evidence: "Helpt vitamine D tegen een winterdip?" };
+const ANSWER = {
+  general: "Waarschijnlijk een beetje. In de winter maak je weinig vitamine D aan, en een tekort hangt samen met vermoeidheid en een somber gevoel. Voor de meeste mensen is 10 microgram per dag genoeg.",
+  evidence: "**Kort:** het bewijs is zwak. Bij mensen met een tekort helpt het mogelijk iets [1]; bij de meeste mensen zonder tekort niet [2].\n\n> \"Vitamin D supplementation had no significant effect on depressive symptoms overall.\" [2]\n\nHet RIVM adviseert in de winter wel 10 microgram per dag voor bepaalde groepen [3]."
+};
+let run = 0;
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+function md(s) {
+  return s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[(\d)\]/g, '<span class="cite">$1</span>')
+    .split("\n\n").map((p) => p.startsWith("> ") ? `<p style="border-left:3px solid var(--eh);padding-left:10px;opacity:.9">${p.slice(2)}</p>` : `<p>${p}</p>`).join("");
+}
+async function play() {
+  const me = ++run;
+  const prof = document.documentElement.dataset.profile;
+  thread.innerHTML = "";
+  send.classList.remove("stop");
+  await sleep(500);
+  // M3: your message flies out of the send button
+  const u = document.createElement("div");
+  u.className = "u fly";
+  u.textContent = ASK[prof];
+  thread.append(u);
+  const ur = u.getBoundingClientRect(), sr = send.getBoundingClientRect();
+  u.style.setProperty("--dx", `${sr.left + sr.width / 2 - ur.right}px`);
+  u.style.setProperty("--dy", `${sr.top + sr.height / 2 - ur.bottom}px`);
+  await sleep(450);
+  send.classList.add("stop"); send.title = "Stop";
+  const ai = document.createElement("div");
+  ai.className = "ai";
+  ai.innerHTML = '<span class="slot"></span><div><div class="bub"></div><div class="label shimmer"></div><div class="meta"></div></div>';
+  thread.append(ai);
+  const d = dewdrop(44);
+  ai.querySelector(".slot").append(d);
+  d.querySelectorAll(".clouds i").forEach(drift);
+  const label = ai.querySelector(".label"), bub = ai.querySelector(".bub"), meta = ai.querySelector(".meta");
+  const steps = prof === "evidence"
+    ? [["reading", "Reading your question…", 1600], ["thinking", "Thinking about search terms…", 2400],
+       ["searching", 'Searching PubMed for "vitamin D depression"', 3600], ["searching", 'Searching rivm.nl for "vitamine D winter"', 2600],
+       ["reading", "Reading 5 abstracts…", 2600], ["summarising", "Checking every quote against its source…", 2400]]
+    : [["reading", "Reading your message…", 1400], ["thinking", "Thinking…", 2800]];
+  let found = 0;
+  const r = radar(d, (n) => { found++; if (d.dataset.phase === "searching") label.dataset.count = ` · ${found} source${found === 1 ? "" : "s"} found`; });
+  for (const [p, text, ms] of steps) {
+    if (me !== run) return;
+    setPhase(d, p);
+    label.dataset.count = label.dataset.count || "";
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms) {
+      if (me !== run) return;
+      label.textContent = text + (p === "searching" ? (label.dataset.count || "") : "");
+      await sleep(150);
+    }
+  }
+  clearInterval(r.timer);
+  // writing: the water rises, the words come in steadily
+  setPhase(d, "writing");
+  label.textContent = "Writing the answer…";
+  const words = ANSWER[prof].split(" ");
+  let shown = "";
+  for (let i = 0; i < words.length; i++) {
+    if (me !== run) return;
+    shown += (i ? " " : "") + words[i];
+    bub.innerHTML = md(shown);
+    d.style.setProperty("--fill", (0.82 * (1 - Math.exp(-i / 14))).toFixed(3));
+    await sleep(55);
+  }
+  // done: the drop drains and settles to 28 px, the stats line fades in, Stop turns back into Send
+  send.classList.remove("stop"); send.title = "Send";
+  setPhase(d, "idle");
+  d.style.setProperty("--s", "28px");
+  label.remove();
+  if (prof === "evidence") bub.insertAdjacentHTML("beforeend", '<div class="srcs"><span class="src"><span class="n">1</span>BMJ 2021 · meta-analysis</span><span class="src"><span class="n">2</span>Cochrane 2020 · review</span><span class="src"><span class="n">3</span>rivm.nl · advies</span></div>');
+  meta.innerHTML = `<span class="dd" style="--s:14px"><span class="pool"></span><span class="shine"></span></span>Dewdrop · 128 tokens · 41 tok/s · <b>Copy</b> · <b>Retry</b>`;
+  meta.classList.add("on");
+}
+
+// controls
+function pick(group, attr, el) {
+  document.querySelectorAll(`#${group} button[data-${attr}]`).forEach((b) => b.classList.toggle("on", b === el));
+}
+document.getElementById("themes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-t]"); if (!b) return;
+  document.documentElement.dataset.theme = b.dataset.t; pick("themes", "t", b);
+});
+document.getElementById("profiles").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-p]");
+  if (b) {
+    document.documentElement.dataset.profile = b.dataset.p; pick("profiles", "p", b);
+    document.getElementById("pname").textContent = b.dataset.p === "evidence" ? "EvidenceHunt" : "General";
+    document.getElementById("ph").textContent = b.dataset.p === "evidence" ? "Ask EvidenceHunt…" : "Message Dewdrop…";
+    play();
+  }
+  if (e.target.id === "replay") play();
+});
+play();
+</script>
+</body>
+</html>
