@@ -47,39 +47,85 @@ def find_quote(quote: str, text: str) -> bool:
 
 
 def cites_in(text: str) -> list[int]:
-    r"""TODO (task E03). Every [n] (also [1, 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
+    r"""Every [n] (also [1, 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
     and append int(x) when it is not in the list yet.
     """
-    raise NotImplementedError
+    result: list[int] = []
+    for m in _CITE.finditer(text):
+        for x in m.group(1).split(","):
+            n = int(x)
+            if n not in result:
+                result.append(n)
+    return result
 
 
 def _strip_marks(t: str) -> str:
-    r"""TODO (task E03). A quote's text without its [n] and its quote marks: _CITE.sub("", t).strip(), then .strip(' "“”\'‘’').strip().
+    r"""A quote's text without its [n] and its quote marks: _CITE.sub("", t).strip(), then .strip(' "“”\'‘’').strip().
     """
-    raise NotImplementedError
+    return _CITE.sub("", t).strip().strip(' "“”\'‘’').strip()
 
 
 def quotes(answer: str) -> list[dict]:
-    r"""TODO (task E03). Blockquote groups and inline quotes of 4+ words, in order, as {"text", "cites"} (SPEC §13.1).
+    r"""Blockquote groups and inline quotes of 4+ words, in order, as {"text", "cites"} (SPEC §13.1).
     Line by line over answer.split("\n"):
       - a line starting with ``` toggles "in code"; lines in code are skipped
       - a line whose lstrip() starts with ">": collect it and the following ">" lines (the text after ">", stripped);
         raw = " ".join(group); append {"text": _strip_marks(raw), "cites": cites_in(raw)}
       - otherwise each _INLINE match (group 1 or 2 is the quote) with 4+ words: cites = cites_in of a [..] right after the
         closing quote (re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest of the line)), else []; append {"text": q.strip(), "cites"}
-    Tests: test_step_verify.py::test_quotes
     """
-    raise NotImplementedError
+    result: list[dict] = []
+    in_code = False
+    i = 0
+    lines = answer.split("\n")
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            in_code = not in_code
+            i += 1
+            continue
+        if not in_code and line.lstrip().startswith(">"):
+            group_lines: list[str] = []
+            while i < len(lines) and lines[i].lstrip().startswith(">"):
+                group_lines.append(lines[i].lstrip()[1:].strip())
+                i += 1
+            raw = " ".join(group_lines)
+            result.append({"text": _strip_marks(raw), "cites": cites_in(raw)})
+            continue
+        if not in_code:
+            for m in _INLINE.finditer(line):
+                q = m.group(1) or m.group(2)
+                if len(q.split()) >= 4:
+                    rest = line[m.end():]
+                    cite_m = re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest)
+                    cites = cites_in(cite_m.group(1)) if cite_m else []
+                    result.append({"text": q.strip(), "cites": cites})
+        i += 1
+    return result
 
 
 def sentences(answer: str) -> list[dict]:
-    r"""TODO (task E03). Sentences outside quotes, headings and code, as {"text", "cites"} (SPEC §13.1).
+    r"""Sentences outside quotes, headings and code, as {"text", "cites"} (SPEC §13.1).
     Line by line: skip code (``` toggles), empty lines and lines starting with ">" or "#"; drop a list marker
     (r"^([-*+]|\d+\.)\s+"); replace each inline quote (_INLINE) by '"q"'; split on r"(?<=[.!?])\s+(?=[A-Z0-9\"'(\[*])";
     each non-empty part -> {"text": part, "cites": cites_in(part)}
-    Tests: test_step_verify.py::test_sentences
     """
-    raise NotImplementedError
+    result: list[dict] = []
+    in_code = False
+    _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(\[*])")
+    for line in answer.split("\n"):
+        if line.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or not line.strip() or line.lstrip().startswith(">") or line.lstrip().startswith("#"):
+            continue
+        text = re.sub(r"^([-*+]|\d+\.)\s+", "", line.strip())
+        text = _INLINE.sub('"q"', text)
+        for part in _SENTENCE_SPLIT.split(text):
+            part = part.strip()
+            if part:
+                result.append({"text": part, "cites": cites_in(part)})
+    return result
 
 
 def check(answer: str, sources: list[dict]) -> dict:
