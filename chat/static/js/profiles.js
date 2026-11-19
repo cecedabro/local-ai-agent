@@ -180,8 +180,144 @@ function readFilters(card) {
  *     clear the input; refresh()
  * Then load the tab from localStorage "dewdrop-profile-tab" if it exists on the page, else the first tab.
  */
-function start() {
-  // TODO (task B17): see the comment above.
+async function start() {
+  document.querySelectorAll(".pf-tab").forEach((t) => {
+    t.addEventListener("click", () => load(t.dataset.profile));
+  });
+  const profileApi = (json) => api(`/api/profiles/${state.profile}`, { method: "PATCH", json });
+  const sourceApi = (id, json) => api(`/api/profiles/${state.profile}/sources/${id}`, { method: "PATCH", json });
+  $("#pf-instructions").addEventListener("input", () => {
+    later("instr", async () => {
+      try { await profileApi({ instructions: $("#pf-instructions").value }); } catch { /* ignore */ }
+      const s = $("#pf-saved");
+      s.textContent = "Saved";
+      setTimeout(() => { s.textContent = ""; }, 1500);
+      refresh();
+    });
+  });
+  $("#pf-web").addEventListener("change", async () => {
+    try { await profileApi({ web: $("#pf-web").checked }); } catch { /* ignore */ }
+    refresh();
+  });
+  $("#pf-sources").addEventListener("input", (ev) => {
+    const target = ev.target;
+    if (target.matches("[data-note]") && target.dataset.source) {
+      const id = target.dataset.source;
+      later("note" + id, async () => {
+        try { await sourceApi(id, { note: target.value }); } catch { /* ignore */ }
+        refresh();
+      });
+    } else if (target.matches("[data-enabled]") && target.dataset.source) {
+      const id = target.dataset.source;
+      const enabled = target.checked;
+      setTimeout(async () => {
+        try { await sourceApi(id, { enabled }); } catch { /* ignore */ }
+        refresh();
+      }, 0);
+    } else if ((target.matches("[data-type]") || target.matches("[data-years]") || target.matches("[data-humans]") || target.matches("[data-lang]")) && target.closest("[data-source]")) {
+      const card = target.closest("[data-source]");
+      const id = card.dataset.source;
+      setTimeout(async () => {
+        try { await sourceApi(id, { filters: readFilters(card) }); } catch { /* ignore */ }
+        refresh();
+      }, 0);
+    }
+  });
+  $("#pf-sources").addEventListener("click", (ev) => {
+    const del = ev.target.closest("[data-delete]");
+    if (del) {
+      const card = del.closest("[data-source]");
+      const id = card.dataset.source;
+      if (confirm("Remove this source?")) {
+        const removeCard = () => card.remove();
+        const restoreCard = () => {
+          const container = $("#pf-sources");
+          const msg = container.querySelector("p.small");
+          if (msg) msg.remove();
+          container.insertAdjacentHTML("beforeend", cardHtml({ id, kind: card.dataset.kind, title: "", enabled: true, note: "", filters: {}, tokens: 0 }));
+          const newCard = container.querySelector(`[data-source="${id}"]`);
+          if (newCard) {
+            newCard.querySelectorAll("[data-note]").forEach((el) => { el.value = card.querySelector("[data-note]")?.value || ""; });
+            newCard.querySelectorAll("[data-enabled]").forEach((el) => { el.checked = card.querySelector("[data-enabled]")?.checked || false; });
+            newCard.querySelectorAll("[data-type]").forEach((el) => { el.checked = card.querySelector(`[data-type="${el.dataset.type}"]`)?.checked || false; });
+            newCard.querySelectorAll("[data-lang]").forEach((el) => { el.checked = card.querySelector(`[data-lang="${el.dataset.lang}"]`)?.checked || false; });
+            newCard.querySelectorAll("[data-humans]").forEach((el) => { el.checked = card.querySelector("[data-humans]")?.checked || false; });
+            const yrs = newCard.querySelector("[data-years]");
+            const oldYrs = card.querySelector("[data-years]");
+            if (yrs && oldYrs) yrs.value = oldYrs.value;
+          }
+        };
+        (async () => {
+          try {
+            await api(`/api/profiles/${state.profile}/sources/${id}`, { method: "DELETE" });
+            removeCard();
+          } catch {
+            restoreCard();
+          }
+          refresh();
+        })();
+      }
+    }
+  });
+  $("#add-pubmed").addEventListener("click", async () => {
+    try {
+      const res = await api(`/api/profiles/${state.profile}/sources`, { method: "POST", json: { kind: "pubmed" } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to add PubMed source" }));
+        say(err.error || "Failed to add PubMed source", true);
+        return;
+      }
+    } catch (e) {
+      say(String(e), true);
+      return;
+    }
+    refresh();
+  });
+  $("#add-website").addEventListener("click", async () => {
+    const url = prompt("Website address (for example rivm.nl):");
+    if (!url) return;
+    try {
+      const res = await api(`/api/profiles/${state.profile}/sources`, { method: "POST", json: { kind: "website", url } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to add website" }));
+        say(err.error || "Failed to add website", true);
+        return;
+      }
+    } catch (e) {
+      say(String(e), true);
+      return;
+    }
+    refresh();
+  });
+  $("#add-doc").addEventListener("change", async () => {
+    const files = $("#add-doc").files;
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch(`/api/profiles/${state.profile}/documents`, {
+          method: "POST", headers: { "X-Coder": "1" }, body: fd
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Failed to add document" }));
+          say(err.error || "Failed to add document", true);
+        } else {
+          say("Added " + file.name);
+        }
+      } catch (e) {
+        say(String(e), true);
+      }
+    }
+    $("#add-doc").value = "";
+    refresh();
+  });
+  const saved = localStorage.getItem("dewdrop-profile-tab");
+  if (saved) {
+    await load(saved);
+  } else {
+    const first = document.querySelector(".pf-tab");
+    if (first) await load(first.dataset.profile);
+  }
 }
 
 start();

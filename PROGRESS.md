@@ -83,3 +83,7 @@
 - Implemented `cardHtml(s)`: generates `<article class="src-card[ off]">` with kind label, title, file token count, on/off switch, delete button, PubMed filter controls (types, years select, humans checkbox, languages), and kind-specific textarea placeholders.
 - Added `round(n)` helper for percentage calculation.
 - All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+
+## Task B17 - start function in profiles.js
+- Implemented `start()` in `chat/static/js/profiles.js`: profile tab clicks, debounced instruction save via `PATCH /api/profiles/{profile}`, web toggle, source card event delegation (note/enable/filters via `PATCH /api/profiles/{profile}/sources/{id}`, delete via `DELETE`, restore-on-failure), add-pubmed and add-website via `POST /api/profiles/{profile}/sources`, document upload via `POST /api/profiles/{profile}/documents`, and localStorage tab restoration.
+- All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).

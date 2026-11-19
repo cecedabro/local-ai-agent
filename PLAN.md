@@ -47,7 +47,7 @@ Rules for every task:
   accept: node --check chat/static/js/app.js && make chat-test
 - [x] B16: In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say
   accept: node --check chat/static/js/profiles.js && make chat-test
-- [ ] B17: In chat/static/js/profiles.js fill in `start` as its comment says
+- [x] B17: In chat/static/js/profiles.js fill in `start` as its comment says
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [ ] B18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js or chat/static/js/profiles.js (see "B18 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
