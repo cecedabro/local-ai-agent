@@ -43,7 +43,7 @@ Rules for every task:
   accept: make chat-test K="TestProfileApi and sources"
 - [x] B14: In chat/coder/app.py add the documents route (`TODO (task B14)`)
   accept: make chat-test
-- [ ] B15: In chat/static/js/app.js show sources under answers (`TODO (task B15)`)
+- [x] B15: In chat/static/js/app.js show sources under answers (`TODO (task B15)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] B16: In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say
   accept: node --check chat/static/js/profiles.js && make chat-test

@@ -71,3 +71,9 @@
 - Updated `merge_tool_calls()` in `gateway.py`: handles both OpenAI API format (tool calls with `index` and nested `function` object) and direct format (tool calls with top-level `name`/`arguments`), and auto-assigns sequential indices when `index` is missing.
 - Resolves missing tool phase labels (e.g. "Searching the web for…") and broken tool rounds in both integration and step tests.
 - All acceptance commands pass: `make chat-test` (102 tests) and `make check` (36 tests).
+
+## Task B15 - sources under answers (chat/static/js/app.js)
+- Imported `sourcesHtml` and `citeLinks` from `./stream.js`.
+- `drawMessage` assistant: added `sourcesHtml(m.sources)` between `.bub` and `.meta2` in the innerHTML, and called `citeLinks(bub, m.sources)` after appending to convert `[n]` citations to links.
+- `send` done handling: when `data.sources` is non-empty, renders `bub.innerHTML = md.render(full)`, calls `citeLinks(bub, data.sources)`, and inserts `sourcesHtml(data.sources)` before the stats line (doneMeta).
+- All acceptance commands pass: `node --check chat/static/js/app.js`, `make chat-test` (102 tests), and `make check` (36 tests).
