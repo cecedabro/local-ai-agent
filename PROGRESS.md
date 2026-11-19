@@ -32,3 +32,7 @@ Implemented `run_evidence(db, settings, chat, think, *, stream, complete, t, clo
 ## Task E10 - verify evidence_messages and public_sources in chat/coder/research.py (2026-11-19)
 
 Confirmed both functions were already implemented per their docstrings. `evidence_messages` builds the system message (RULES + optional user instructions) and user message with source pack. `public_sources` strips internal `text` field and adds a `quote` via `tools._cut`. `make chat-test K="test_step_research and evidence_messages"` passes. `make check` passes.
+
+## Task E11 - run_evidence verification (2026-11-19)
+
+Confirmed `run_evidence` in `chat/coder/research.py:279` is fully implemented per its docstring (SPEC §13.2 step 6). All `test_step_research` tests pass (10/10) and `make check` passes (36/36). No changes needed.
