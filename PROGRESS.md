@@ -35,3 +35,9 @@
 - **File**: `chat/static/js/profiles.js:329` — filled in the `TODO (task F09)` block.
 - **Change**: Added click listener for `#add-defaults` that POSTs to `/api/profiles/${state.profile}/defaults`, shows "Added N source(s)." or "You already have all the default sources." based on response, errors shown via `say(String(e), true)`, then refreshes.
 - `node --check chat/static/js/profiles.js` passes. `make chat-test K="add_defaults"` passes (1/1). `make check` passes (36/36).
+
+## Task F11 - `pmc_id` and `pmc_text` implementation
+- **File**: `chat/coder/tools.py:453-518` — both functions were already implemented (no changes needed).
+- **`pmc_id`**: Uses `_PMC` regex to extract PMC IDs from URLs; returns uppercased "PMC" ID or None.
+- **`pmc_text`**: Fetches PMC article via E-utilities efetch (db=pmc, retmode=xml), extracts title from `<article-title>`, collects text from `<abstract>` and `<body>` `<p>` elements, returns `{"title", "url", "text"}` dict capped at `PAGE_CHARS`.
+- `make chat-test K="test_step_flow and pmc"` passes (2/2). `make check` passes (36/36).

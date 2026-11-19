@@ -35,7 +35,7 @@ Rules for every task:
   accept: make chat-test K="missing_defaults or add_defaults"
 - [x] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
   accept: node --check chat/static/js/profiles.js && make chat-test K="add_defaults"
-- [ ] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
+- [x] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
   accept: make chat-test K="test_step_flow and pmc"
 - [ ] F12: In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say
   accept: make chat-test K="test_step_flow and (extract or read_one)"
