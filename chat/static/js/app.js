@@ -1,7 +1,8 @@
 // The chat page (chat/coder/templates/chat.html). ES module. Hooks: chat/SPEC.md §9 and §11.
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
-import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions } from "./stream.js";
+import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions,
+  orbHtml, startOrb, flyFrom } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -99,11 +100,22 @@ async function loadChats() {
   convs.innerHTML = html;
 }
 
+const PROFILE_NAMES = { general: "General", evidence: "EvidenceHunt" };
+
+/** Show which profile the chat is in: the profile button, html[data-profile] (strip, colours) and the placeholder. */
+function setProfile(p) {
+  state.profile = p;
+  $("#profile-name").textContent = PROFILE_NAMES[p] || p;
+  $("#profile").dataset.profile = p;
+  document.documentElement.dataset.profile = p;
+  $("#input").placeholder = p === "evidence" ? "Ask EvidenceHunt…" : "Message Dewdrop…";
+}
+
 async function openChat(id) {
   const res = await api(`/api/chats/${encodeURIComponent(id)}`);
   const chat = await res.json();
   state.chatId = chat.id;
-  state.profile = chat.profile;
+  setProfile(chat.profile);
   $("#chat-title").textContent = chat.title;
   const $messages = $("#messages");
   $messages.innerHTML = "";
@@ -114,12 +126,16 @@ async function openChat(id) {
   await loadChats();
 }
 
+let welcomeOrb = null;
+
 function drawWelcome() {
   const $messages = $("#messages");
   const username = document.body.dataset.username;
   const chips = EXAMPLES[state.profile].map((ex) => `<button data-example="${esc(ex)}">${esc(ex)}</button>`).join("");
   $messages.innerHTML =
-    `<div class="welcome">${MARBLE}<h2>Hi ${esc(username)}, what's up?</h2><div class="chips">${chips}</div></div>`;
+    `<div class="welcome">${orbHtml("marble", "welcome")}<h2>Hi ${esc(username)}, what's up?</h2><div class="chips">${chips}</div></div>`;
+  welcomeOrb?.stop();
+  welcomeOrb = startOrb($messages.querySelector(".welcome .orb"), { range: 30, min: 3500, max: 6000 });
   $messages.querySelectorAll("button[data-example]").forEach((btn) => {
     btn.addEventListener("click", () => { $("#input").value = btn.dataset.example; send(); });
   });
@@ -266,18 +282,20 @@ async function send() {
     }
     const userText = state.files.length ? esc(typedText(text)) : esc(text);
     $("#messages").insertAdjacentHTML("beforeend", `<div class="u">${userChips}<div class="msg user">${userText}</div></div>`);
+    flyFrom($("#messages").lastElementChild, $("#send"));
 
     // Draw assistant message placeholder
     const aiDiv = document.createElement("div");
     aiDiv.className = "ai";
-    aiDiv.innerHTML = ORB + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
+    aiDiv.innerHTML = orbHtml() + `<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
     $("#messages").appendChild(aiDiv);
 
     const bub = aiDiv.querySelector(".bub");
     const meta = aiDiv.querySelector(".meta2");
     const orb = aiDiv.querySelector(".orb");
+    const liveOrb = startOrb(orb);
     const tiny = document.createElement("span");
-    tiny.innerHTML = TINY;
+    tiny.innerHTML = orbHtml("tiny");
     const tinyEl = tiny.firstElementChild;
 
     // Clear #input, #file-chips and state.files
@@ -308,6 +326,7 @@ async function send() {
     });
     if (!res.ok) {
       orb.dataset.phase = "idle";
+      liveOrb.stop();
       meta.innerHTML = "";
       const errObj = await res.json().catch(() => null);
       const errMsg = errObj?.error || "Something went wrong.";
@@ -336,6 +355,7 @@ async function send() {
     await typewriter.finish();
     tinyEl.remove();
     orb.dataset.phase = "idle";
+    liveOrb.stop();
 
     if (finished && finished.event === "done") {
       const data = finished.data;
@@ -668,9 +688,7 @@ async function start() {
   $("#profile").addEventListener("click", () => $("#pmenu").classList.toggle("hidden"));
   $("#pmenu").querySelectorAll(".opt").forEach((opt) => {
     opt.addEventListener("click", () => {
-      state.profile = opt.dataset.profile;
-      $("#profile-name").textContent = opt.querySelector("b").textContent;
-      $("#profile").dataset.profile = state.profile;
+      setProfile(opt.dataset.profile);
       $("#pmenu").classList.add("hidden");
       state.chatId = null;
       $("#chat-title").textContent = "New chat";
@@ -696,6 +714,7 @@ async function start() {
   });
   setupFiles();
   setupSidebar();
+  setProfile(state.profile);
   await loadChats();
   if (state.chats.length > 0) await openChat(state.chats[0].id);
   else drawWelcome();

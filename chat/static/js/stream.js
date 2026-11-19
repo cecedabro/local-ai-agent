@@ -337,3 +337,85 @@ export function sourceActions(root) {
     setTimeout(() => card.classList.remove("flash"), 1200);
   });
 }
+
+// ------------------------------------------------------------------ round 12: the live drop (orb.css), M3 fly
+
+/** Markup of a live drop: every phase layer inside one .orb.live (orb.css). `cls` adds classes ("tiny", …). */
+export function orbHtml(cls = "", phase = "idle") {
+  return `<span class="orb live${cls ? " " + cls : ""}" data-phase="${phase}"><span class="pool"></span>` +
+    '<span class="clouds"><i></i><i></i><i></i><i></i></span>' +
+    '<span class="radar"><span class="ring"></span><span class="ring"></span><span class="beam"></span></span>' +
+    '<span class="read"><span class="lines"></span><span class="beam"></span></span>' +
+    '<span class="sum"><em></em><b></b><b></b><b></b></span>' +
+    '<span class="water"><span class="body"><span class="slosh"><span class="deep"></span><span class="wave c"></span>' +
+    '<span class="wave b"></span><span class="wave"></span></span></span></span></span>';
+}
+
+const BEAM_MS = 2400;
+
+/**
+ * Bring a live drop to life: its clouds drift to new random spots (round 12: further and faster, eased) and its
+ * radar beam turns, drawing a source exactly when the beam reaches it (round 3). Everything is Web Animations
+ * on transform/opacity. Returns {stop()} to end it all. Does nothing without element.animate (tests, old browsers).
+ */
+export function startOrb(orb, { range = 45, min = 1500, max = 2600 } = {}) {
+  if (!orb || typeof orb.animate !== "function") return { stop() {} };
+  const anims = [];
+  let alive = true;
+  orb.querySelectorAll(".clouds i").forEach((el) => {
+    let x = 0, y = 0, sc = 1;
+    const go = () => {
+      if (!alive) return;
+      const nx = (Math.random() * 2 - 1) * range, ny = (Math.random() * 2 - 1) * range, s = .7 + Math.random() * .6;
+      const a = el.animate([{ transform: `translate3d(${x}%,${y}%,0) scale(${sc})` }, { transform: `translate3d(${nx}%,${ny}%,0) scale(${s})` }],
+        { duration: min + Math.random() * (max - min), easing: "cubic-bezier(.45,0,.55,1)", fill: "forwards" });
+      x = nx; y = ny; sc = s;
+      a.onfinish = go;
+      anims.push(a);
+      if (anims.length > 40) anims.splice(0, 20);
+    };
+    go();
+  });
+  const box = orb.querySelector(".radar"), beam = box && box.querySelector(".beam");
+  let timer = null;
+  if (beam) {
+    anims.push(beam.animate([{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }], { duration: BEAM_MS, iterations: Infinity }));
+    const t0 = performance.now();
+    let n = 0;
+    timer = setInterval(() => {
+      if (orb.dataset.phase !== "searching") return;
+      if (n >= 8) { box.querySelectorAll(".blip").forEach((b) => b.remove()); n = 0; }
+      const ang = Math.random() * 360, r = 14 + Math.random() * 28;
+      const x = 50 + r * Math.sin(ang * Math.PI / 180), y = 50 - r * Math.cos(ang * Math.PI / 180);
+      const wait = (ang / 360 * BEAM_MS - (performance.now() - t0) % BEAM_MS + BEAM_MS) % BEAM_MS;
+      setTimeout(() => {
+        if (!alive) return;
+        const b = document.createElement("span");
+        b.className = "blip";
+        b.style.setProperty("--x", x + "%");
+        b.style.setProperty("--y", y + "%");
+        box.appendChild(b);
+        b.animate([{ opacity: 1, transform: "scale(1.7)" }, { opacity: .85, transform: "scale(1)", offset: .12 }, { opacity: .3, transform: "scale(1)" }],
+          { duration: BEAM_MS, iterations: Infinity });
+        n++;
+      }, wait);
+    }, 1000);
+  }
+  return {
+    stop() {
+      alive = false;
+      clearInterval(timer);
+      anims.forEach((a) => a.cancel());
+      box && box.querySelectorAll(".blip").forEach((b) => b.remove());
+    },
+  };
+}
+
+/** M3: `el` (your new message) flies out of `from` (the send button) to its place. */
+export function flyFrom(el, from) {
+  if (!el || !from || !el.getBoundingClientRect) return;
+  const a = el.getBoundingClientRect(), b = from.getBoundingClientRect();
+  el.style.setProperty("--dx", `${Math.round(b.left + b.width / 2 - a.right)}px`);
+  el.style.setProperty("--dy", `${Math.round(b.top + b.height / 2 - a.bottom)}px`);
+  el.classList.add("fly");
+}

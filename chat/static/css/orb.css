@@ -1,71 +1,100 @@
-/* Dewdrop: the orb and its phases. Human-owned. Markup (chat/SPEC.md §9):
-     <span class="orb" data-phase="idle|waiting|thinking|searching|reading|summarising|writing|compressing"><i></i><i></i><i></i><i></i></span>
-   <i>1 = clouds (thinking), <i>2 = water (writing; its height follows --fill, 0–1, set by app.js),
-   <i>3 = little bubbles in the water, <i>4 = the light pooled at the bottom of the drop.
-   Size: --s. Only transform and opacity animate, so it stays smooth.
-   The welcome screen uses .orb.marble: the drifting cloud marble. */
+/* Dewdrop: the orb and its phases (design round 12, docs/design/chat/2026-11-19-r12-chat-preview.html).
+   Human-owned. Two kinds of markup (chat/SPEC.md §9):
+     static:  <span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>   (brand, profile, stats line)
+     live:    stream.js orbHtml(): <span class="orb live" data-phase="…"> + layers .clouds .radar .read .sum .water
+              (the answer's drop, the tiny writing drop, the welcome drop); stream.js startOrb() moves its clouds
+              and radar with Web Animations.
+   Phases: idle | waiting | reading | thinking | searching | summarising | writing | compressing | welcome.
+   Searching, reading and summarising are round 3's (coder-design-round3 §3) exactly, inside the drop. No
+   breathing. Only transform and opacity animate; every moving layer is its own GPU layer. */
 .orb{--s:30px;
   --d-core:rgba(255,255,255,.95);--d-mid:rgba(170,228,255,.38);--d-edge:rgba(80,170,230,.55);--d-glow:rgba(34,160,230,.22);--d-rim:rgba(255,255,255,.85);
-  --w-top:rgba(140,215,250,.34);--w-deep:rgba(40,140,220,.5);--c1:#bfe9ff;--c2:#d9f5e6;--c3:#e3dcff;
+  --w-top:rgba(140,215,250,.4);--w-deep:rgba(40,140,220,.55);--c1:#7fd6f5;--c2:#9fe3c4;--c3:#b9c8f5;--c5:#d6f3ff;--dot:#22c3ee;
   position:relative;display:inline-block;flex:none;width:var(--s);height:var(--s);border-radius:50%;overflow:hidden;isolation:isolate;vertical-align:middle;
-  transform:translateZ(0);
+  transform:translateZ(0);transition:width .5s cubic-bezier(.3,.9,.3,1),height .5s cubic-bezier(.3,.9,.3,1);
   background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 42%,var(--d-edge) 100%);
   box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.10),0 3px 12px var(--d-glow)}
 :root[data-theme=dark] .orb{--d-core:rgba(150,240,255,.95);--d-mid:rgba(40,170,220,.5);--d-edge:#0b3b5e;--d-glow:rgba(60,200,255,.32);--d-rim:rgba(150,220,255,.35);
-  --w-top:rgba(90,200,250,.3);--w-deep:rgba(20,120,210,.52);--c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a}
-/* Blossom: rose quartz, pink water, a white glow (never blue) */
+  --w-top:rgba(90,200,250,.32);--w-deep:rgba(20,120,210,.55);--c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a;--c5:#3b6f99;--dot:#5fd0ff}
 :root[data-theme=blossom] .orb{--d-core:rgba(255,255,255,.97);--d-mid:rgba(255,214,232,.55);--d-edge:rgba(232,128,176,.6);--d-glow:rgba(255,190,220,.45);
-  --d-rim:rgba(255,255,255,.9);--w-top:rgba(255,190,222,.36);--w-deep:rgba(226,104,160,.48);--c1:#ffd6ea;--c2:#ffe4f0;--c3:#ead9ff}
+  --d-rim:rgba(255,255,255,.9);--w-top:rgba(255,190,222,.4);--w-deep:rgba(226,104,160,.5);--c1:#f9a8d4;--c2:#fcd5e5;--c3:#d8c4fb;--c5:#ffe4ef;--dot:#ec4899}
 /* the drop's own shine, on top of everything */
-.orb::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:6;
+.orb::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:9;pointer-events:none;
   background:radial-gradient(40% 26% at 35% 22%,rgba(255,255,255,.92),transparent 72%)}
-.orb i{position:absolute;display:block}
 
-/* 4: pooled light at the bottom, softly glinting */
-.orb i:nth-child(4){left:18%;right:18%;bottom:9%;height:22%;border-radius:50%;z-index:5;
+/* ---------------------------------------------------------------- static markup (four <i>) */
+.orb>i{position:absolute;display:block}
+.orb>i:nth-child(1),.orb>i:nth-child(2),.orb>i:nth-child(3){display:none}
+/* 4: the light pooled at the bottom, softly glinting (also in live drops: .pool) */
+.orb>i:nth-child(4),.orb .pool{position:absolute;left:18%;right:18%;bottom:9%;height:22%;border-radius:50%;z-index:8;
   background:radial-gradient(closest-side,#fff,transparent);animation:orb-glint 5s ease-in-out infinite}
 @keyframes orb-glint{50%{transform:scaleX(1.15);opacity:.7}}
 
-/* 1: clouds, only while thinking (the drop clouds over softly) */
-.orb i:nth-child(1){inset:-10%;border-radius:50%;opacity:0;transition:opacity .6s;
-  background:radial-gradient(38% 34% at 30% 35%,var(--c1),transparent 70%),radial-gradient(36% 32% at 70% 45%,var(--c3),transparent 70%),
-    radial-gradient(40% 34% at 45% 72%,var(--c2),transparent 70%)}
-.orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]) i:nth-child(1){
-  opacity:.85;animation:orb-cloud 7s ease-in-out infinite}
-@keyframes orb-cloud{0%,100%{transform:rotate(0) scale(1)}33%{transform:rotate(25deg) scale(1.08) translate3d(4%,-3%,0)}66%{transform:rotate(-15deg) scale(.95) translate3d(-4%,3%,0)}}
-.orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]){
-  animation:orb-breath 3.6s cubic-bezier(.45,0,.55,1) infinite}
-@keyframes orb-breath{0%,100%{transform:scale(.97)}50%{transform:scale(1.03)}}
+/* ---------------------------------------------------------------- live drops: layers fade in per phase */
+.orb.live>span{position:absolute;inset:0;display:block;border-radius:50%;opacity:0;transition:opacity .45s}
+.orb.live>span.pool{inset:auto 18% 9% 18%;height:22%;opacity:1}
+.orb.live>span.water{opacity:1}
 
-/* 2: water. Its body starts below the waves (no darker band); two wave strips slide at different
-   speeds with a bright waterline; it rises with --fill and drains when the phase ends. */
-.orb i:nth-child(2){left:0;right:0;top:0;height:100%;z-index:2;transform:translate3d(0,100%,0);
-  transition:transform 1.4s cubic-bezier(.33,0,.2,1);
-  background:linear-gradient(180deg,transparent 0 9%,var(--w-top) 9%,var(--w-deep))}
-.orb[data-phase=writing] i:nth-child(2){transform:translate3d(0,calc((1 - var(--fill,.15)) * 100%),0)}
-.orb i:nth-child(2)::before,.orb i:nth-child(2)::after{content:"";position:absolute;left:0;width:200%;top:0;height:10%;
-  background-repeat:repeat-x;background-size:50% 100%;animation:orb-wave 4.2s linear infinite}
-.orb i:nth-child(2)::before{opacity:.7;animation-duration:6.5s;animation-direction:reverse;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q12.5 1 25 5 T50 5 T75 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.22)'/%3E%3C/svg%3E")}
-.orb i:nth-child(2)::after{
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.16)'/%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5' fill='none' stroke='white' stroke-opacity='0.95' stroke-width='0.9'/%3E%3C/svg%3E")}
+/* thinking: four soft clouds, each moved to a new random spot by stream.js startOrb (transform only) */
+.orb .clouds{z-index:2}
+.orb .clouds i{position:absolute;left:5%;top:5%;width:90%;height:90%;border-radius:50%;will-change:transform}
+.orb .clouds i:nth-child(1){background:radial-gradient(circle,var(--c1) 0,var(--c1) 22%,transparent 66%)}
+.orb .clouds i:nth-child(2){background:radial-gradient(circle,var(--c3) 0,var(--c3) 22%,transparent 66%)}
+.orb .clouds i:nth-child(3){background:radial-gradient(circle,var(--c2) 0,var(--c2) 22%,transparent 66%)}
+.orb .clouds i:nth-child(4){background:radial-gradient(circle,var(--c5) 0,var(--c5) 22%,transparent 66%)}
+.orb[data-phase=thinking] .clouds,.orb[data-phase=compressing] .clouds{opacity:1}
+.orb[data-phase=welcome] .clouds{opacity:.85}
+
+/* searching (round 3): the beam turns (stream.js), two rings, sources pop up when the beam passes them */
+.orb .radar{z-index:3}
+.orb .radar .beam{position:absolute;inset:0;border-radius:50%;will-change:transform;
+  background:conic-gradient(from 0deg,transparent 0 280deg,color-mix(in srgb,var(--dot) 16%,transparent) 310deg,color-mix(in srgb,var(--dot) 85%,transparent) 360deg)}
+.orb .radar .ring{position:absolute;border-radius:50%;border:1px solid color-mix(in srgb,var(--dot) 30%,transparent)}
+.orb .radar .ring:nth-child(1){inset:22%}.orb .radar .ring:nth-child(2){inset:40%}
+.orb .radar .blip{position:absolute;left:var(--x,50%);top:var(--y,50%);width:7%;height:7%;margin:-3.5%;border-radius:50%;background:var(--dot);box-shadow:0 0 6px var(--dot);opacity:0;z-index:4;will-change:transform,opacity}
+.orb[data-phase=searching] .radar{opacity:1}
+
+/* reading (round 3): lines drifting up, a soft beam gliding over them, fading out at the top and bottom */
+.orb .read{z-index:3;-webkit-mask:linear-gradient(180deg,transparent 4%,#000 30%,#000 70%,transparent 96%);mask:linear-gradient(180deg,transparent 4%,#000 30%,#000 70%,transparent 96%)}
+.orb .read .lines{position:absolute;left:22%;right:22%;top:0;height:200%;will-change:transform;
+  background:repeating-linear-gradient(180deg,color-mix(in srgb,var(--dot) 50%,transparent) 0 2px,transparent 2px 9px);animation:orb-lines 7.2s linear infinite paused}
+@keyframes orb-lines{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+.orb .read .beam{position:absolute;left:10%;right:10%;top:50%;height:25%;margin-top:-12.5%;will-change:transform;
+  background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c2) 75%,transparent),transparent);animation:orb-glide 3.4s cubic-bezier(.45,0,.55,1) infinite alternate paused}
+@keyframes orb-glide{from{transform:translate3d(0,-100%,0)}to{transform:translate3d(0,100%,0)}}
+.orb[data-phase=reading] .read{opacity:1}
+.orb[data-phase=reading] .read *{animation-play-state:running}
+
+/* summarising (round 3): a bright core, three particles drawn in */
+.orb .sum{z-index:4}
+.orb .sum em{position:absolute;left:50%;top:50%;width:11%;height:11%;margin:-5.5%;border-radius:50%;background:radial-gradient(circle,#fff,var(--dot));box-shadow:0 0 10px var(--dot)}
+.orb .sum b{position:absolute;left:50%;top:50%;width:7%;height:7%;margin:-3.5%;border-radius:50%;background:var(--c2);will-change:transform,opacity;
+  animation:orb-inward 2.2s cubic-bezier(.5,0,.75,0) infinite paused}
+.orb .sum b:nth-of-type(2){animation-delay:.73s;background:var(--c3)}.orb .sum b:nth-of-type(3){animation-delay:1.46s;background:var(--c1)}
+@keyframes orb-inward{0%{transform:rotate(0) translateX(calc(var(--s) * .36)) scale(1);opacity:0}15%{opacity:1}
+  100%{transform:rotate(300deg) translateX(0) scale(.3);opacity:0}}
+.orb[data-phase=summarising] .sum{opacity:1}
+.orb[data-phase=summarising] .sum *{animation-play-state:running}
+
+/* writing: the water rises with --fill (0-1, set by app.js), three waves at different speeds, a gentle slosh;
+   back to idle it drains */
+.orb .water{z-index:5;overflow:hidden}
+.orb .water .body{position:absolute;left:-15%;right:-15%;top:0;height:100%;will-change:transform;transform:translate3d(0,100%,0);
+  transition:transform 1.2s cubic-bezier(.33,0,.2,1)}
+.orb[data-phase=writing] .water .body{transform:translate3d(0,calc((1 - var(--fill,.15)) * 100%),0)}
+.orb .water .slosh{position:absolute;inset:0;will-change:transform;transform-origin:50% 0;animation:orb-slosh 3.2s ease-in-out infinite paused}
+@keyframes orb-slosh{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.orb .water .deep{position:absolute;left:0;right:0;top:7%;bottom:0;background:linear-gradient(180deg,var(--w-top),var(--w-deep))}
+.orb .water .wave{position:absolute;left:0;top:0;width:200%;height:16%;will-change:transform;background-repeat:repeat-x;background-size:50% 100%;
+  animation:orb-wave 3.4s linear infinite paused;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 16' preserveAspectRatio='none'%3E%3Cpath d='M0 8 Q12.5 2 25 8 T50 8 T75 8 T100 8 V16 H0Z' fill='rgba(255,255,255,0.22)'/%3E%3Cpath d='M0 8 Q12.5 2 25 8 T50 8 T75 8 T100 8' fill='none' stroke='white' stroke-opacity='0.95' stroke-width='1.1'/%3E%3C/svg%3E")}
+.orb .water .wave.b{top:2%;opacity:.55;animation-duration:5.4s;animation-direction:reverse}
+.orb .water .wave.c{top:4%;opacity:.35;animation-duration:7.6s;height:12%}
 @keyframes orb-wave{to{transform:translate3d(-50%,0,0)}}
-/* 3: little bubbles rising inside the water (only while writing) */
-.orb i:nth-child(3){left:0;right:0;bottom:0;height:200%;z-index:3;opacity:0;transition:opacity .5s;
-  background:radial-gradient(circle at 30% 80%,transparent 0 1.3%,rgba(255,255,255,.9) 1.6% 2.2%,transparent 2.6%),
-    radial-gradient(circle at 62% 62%,transparent 0 1%,rgba(255,255,255,.85) 1.3% 1.8%,transparent 2.2%),
-    radial-gradient(circle at 45% 92%,transparent 0 1.1%,rgba(255,255,255,.85) 1.4% 2%,transparent 2.4%)}
-.orb[data-phase=writing] i:nth-child(3){opacity:1;animation:orb-bubbles 3.6s linear infinite}
-@keyframes orb-bubbles{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+.orb[data-phase=writing] .water *{animation-play-state:running}
 
-/* waiting in line: the drop asleep, grey and slowly breathing */
+/* waiting in line: asleep, grey, slowly fading in and out (no breathing) */
 .orb[data-phase=waiting]{filter:grayscale(1);animation:orb-sleep 4s ease-in-out infinite}
-@keyframes orb-sleep{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:.8;transform:scale(1)}}
+@keyframes orb-sleep{0%,100%{opacity:.45}50%{opacity:.85}}
 
-/* the welcome screen: the dewdrop itself, clouds drifting slowly inside it, breathing */
-.orb.marble{animation:orb-breath 6s cubic-bezier(.45,0,.55,1) infinite}
-.orb.marble i:nth-child(1){opacity:.8;animation:orb-cloud 12s ease-in-out infinite}
-/* the tiny writing drop fills too (JS sets data-phase="writing" and --fill on it) */
-.orb.tiny i:nth-child(2)::before,.orb.tiny i:nth-child(2)::after{height:16%}
-
-@media (prefers-reduced-motion:reduce){.orb,.orb *,.orb i::before,.orb i::after{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.orb,.orb *{animation:none!important;transition:none!important}}
