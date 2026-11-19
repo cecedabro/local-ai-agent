@@ -39,3 +39,7 @@ chat/tests/test_step_tools.py
 chat/tests/test_step_profiles.py
 chat/tests/test_accept_profiles.py
 chat/tests/test_step_textcalls.py
+chat/tests/test_step_verify.py
+chat/tests/test_step_research.py
+chat/tests/test_accept_evidence.py
+chat/static/icons/

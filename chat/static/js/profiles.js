@@ -7,6 +7,21 @@ const state = { profile: null, data: null, timers: {} };
 const TYPES = [["systematic_review", "Systematic reviews"], ["meta_analysis", "Meta-analyses"], ["rct", "Randomised trials"],
   ["guideline", "Guidelines"], ["review", "Reviews"]];
 const LANGS = [["english", "English"], ["dutch", "Dutch"]];
+/*
+ * TODO (task E17): PubMed strictness, design C (SPEC §13.4), and the on/off switch. Judge: make chat-browser-test
+ * ("round 4: PubMed strictness…").
+ *   1. const PRESETS = [["strict", "Strict", "Reviews, meta-analyses and guidelines · last 10 years · humans"],
+ *        ["balanced", "Balanced", "+ randomised trials · last 15 years · humans"], ["broad", "Broad", "All study types · any year"]];
+ *   2. cardHtml for pubmed: before the filters, cur = f.preset || "custom";
+ *        <div class="presets"> per PRESETS <button type="button" class="preset[ on when cur === key]" data-preset="KEY">
+ *        <b>NAME</b><small>DESC</small></button></div><details class="custom"[ open when cur === "custom"]><summary>Customise</summary>
+ *      and the existing <div class="filters">…</div> inside that details (close it after the filters).
+ *   3. start(): a click on a [data-preset] in #pf-sources: PATCH that card's source {filters: {preset: its data-preset,
+ *      languages: the checked [data-lang] of the card}}, then refresh(). Changing a filter control now sends
+ *      {filters: {...readFilters(card), preset: "custom"}}.
+ *   4. Bug: the on/off switch never saves: the [data-enabled] branch reads target.dataset.source, but the id is on the card:
+ *      use target.closest("[data-source]").dataset.source (and check that closest instead).
+ */
 const KIND = { pubmed: "PubMed", website: "Website", file: "Document" };
 
 /** fetch() for /api with the CSRF header; on 401 go to /login. (done) */

@@ -466,6 +466,20 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
     return (f"Error: the tool {name} is not available here.", [])
 
 
+def trail_step(name: str, arguments: str, found: list[dict]) -> dict:
+    r"""TODO (task E06). One step of the search trail for a tool call (SPEC §13.3).
+      args = json.loads(arguments or "{}") (not JSON or not a dict -> {}); q = str(args.get("query") or "").strip()
+      open_page     -> {"kind": "read", "title": found[0]["title"] if found else the url, "url": found[0]["url"] if found else the url}
+                       (the url = str(args.get("url") or ""))
+      search_pubmed -> {"kind": "search", "source": "PubMed", "query": q, "found": len(found),
+                        "url": "https://pubmed.ncbi.nlm.nih.gov/?term=" + urllib.parse.quote_plus(q)}
+      search_site   -> {"kind": "search", "source": args["site"] (as str), "query": q, "found": len(found), "url": None}
+      anything else -> the same with "source": "the web"
+    Tests: test_step_research.py::test_trail_step
+    """
+    raise NotImplementedError
+
+
 def _cut(text: str, n: int = QUOTE_CHARS) -> str:
     """The first `n` characters of a text for the source card's quote, cut at a word."""
     text = " ".join((text or "").split())

@@ -127,3 +127,17 @@ test("orbHtml: a live drop with every phase layer", async () => {
   assert.equal((h.match(/class="wave/g) || []).length, 3);
   assert.doesNotThrow(() => startOrb(null).stop(), "no element, no animation: a no-op");
 });
+
+test("trailHtml / thoughtHtml: the search trail and the thinking block, escaped", async () => {
+  const { trailHtml, thoughtHtml } = await import("../../static/js/stream.js");
+  assert.equal(trailHtml([]), "");
+  const h = trailHtml([{ kind: "search", source: "PubMed", query: "apixaban <renal>", found: 5, url: "https://pubmed.ncbi.nlm.nih.gov/?term=a" },
+    { kind: "search", source: "rivm.nl", query: "griep", found: 0, url: null, error: "search answered 500" },
+    { kind: "read", title: "Griepprik", url: "https://www.rivm.nl/griepprik" }], true);
+  assert.match(h, /^<details class="trail" open><summary>Searched 2 times · read 1 page<\/summary><ol>/);
+  assert.match(h, /Searched PubMed for <b>"apixaban &lt;renal&gt;"<\/b> · <a href="https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\?term=a" target="_blank" rel="noopener noreferrer">5 found ↗<\/a>/);
+  assert.match(h, /<span class="err">search answered 500<\/span>/);
+  assert.match(h, /<li class="step read">Read <a href="https:\/\/www\.rivm\.nl\/griepprik"[^>]*>Griepprik ↗<\/a><\/li>/);
+  assert.equal(thoughtHtml("", 3), "");
+  assert.equal(thoughtHtml("a < b", 2.4), '<details class="thought"><summary>Thought for 2 s</summary><div class="thought-text">a &lt; b</div></details>');
+});

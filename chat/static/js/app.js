@@ -164,6 +164,20 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
  *   send, on done: if data.sources is non-empty: bub.innerHTML = md.render(full); citeLinks(bub, data.sources);
  *     bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources))  (before the stats line is drawn).
  */
+/*
+ * TODO (task E16): thinking, the search trail and the checker's marks (SPEC §13.3). Import trailHtml, thoughtHtml and
+ * markVerify from ./stream.js. Judge: make chat-browser-test ("round 4: EvidenceHunt…").
+ *   drawMessage, assistant: put <div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div> right
+ *     before the .bub; after citeLinks: markVerify(the .bub, m.verify).
+ *   send: the new div.ai gets an empty <div class="pre"></div> before its .bub. Keep thinking = "", th0 = null,
+ *     thoughtSecs = null, report = null, steps = [] and drawPre(live) = pre.innerHTML = thoughtHtml(thinking, thoughtSecs)
+ *     + trailHtml(steps, live). Events:
+ *       thinking -> th0 = th0 ?? performance.now(); thinking += data.text; drawPre(true)
+ *       trail    -> steps.push(data.step); drawPre(true)
+ *       verify   -> report = data.report
+ *       delta    -> the first time after thinking: thoughtSecs = (performance.now() - th0) / 1000; drawPre(true)
+ *     done (after the sources and doneMeta): drawPre(false); markVerify(bub, report || data.verify)
+ */
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
 function typedText(content) { return content.split("\n\nFile ")[0]; }
 

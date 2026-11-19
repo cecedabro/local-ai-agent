@@ -20,6 +20,11 @@ ANSWER = ("Go a bit lower than for search: around **150–200 ms**.\n\n```javasc
           "For the full results page keep **300 ms**.")
 
 
+EH_ANSWER = ("**Kort:** apixaban lijkt veiliger dan warfarine bij ernstige nierfunctiestoornis [1].\n\n"
+             '> "apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin" [1]\n\n'
+             '> "apixaban is completely safe in every patient on dialysis" [2]\n\n'
+             "Bij dialyse zijn er volgens de onderzoekers vooral observationele studies beschikbaar en geen trials.\n\n"
+             "Het bewijs is beperkt.")
 LONG = "\n\n".join(f"Paragraph {i}: " + "the quick brown fox jumps over the lazy dog " * 4 for i in range(1, 15))
 CODE = "Here it is:\n\n```html page.html\n<!doctype html>\n<title>Hi</title>\n<p class=\"x\">Hello</p>\n```\n"
 
@@ -34,6 +39,8 @@ class Script(dict):
         msgs = self.gw.requests[-1]["body"]["messages"]
         if key == "tool_calls":                   # "search ..." -> one web search first (SPEC §12.3)
             return [{"name": "web_search", "arguments": '{"query": "flu shot"}'}] if "search" in msgs[-1]["content"] else None
+        if key == "content" and str(msgs[-1]["content"]).startswith("Sources:"):     # EvidenceHunt's answer (SPEC §13)
+            return [w + " " for w in EH_ANSWER.split(" ")]
         if key == "content" and msgs[-1]["role"] == "tool":
             return [w + " " for w in "Yes, people over 60 get it every autumn [1].".split(" ")]
         if key == "content":
@@ -67,6 +74,12 @@ def main() -> None:
         except (BrokenPipeError, ConnectionResetError):
             return None                           # the app closed the stream (stop)
     handler.do_POST = slow_post
+    import coder.tools as tools_mod
+    tools_mod.PUBMED = gw.url                     # PubMed's E-utilities, faked by the gateway
+    gw.pubmed = [{"pmid": "101", "title": "Apixaban in chronic kidney disease", "journal": "Kidney Int", "year": "2022",
+                  "abstract": "In patients with eGFR 15-29, apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin."},
+                 {"pmid": "102", "title": "DOACs in dialysis", "journal": "BMJ", "year": "2021",
+                  "abstract": "Evidence in patients on dialysis is limited to observational studies."}]
     gw.search_results = [{"title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "content": "Wie krijgt hem"}]
     gw.start()
     app = create_app({"DATA_DIR": data, "GATEWAY_URL": gw.url + "/v1", "GATEWAY_KEY": "k", "STATUS_URL": gw.url,

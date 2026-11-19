@@ -55,6 +55,17 @@ def domain_of(url: str) -> str | None:
     return host
 
 
+# TODO (task E13): PubMed strictness, design C (SPEC §13.4). Tests: test_accept_evidence.py::TestStrictnessAndIcon::test_presets
+#   1. Add a module constant
+#      PRESETS = {"strict": {"types": ["systematic_review", "meta_analysis", "guideline"], "years": 10, "humans": True},
+#                 "balanced": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 15, "humans": True},
+#                 "broad": {"types": [], "years": None, "humans": False}}
+#   2. clean_filters: preset = f.get("preset") when it is one of PRESETS or "custom", else None; for a PRESETS key use
+#      base = {**f, **PRESETS[preset]} instead of f for types/years/humans (languages always from f); the result gets
+#      "preset": preset only when preset is set.
+#   3. In chat/coder/app.py, PATCH /api/profiles/{profile}/sources/{id}: the filters it stores must go through
+#      profiles.clean_filters (today the raw body is stored: a bug).
+
 def clean_filters(f: Any) -> dict:
     """Keep only the known PubMed filter values (SPEC §12.1); `f` that is not a dict counts as {}:
     {"types": [t for t in FILTER_TYPES if t in f types], "years": years when an int 1–50 else None,

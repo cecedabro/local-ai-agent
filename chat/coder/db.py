@@ -846,6 +846,16 @@ class DB:
             conn.commit()
             return cur.rowcount > 0
 
+    # TODO (task E05): EvidenceHunt v2 storage (chat/SPEC.md §13). Tests: test_step_research.py (storage parts),
+    #   test_accept_evidence.py.
+    #   1. init_schema migration, like "sources": messages gets trail TEXT NOT NULL DEFAULT '[]', verify TEXT DEFAULT NULL,
+    #      thinking TEXT NOT NULL DEFAULT '' and thought_s REAL DEFAULT NULL when missing; users gets
+    #      icon TEXT NOT NULL DEFAULT '' when missing (PRAGMA table_info(users)).
+    #   2. add_message gets the keywords trail: list | None = None, verify: dict | None = None, thinking: str = "",
+    #      thought_s: float | None = None; stored as json.dumps(trail or []), None or json.dumps(verify), thinking or "", thought_s.
+    #   3. get_messages adds "trail": json.loads(...), "verify": json.loads(...) or None, "thinking", "thought_s".
+    #   4. update_user_icon(username, icon): UPDATE users SET icon = ? WHERE username = ?
+
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
         with self._lock:

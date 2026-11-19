@@ -177,6 +177,21 @@ def create_app(settings: dict | None = None) -> FastAPI:
         resp.delete_cookie("coder_session", path="/")
         return resp
 
+    # TODO (task E14): the app icon (SPEC §13.4). Tests: test_accept_evidence.py::TestStrictnessAndIcon::test_icon,
+    #   test_accept_core.py (the /api/me tests).
+    #   ICONS = ("aero", "blossom") at module level. A helper _me(username) -> {"username", "rights": sorted, "theme",
+    #   "icon": the stored icon, or "blossom" when the theme is blossom, else "aero"}.
+    #   GET /api/me -> _me(...). PATCH /api/me {"theme"?, "icon"?}: body not a dict or neither key -> 400 {"error":
+    #   "Nothing to change."}; a theme not in auto/light/dark/blossom -> 400 {"error": "invalid theme"}; an icon not in ICONS ->
+    #   400 {"error": "invalid icon"}; then db.update_user_theme / db.update_user_icon for the keys given; return _me(...).
+    #   GET /manifest.json (no session needed; icon = _me(...)["icon"] with a session, else "aero"): JSONResponse with
+    #   media_type "application/manifest+json": {"name": "Dewdrop", "short_name": "Dewdrop", "description": "Your private
+    #   chat, running on a local model.", "start_url": "/", "scope": "/", "display": "standalone", "background_color":
+    #   "#0b2233", "theme_color": "#0b2233", "icons": [{"src": f"/static/icons/{icon}-{n}.png", "sizes": f"{n}x{n}",
+    #   "type": "image/png", "purpose": "any maskable"} for n in (192, 512)]}
+    #   GET /apple-touch-icon.png: the bytes of <static dir>/icons/{icon}-180.png, media_type "image/png",
+    #   header Cache-Control: no-cache.
+
     @app.get("/api/me")
     async def api_me_get(request: Request) -> JSONResponse:
         session = _session_from_cookie(request, app.state.db)

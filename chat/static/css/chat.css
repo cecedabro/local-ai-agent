@@ -463,3 +463,45 @@ a.cite{cursor:pointer;margin:0 1px}
   box-shadow:0 0 0 3px var(--eh-soft),var(--shadow),inset 0 1px 0 var(--hi)}
 :root[data-profile=evidence] .phase-label{background-image:linear-gradient(90deg,var(--muted) 30%,var(--eh) 50%,var(--muted) 70%)}
 @media (prefers-reduced-motion:reduce){.u.fly,.send.stop{animation:none}}
+
+/* ================================================================ §13: trail, thinking, the checker's marks */
+.trail,.thought{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
+.trail>summary,.thought>summary{list-style:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:3px 10px 3px 8px;
+  border-radius:99px;background:var(--chip);border:1px solid var(--stroke-soft);font-weight:600}
+.trail>summary::-webkit-details-marker,.thought>summary::-webkit-details-marker{display:none}
+.trail>summary::before,.thought>summary::before{content:"";width:0;height:0;border:4px solid transparent;border-left:5px solid currentColor;
+  transition:transform .2s;transform-origin:30% 50%}
+.trail[open]>summary::before,.thought[open]>summary::before{transform:rotate(90deg)}
+.trail ol{margin:8px 0 2px;padding:0 0 0 4px;list-style:none;display:grid;gap:5px}
+.trail .step{display:flex;gap:7px;align-items:baseline;line-height:1.45}
+.trail .step::before{content:"⌕";flex:none;color:var(--accent);font-weight:700}
+.trail .step.read::before{content:"📄";font-size:11px}
+.trail .step b{color:var(--ink);font-weight:600}
+.trail .step a{color:var(--link);text-decoration:none;font-weight:600;white-space:nowrap}
+.trail .step .err{color:var(--bad)}
+.thought-text{margin:8px 0 2px;padding:8px 12px;border-left:2px solid var(--line);white-space:pre-wrap;font-size:12.5px;line-height:1.55;
+  max-height:240px;overflow:auto}
+/* quotes the checker found (✓) or could not find (⚠) in their source */
+.ai .bub blockquote.q-ok{border-left-color:var(--ok)}
+.ai .bub blockquote.q-bad{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 7%,transparent);border-radius:0 8px 8px 0}
+.q-inline.q-ok{text-decoration:underline dotted var(--ok);text-underline-offset:3px}
+.q-inline.q-bad{background:color-mix(in srgb,var(--bad) 12%,transparent);border-radius:4px}
+.q-mark{display:inline-grid;place-items:center;width:16px;height:16px;margin-left:5px;border-radius:50%;font-size:10px;font-weight:800;
+  vertical-align:1px;color:#fff;background:var(--ok);font-style:normal}
+.q-bad>.q-mark{background:var(--bad)}
+.verify-note{margin:6px 0 2px;font-size:12.5px;color:var(--bad)}
+.verify-note>summary{cursor:pointer;font-weight:600}
+.verify-note ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+/* PubMed strictness, design C: three choices, details under "Customise" */
+.presets{display:grid;gap:7px;margin:0 0 8px}
+.preset{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:14px;border:1px solid var(--stroke-soft);
+  background:var(--chip);box-shadow:none;font-weight:400}
+.preset b{display:block;font-size:14px}.preset small{color:var(--muted);font-size:12px}
+.preset.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 0 0 0 1px var(--accent)}
+.custom>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--link);margin:2px 0 6px}
+/* app icon picker on the account page */
+.icon-pick{display:flex;gap:14px;margin:6px 0 4px}
+.icon-pick button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border-radius:20px;background:none;border:2px solid transparent;
+  box-shadow:none;font-size:13px}
+.icon-pick button img{width:72px;height:72px;border-radius:17px;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.icon-pick button.on{border-color:var(--accent)}
