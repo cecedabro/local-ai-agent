@@ -113,6 +113,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
             # Process events for this round
             said = ""
+            held = ""                  # text that may be a tool call written as text (gateway.tag_split)
             calls_dict: dict[int, dict] = {}
             content_started = False
 
@@ -128,14 +129,16 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                         yield phase("thinking")
                         events._thinking_sent = True
                 elif tag == "content":
-                    if not content_started:
-                        content_started = True
-                        yield phase("writing")
-                        t0 = clock()
-                    said += val
-                    text += val
                     count += 1
-                    yield sse("delta", {"text": val})
+                    show, held = gateway.tag_split(held + val)
+                    if show:
+                        if not content_started:
+                            content_started = True
+                            yield phase("writing")
+                            t0 = clock()
+                        said += show
+                        text += show
+                        yield sse("delta", {"text": show})
                 elif tag == "usage":
                     usage = val
                 elif tag in ("tool_call", "tool_calls"):
@@ -148,6 +151,14 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                     break
 
             calls = [v for _, v in sorted(calls_dict.items())]
+            if held:
+                written = gateway.text_tool_calls(held)
+                if written and not calls:
+                    calls = written            # the model wrote its tool calls as text: run them anyway
+                elif not written and gateway.TOOL_TAG not in held:
+                    said += held               # it was just text after all (e.g. a lone "<")
+                    text += held
+                    yield sse("delta", {"text": held})
 
             # Handle tool calls for this round
             if calls and offer:
