@@ -1,7 +1,7 @@
 // The chat page (chat/coder/templates/chat.html). ES module. Hooks: chat/SPEC.md §9 and §11.
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
-import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions } from "./stream.js";
+import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -141,6 +141,13 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
   }
 }
 
+/*
+ * TODO (task B15): sources under answers (SPEC §12.4). Import sourcesHtml and citeLinks from ./stream.js.
+ *   drawMessage, assistant: put sourcesHtml(m.sources) between the .bub and the .meta2 in its innerHTML, and after
+ *     appending call citeLinks(its .bub, m.sources).
+ *   send, on done: if data.sources is non-empty: bub.innerHTML = md.render(full); citeLinks(bub, data.sources);
+ *     bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources))  (before the stats line is drawn).
+ */
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
 function typedText(content) { return content.split("\n\nFile ")[0]; }
 
@@ -171,8 +178,9 @@ function drawMessage(m) {
   // assistant
   const div = document.createElement("div");
   div.className = "ai";
-  div.innerHTML = ORB + `<div class="content"><div class="bub">${md.render(m.content)}</div><div class="meta2"></div></div>`;
+  div.innerHTML = ORB + `<div class="content"><div class="bub">${md.render(m.content)}</div>${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
   $("#messages").appendChild(div);
+  citeLinks(div.querySelector(".bub"), m.sources);
   const meta2 = div.querySelector(".meta2");
   doneMeta(meta2, m.content, m.tokens, m.tps, m.stopped, () => {
     const lastU = $("#messages").querySelectorAll(".u .msg.user").item(-1);
@@ -334,6 +342,11 @@ async function send() {
       if (!full && data.stopped) {
         meta.innerHTML = "";
       } else {
+        if (data.sources && data.sources.length) {
+          bub.innerHTML = md.render(full);
+          citeLinks(bub, data.sources);
+          bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
+        }
         doneMeta(meta, full, data.tokens, data.tps, false, () => text);
       }
       if (data.stopped) {

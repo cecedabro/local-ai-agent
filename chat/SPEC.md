@@ -309,3 +309,72 @@ A user's chats can live in folders (one level, no nesting of folders).
 - The menu `#cmenu` (positioned with the CSS variables `--x`/`--y`): for a chat: Rename, "Move
   to" + one button per folder + "No folder" + "New folder…", Delete (confirm first); for a
   folder: Rename, Delete (confirm; its chats are kept).
+
+## 12. Round 3: profiles, sources and tools
+
+### 12.1 Profile settings (per user, per profile)
+Each user has their own settings for each profile they may use (`general` needs `chat`, `evidence`
+needs `evidence`; `admin` may use both; otherwise **403**; unknown profile **404**):
+`instructions` (0–4000 characters), `web` (bool, default **true**: the model may search the web and
+open pages when it helps) and a list of **source cards**:
+- `pubmed` (at most one per profile, else **409**): PubMed via the free E-utilities, with `filters`
+  `{"types": ⊆ [systematic_review, meta_analysis, rct, guideline, review], "years": 1–50 or null,
+  "humans": bool, "languages": ⊆ [english, dutch]}` (unknown values are dropped, never an error).
+- `website`: one domain (`https://www.rivm.nl/x` → `rivm.nl`); searched with SearXNG `site:`.
+- `file`: a document (PDF via pypdf, text, Markdown, HTML; ≤ 5 MB, ≤ 200 000 characters of text,
+  else **413**; unreadable **415**). Its whole text goes into the system prompt.
+Every card has a `note` (0–1000 characters: how the model should use it) and `enabled`.
+A user's EvidenceHunt starts with two cards (seeded once, deletable): PubMed (reviews,
+meta-analyses, RCTs and guidelines, last 10 years, humans) and rivm.nl.
+
+Endpoints (JSON; a source as `{"id", "kind", "title", "domain", "note", "filters", "enabled",
+"created", "tokens"}`, `tokens` = ceil(chars/4) of a document's text, else 0):
+- `GET /api/profiles/<p>` → `{"profile", "name", "instructions", "web", "sources", "budget"}`;
+  `budget` = `{"used", "max", "parts": [{"label", "tokens"}]}`: `used` = ceil(chars/4) of the
+  profile's system prompt (§12.2), `max` = the context size (§6), parts = "Instructions" and one
+  per enabled document, summing to `used`.
+- `PATCH /api/profiles/<p>` `{"instructions"?, "web"?}` → the profile; nothing known or wrong
+  types → **400**.
+- `POST /api/profiles/<p>/sources` `{"kind": "pubmed"|"website", "url"?, "note"?, "filters"?}` →
+  **201** the source; bad url/kind/note → **400**.
+- `POST /api/profiles/<p>/documents` (multipart `file`) → **201** the source (title = file name).
+- `PATCH /api/profiles/<p>/sources/<id>` `{"note"?, "enabled"?, "filters"?}` → the source;
+  someone else's or another profile's → **404**; nothing to change → **400**.
+- `DELETE /api/profiles/<p>/sources/<id>` → **204**.
+- `GET /profiles`: the profiles page (no session → **303** `/login`), one tab per profile you may use.
+
+### 12.2 The system prompt
+The base prompt (§11.4), then "Extra instructions from the user:" + the instructions, then
+"Sources you can use:" with a line per enabled pubmed/website card (+ its note) and a line for the
+web when `web` is on, plus how to cite (`[n]`), then each enabled document as
+`Document <title> (<note>):\n```\n<text>\n```` (no parentheses when the note is empty).
+
+### 12.3 Tools
+The chat offers the model tools (OpenAI `tools`) from the profile: `web_search` + `open_page` when
+`web` is on; `search_site` (enum of the enabled website domains) + `open_page` for websites;
+`search_pubmed` when a PubMed card is enabled. Up to 4 tool rounds per answer; the last call has no
+tools, so the model must answer. Each tool call shows a phase: `searching` ("Searching PubMed for
+"x"…", "Searching rivm.nl for "x"…", "Searching the web for "x"…") or `reading` ("Reading
+www.rivm.nl…"); these may repeat, and `writing` may come again after them.
+- Web search goes to SearXNG (`SEARXNG_URL`, setting; empty → the tool answers an error).
+- `open_page` fetches only public http(s) pages on ports 80/443 (every address the host resolves
+  to must be public: no private, loopback, link-local, CGNAT/Tailscale or reserved ranges, checked
+  again on each of at most 3 redirects), HTML or text only, at most 2 MB read and 6000 characters
+  of readable text handed on. With `web` off it may only open the profile's website domains.
+- Results get numbers per answer (`[1]`, `[2]`, … the same URL keeps its number); the tool result
+  tells the model "Cite these as: [n] url". `done` gets `"sources": [{"n", "title", "url", "kind",
+  "meta"?}]` and the assistant message stores them (`GET /api/chats/<id>` messages have `sources`).
+- A failing tool never fails the answer: its result is "Error: <reason>" for the model.
+
+### 12.4 Sources in the page
+Under an answer with sources: stream.js `sourcesHtml` cards; `[n]` in the text becomes a link
+(`citeLinks`). The profile menu has "Profile settings…" → `/profiles`.
+
+### 12.5 The profiles page (`profiles.js`)
+Tabs `.pf-tab[data-profile]` (`aria-selected` on the open one); `#pf-instructions` and `#pf-web`
+(saved as you type, after a short pause); `#pf-sources` with one `article.src-card[data-source]
+[data-kind]` per card (a note `textarea[data-note]`, `input[data-enabled]`, `[data-delete]`, and for
+PubMed the filters `[data-type]`, `select[data-years]`, `[data-humans]`, `[data-lang]`);
+`#add-pubmed`, `#add-website` (asks the address), `#add-doc` (file input). The context bar
+`#budget-bar` has one `<i>` per budget part (`--w` = tokens / max) and a line at half;
+`#budget-text`, `#budget-legend`, `#budget-hint` explain it; the bar gets class `over` above half.

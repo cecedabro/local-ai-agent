@@ -108,3 +108,13 @@ test("Follow: stops on scroll up, follows again at the bottom", () => {
   assert.equal(f.on, true); assert.equal(el.scrollTop, 1500);
   assert.deepEqual(seen, [false, true, false, true]);
 });
+
+test("sourcesHtml: cards with number, title, meta or host; escaped", async () => {
+  const { sourcesHtml } = await import("../../static/js/stream.js");
+  assert.equal(sourcesHtml([]), "");
+  const html = sourcesHtml([{ n: 1, title: "A <b>", url: "https://www.rivm.nl/x", kind: "web" },
+    { n: 2, title: "T", url: "https://pubmed.ncbi.nlm.nih.gov/1/", meta: "BMJ · 2021" }]);
+  assert.match(html, /^<div class="sources"><a class="src" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">/);
+  assert.match(html, /<span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
+  assert.match(html, /<small>BMJ · 2021<\/small>/);
+});

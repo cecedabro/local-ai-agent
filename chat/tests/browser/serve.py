@@ -31,8 +31,13 @@ class Script(dict):
         self.gw = gw
 
     def get(self, key, default=None):
+        msgs = self.gw.requests[-1]["body"]["messages"]
+        if key == "tool_calls":                   # "search ..." -> one web search first (SPEC §12.3)
+            return [{"name": "web_search", "arguments": '{"query": "flu shot"}'}] if "search" in msgs[-1]["content"] else None
+        if key == "content" and msgs[-1]["role"] == "tool":
+            return [w + " " for w in "Yes, people over 60 get it every autumn [1].".split(" ")]
         if key == "content":
-            last = self.gw.requests[-1]["body"]["messages"][-1]["content"]
+            last = msgs[-1]["content"]
             text = LONG if "long" in last else CODE if "html" in last else ANSWER
             return [w + " " for w in text.split(" ")]
         if key == "reasoning":
@@ -62,10 +67,11 @@ def main() -> None:
         except (BrokenPipeError, ConnectionResetError):
             return None                           # the app closed the stream (stop)
     handler.do_POST = slow_post
+    gw.search_results = [{"title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "content": "Wie krijgt hem"}]
     gw.start()
     app = create_app({"DATA_DIR": data, "GATEWAY_URL": gw.url + "/v1", "GATEWAY_KEY": "k", "STATUS_URL": gw.url,
                       "ADMIN_USER": "cedric", "ADMIN_PASSWORD": "browser-test-password", "SECURE_COOKIES": "0",
-                      "RP_ID": "localhost", "ORIGIN": f"http://localhost:{port}"})
+                      "RP_ID": "localhost", "ORIGIN": f"http://localhost:{port}", "SEARXNG_URL": gw.url})
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 

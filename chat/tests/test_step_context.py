@@ -62,7 +62,8 @@ def test_context_and_build_messages(db):
     assert context.context_messages(db, c) == [
         {"role": "system", "content": context.SUMMARY_PREFIX + "S1"}, {"role": "user", "content": "q2"}]
     msgs = context.build_messages(db, c)
-    assert msgs[0] == {"role": "system", "content": context.SYSTEM_PROMPTS["evidence"]} and len(msgs) == 3
+    # round 3 (SPEC §12.2): the system prompt is the profile's, starting with the base prompt
+    assert msgs[0]["role"] == "system" and msgs[0]["content"].startswith(context.SYSTEM_PROMPTS["evidence"]) and len(msgs) == 3
 
 
 # ---------------------------------------------------------------- S07
@@ -70,7 +71,7 @@ def test_used_and_info(db):
     c = chat_of(db)
     db.add_message(c["id"], "user", "x" * 400)
     est = context.used(db, c)
-    assert est == -(-(len(context.SYSTEM_PROMPTS["general"]) + 400) // 4)
+    assert est == -(-(len(context.build_messages(db, c)[0]["content"]) + 400) // 4)
     db.update_chat_usage(c["id"], 1000, 50)
     c = db.get_chat(c["id"], "u1")
     assert context.used(db, c) == 1050

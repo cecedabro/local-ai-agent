@@ -47,7 +47,17 @@ JS stream tests: `node --test chat/tests/js/stream.test.mjs`.
    Create the first account via the admin env vars above, or create an invite and accept it.
 
 5. The chat app runs behind Cloudflare Tunnel in production (public-facing) and behind Tailscale
-   for the status page. Locally both are on `localhost`.
+    for the status page. Locally both are on `localhost`.
+
+## Profiles and sources
+
+The profiles page (`/profiles`, also reachable from the profile menu) lets you set instructions,
+toggle web on/off, and manage source cards: PubMed sources with type/year/human/language filters,
+websites, and uploaded documents (up to 5 MB). Each source can include a note that appears in the
+context. The context bar at the top keeps the active profile under half its budget. Answers with
+web or source lookups display numbered source cards below the response. Web search requires the
+`SEARXNG_URL` setting (points to the private SearXNG instance in the cluster); when empty the web
+tools return an error.
 
 ## How it fits together
 

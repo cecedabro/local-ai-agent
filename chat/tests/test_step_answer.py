@@ -43,7 +43,7 @@ def parse(chunks: list[str]) -> list[tuple[str, dict]]:
 def fake_stream(events, busy_times=0, error=None, error_after=None):
     calls = {"n": 0}
 
-    async def stream(settings, messages, think):
+    async def stream(settings, messages, think, tools=None):
         calls["n"] += 1
         calls["messages"] = messages
         if calls["n"] <= busy_times:
@@ -88,7 +88,7 @@ def test_stream_events_and_store(db):
     assert [d["phase"] for e, d in evs if e == "phase"] == ["reading", "thinking", "writing"]
     assert "".join(d["text"] for e, d in evs if e == "delta") == "Hello"
     done = evs[-1][1]
-    assert done["tokens"] == 3 and set(done) == {"message_id", "tokens", "tps", "context", "title", "stopped"}
+    assert done["tokens"] == 3 and set(done) == {"message_id", "tokens", "tps", "context", "title", "stopped", "sources"}
     assert done["stopped"] is False and done["title"] == "hello there"
     msgs = db.get_messages(chat["id"], "u1")
     assert msgs[-1]["role"] == "assistant" and msgs[-1]["content"] == "Hello" and msgs[-1]["id"] == done["message_id"]

@@ -1,61 +1,68 @@
-# PLAN: Dewdrop round 2
+# PLAN: Dewdrop profiles and sources
 
-Chat fixes and folders (chat/SPEC.md §11): the reading phase, every chunk on screen, a stop button,
-folders in the sidebar, coloured code you can download, and a page that keeps your place while you
-read. Small steps: every task names one file and one or two functions; the steps are in that
-function's docstring or TODO comment (`grep -n "task Rxx" <file>`). Each task has its own test.
+Round 3 (chat/SPEC.md §12): each user edits their profiles (instructions, web on/off, source cards with
+notes: PubMed with filters, websites, documents) and sees how much context they take; the model can
+search the web (SearXNG), PubMed and the profile's websites, open pages, and cites numbered sources.
+Small steps: every task names one file and one to three functions; the steps are in that function's
+docstring or TODO comment (`grep -n "task Bxx" <file>`). Each task has its own test.
 
 Rules for every task:
 - Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
 - Only change what the task names. Don't refactor, rename or move other code.
-- Never read a whole large file (`chat/coder/app.py` is ~800 lines, `chat/static/js/app.js` ~450):
-  `grep -n`, then `sed -n 'a,bp'`.
-- Python: only the packages in `chat/requirements.txt`.
+- Never read a whole large file (`chat/coder/app.py` is ~900 lines): `grep -n`, then `sed -n 'a,bp'`.
+- Python: only the packages in `chat/requirements.txt` (pypdf reads PDFs, httpx does HTTP).
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/stream.js`, `chat/static/vendor/`,
-  `chat/coder/templates/`, `Makefile`, `docs/`. The look, the templates and stream.js are already done.
+  `chat/coder/templates/`, `Makefile`, `docs/`, and in `chat/coder/tools.py` the finished functions
+  `html_text`, `is_public` and `fetch_page` (they guard against private addresses).
 
-- [x] R01: In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says
-  accept: make chat-test K="test_step_round2 and (folders_db or migration)"
-- [x] R02: In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`)
-  accept: make chat-test K="test_step_round2 and prompt_names_files"
-- [x] R03: In chat/coder/answer.py do `TODO (task R03)` in the `run_answer` docstring (reading phase, every chunk as a delta, title in done)
-  accept: make chat-test K="test_step_answer or (test_step_round2 and reading_phase)"
-- [x] R04: In chat/coder/answer.py do `TODO (task R04)` in the `run_answer` docstring (the stop event)
-  accept: make chat-test K="test_step_answer or (test_step_round2 and stop_event)"
-- [x] R05: In chat/coder/answer.py do `TODO (task R05)` in the `run_answer` docstring (store the partial answer when the browser goes away)
-  accept: make chat-test K="test_step_answer or test_step_round2"
-- [x] R06: In chat/coder/app.py rewrite `api_update_chat` as its docstring says (`TODO (task R06)`)
-  accept: make chat-test K="TestFolders and move_chats or test_crud_and_isolation"
-- [x] R07: In chat/coder/app.py add the four folder routes (`TODO (task R07)`)
-  accept: make chat-test K="TestFolders"
-- [x] R08: In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`)
-  accept: make chat-test K="TestRound2Answer and (stop_endpoint or done_has_title)"
-- [x] R09: In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`)
+- [x] B01: In chat/coder/tools.py fill in `web_search` as its docstring says
+  accept: make chat-test K="test_step_tools and web_search"
+- [x] B02: In chat/coder/tools.py fill in `pubmed_term` and `pubmed_search` as their docstrings say
+  accept: make chat-test K="test_step_tools and pubmed"
+- [x] B03: In chat/coder/tools.py fill in `tool_specs` and `describe` as their docstrings say
+  accept: make chat-test K="test_step_tools and tool_specs"
+- [x] B04: In chat/coder/tools.py fill in `run_tool` as its docstring says
+  accept: make chat-test K="test_step_tools"
+- [x] B05: In chat/coder/gateway.py add tool calls (`TODO (task B05)`)
+  accept: make chat-test K="test_step_tools or test_step_gateway"
+- [x] B06: In chat/coder/db.py add the profile tables and methods (`TODO (task B06)`)
+  accept: make chat-test K="test_step_profiles and profile_db or test_step_round2"
+- [x] B07: In chat/coder/profiles.py fill in `tokens`, `domain_of` and `clean_filters` as their docstrings say
+  accept: make chat-test K="test_step_profiles and helpers"
+- [x] B08: In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say
+  accept: make chat-test K="test_step_profiles and seed_prompt_budget"
+- [x] B09: In chat/coder/profiles.py fill in `document_text` as its docstring says
+  accept: make chat-test K="test_step_profiles and document_text"
+- [x] B10: In chat/coder/answer.py add tool rounds to `run_answer` (`TODO (task B10)`, above the function)
+  accept: make chat-test K="test_step_profiles or test_step_answer or test_step_round2"
+- [x] B11: In chat/coder/context.py use the profile's prompt (`TODO (task B11)`) and in chat/coder/config.py add SEARXNG_URL (`TODO (task B11)`)
+  accept: make chat-test K="test_step_context or test_step_round2 or TestStream"
+- [x] B12: In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`)
+  accept: make chat-test K="TestProfileApi and (seeds or rights or settings or profiles_page)"
+- [x] B13: In chat/coder/app.py add the source card routes (`TODO (task B13)`)
+  accept: make chat-test K="TestProfileApi and sources"
+- [x] B14: In chat/coder/app.py add the documents route (`TODO (task B14)`)
   accept: make chat-test
-- [x] R10: In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`)
+- [x] B15: In chat/static/js/app.js show sources under answers (`TODO (task B15)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [x] R11: In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`)
-  accept: node --check chat/static/js/app.js && make chat-test
-- [x] R12: In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`)
-  accept: node --check chat/static/js/app.js && make chat-test
-- [x] R13: In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`)
-  accept: node --check chat/static/js/app.js && make chat-test
-- [x] R14: In chat/static/js/app.js fill in `setupSidebar` (`TODO (task R14)`)
-  accept: node --check chat/static/js/app.js && make chat-test
-- [x] R15: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/static/js/app.js or chat/coder/ (see "R15 details")
+- [x] B16: In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say
+  accept: node --check chat/static/js/profiles.js && make chat-test
+- [x] B17: In chat/static/js/profiles.js fill in `start` as its comment says
+  accept: node --check chat/static/js/profiles.js && make chat-test
+- [x] B18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js or chat/static/js/profiles.js (see "B18 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [x] R16: Add a "## Round 2" section to chat/README.md (see "R16 details")
-  accept: grep -q "## Round 2" chat/README.md && grep -q "folders" chat/README.md && make chat-test
+- [x] B19: Add a "## Profiles and sources" section to chat/README.md (see "B19 details")
+  accept: grep -q "## Profiles and sources" chat/README.md && grep -q "SEARXNG_URL" chat/README.md && make chat-test
 
-## R15 details
-`make chat-browser-test` drives a real headless Chromium against the app (chat/tests/browser/run.mjs,
-fake model in serve.py: a message with "long" gets a long answer, "html" gets a code file). It prints
-one `ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run again, repeat. The checks
-look at the hooks in chat/SPEC.md §11.5; the reference markup is in the TODO docstrings of app.js.
-Console errors on the page also fail a check: read them in the FAIL line.
+## B18 details
+`make chat-browser-test` drives a real headless Chromium against the app (chat/tests/browser/run.mjs;
+fake model and fake SearXNG in serve.py: a message with "search" makes the model call web_search
+first). It prints one `ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run again,
+repeat. Console errors on the page also fail a check: read them in the FAIL line.
 
-## R16 details
-Append to `chat/README.md` a section `## Round 2` (5–8 lines): the reading phase, the stop button
-(and that the partial answer is kept), folders (the ⋯ menu, drag a chat onto a folder), coloured
-code blocks with Copy and Download (the model puts the file name on the fence line), and that the
-page keeps your place when you scroll up while it writes ("↓ Latest" brings you back).
+## B19 details
+Append to `chat/README.md` a section `## Profiles and sources` (6–10 lines): the profiles page
+(`/profiles`, also from the profile menu), instructions, web on/off, the source cards (PubMed with
+filters, websites, documents up to 5 MB) and their notes, the context bar (keep a profile under
+half), numbered sources under answers, and that web search needs the setting `SEARXNG_URL` (the
+private SearXNG in the cluster; empty = the web tools answer an error).

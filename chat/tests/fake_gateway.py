@@ -2,6 +2,9 @@
 
     gw = FakeGateway(); gw.start()
     gw.script = {"busy": 1, "reasoning": ["hm"], "content": ["Hel", "lo"], "usage": {...}}
+    gw.script["tool_calls"] = [{"name": "web_search", "arguments": '{"query": "x"}'}]
+        -> a streamed answer whose last message is not a tool result asks for these tools first
+    gw.search_results = [{"title", "url", "content"}]   (GET /search?format=json, a fake SearXNG)
     ... requests land in gw.requests ...
     gw.stop()
 """
@@ -19,6 +22,7 @@ class FakeGateway:
         self.n_ctx = 32768
         self.summary = "SUMMARY OF EARLIER MESSAGES"
         self.busy_left = 0
+        self.search_results: list[dict] = []
         self._lock = threading.Lock()
         gw = self
 
@@ -27,6 +31,16 @@ class FakeGateway:
                 pass
 
             def do_GET(self) -> None:
+                if self.path.startswith("/search"):
+                    with gw._lock:
+                        gw.requests.append({"path": self.path, "body": None, "headers": dict(self.headers)})
+                    body = json.dumps({"results": gw.search_results}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if self.path == "/api/status":
                     body = json.dumps({"gateway": {"enabled": True, "n_ctx": gw.n_ctx}}).encode()
                     self.send_response(200)
@@ -84,6 +98,18 @@ class FakeGateway:
                     self.wfile.flush()
 
                 chunk({"role": "assistant"})
+                msgs = body.get("messages") or [{}]
+                calls = s.get("tool_calls")
+                if calls and body.get("tools") and msgs[-1].get("role") != "tool":
+                    for i, call in enumerate(calls):
+                        args = call["arguments"]
+                        chunk({"tool_calls": [{"index": i, "id": f"call_{i}", "type": "function",
+                                               "function": {"name": call["name"], "arguments": args[:5]}}]})
+                        chunk({"tool_calls": [{"index": i, "function": {"arguments": args[5:]}}]})
+                    chunk(None, {"prompt_tokens": 50, "completion_tokens": 9})
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
+                    return
                 for r in s.get("reasoning", []):
                     chunk({"reasoning_content": r})
                 for c in s.get("content", ["Hello", " there"]):

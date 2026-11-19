@@ -1,22 +1,28 @@
-# Agent run agent/dewdrop-round-2
+# Agent run agent/dewdrop-profiles
 
-Ended 2026-11-18 19:40: plan complete. 13 done, 0 skipped, 1.8 h.
+Ended 2026-11-19 04:19: plan complete. 19 done, 0 skipped, 3.9 h.
 
 | Task | Result | Attempts | Minutes | Note |
 | --- | --- | --- | --- | --- |
-| R01 In chat/coder/db.py add folders, the folder_id and stopped columns (with the migration) as the `TODO (task R01)` comment says | done | 1 | 6 |  |
-| R02 In chat/coder/context.py add the file-name sentence to the General prompt (`TODO (task R02)`) | done | 1 | 4 |  |
-| R03 In chat/coder/answer.py do `TODO (task R03)` in the `run_answer` docstring (reading phase, every chunk as a delta, title in done) | done | 1 | 7 |  |
-| R04 In chat/coder/answer.py do `TODO (task R04)` in the `run_answer` docstring (the stop event) | done | 1 | 5 |  |
-| R05 In chat/coder/answer.py do `TODO (task R05)` in the `run_answer` docstring (store the partial answer when the browser goes away) | done | 1 | 5 |  |
-| R06 In chat/coder/app.py rewrite `api_update_chat` as its docstring says (`TODO (task R06)`) | done | 1 | 11 |  |
-| R07 In chat/coder/app.py add the four folder routes (`TODO (task R07)`) | done | 1 | 3 |  |
-| R08 In chat/coder/app.py add the stop route and the running map (`TODO (task R08)`) | done | 1 | 17 |  |
-| R09 In chat/coder/app.py fix the file block in `api_create_message` (`TODO (task R09)`) | done | 1 | 5 |  |
-| R10 In chat/static/js/app.js fill in `convHtml` and `loadChats` (`TODO (task R10)`) | done | 1 | 7 |  |
-| R11 In chat/static/js/app.js fill in `doneMeta` and `drawMessage` (`TODO (task R11)`) | done | 1 | 6 |  |
-| R12 In chat/static/js/app.js fill in `setBusy`, `stopAnswer` and `send` (`TODO (task R12)`) | done | 1 | 8 |  |
-| R13 In chat/static/js/app.js fill in `moveChat`, `newFolder`, `openMenu`, `chatMenu`, `folderMenu` and `menuAction` (`TODO (task R13)`) | done | 1 | 18 |  |
+| B01 In chat/coder/tools.py fill in `web_search` as its docstring says | done | 1 | 4 |  |
+| B02 In chat/coder/tools.py fill in `pubmed_term` and `pubmed_search` as their docstrings say | done | 1 | 4 |  |
+| B03 In chat/coder/tools.py fill in `tool_specs` and `describe` as their docstrings say | done | 1 | 4 |  |
+| B04 In chat/coder/tools.py fill in `run_tool` as its docstring says | done | 1 | 10 |  |
+| B05 In chat/coder/gateway.py add tool calls (`TODO (task B05)`) | done | 1 | 5 |  |
+| B06 In chat/coder/db.py add the profile tables and methods (`TODO (task B06)`) | done | 1 | 24 |  |
+| B07 In chat/coder/profiles.py fill in `tokens`, `domain_of` and `clean_filters` as their docstrings say | done | 1 | 4 |  |
+| B08 In chat/coder/profiles.py fill in `config`, `system_prompt`, `budget` and `public` as their docstrings say | done | 1 | 5 |  |
+| B09 In chat/coder/profiles.py fill in `document_text` as its docstring says | done | 1 | 3 |  |
+| B10 In chat/coder/answer.py add tool rounds to `run_answer` (`TODO (task B10)`, above the function) | done | 3 | 29 |  |
+| B11 In chat/coder/context.py use the profile's prompt (`TODO (task B11)`) and in chat/coder/config.py add SEARXNG_URL (`TODO (task B11)`) | done | 1 | 4 |  |
+| B12 In chat/coder/app.py add the profile routes and the /profiles page (`TODO (task B12)`) | done | 1 | 18 |  |
+| B13 In chat/coder/app.py add the source card routes (`TODO (task B13)`) | done | 1 | 25 |  |
+| B14 In chat/coder/app.py add the documents route (`TODO (task B14)`) | done | 1 | 17 |  |
+| B15 In chat/static/js/app.js show sources under answers (`TODO (task B15)`) | done | 1 | 6 |  |
+| B16 In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say | done | 1 | 10 |  |
+| B17 In chat/static/js/profiles.js fill in `start` as its comment says | done | 1 | 12 |  |
+| B18 Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js or chat/static/js/profiles.js (see "B18 details") | done | 2 | 43 |  |
+| B19 Add a "## Profiles and sources" section to chat/README.md (see "B19 details") | done | 1 | 4 |  |
 
 ## CI
 

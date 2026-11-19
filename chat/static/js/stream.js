@@ -263,3 +263,48 @@ export function codeActions(root) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 }
+
+// ------------------------------------------------------------------ round 3: sources (SPEC §12.4)
+
+/** The cards under an answer: <div class="sources"> + per source <a class="src" href target=_blank rel=noopener>
+ * <span class="n">N</span><div><b>TITLE</b><small>META or the host</small></div></a>. "" when there are none. */
+export function sourcesHtml(sources) {
+  if (!sources || !sources.length) return "";
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
+  return '<div class="sources">' + sources.map((s) =>
+    `<a class="src" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer"><span class="n">${Number(s.n)}</span>` +
+    `<div><b>${escHtml(s.title || s.url)}</b><small>${escHtml(s.meta || host(s.url))}</small></div></a>`).join("") + "</div>";
+}
+
+/** Turn "[n]" in the text of `el` into <a class="cite" href=URL>n</a> for the answer's sources (not inside code). */
+export function citeLinks(el, sources) {
+  if (!sources || !sources.length) return;
+  const byN = new Map(sources.map((s) => [String(s.n), s]));
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    if (/\[\d+\]/.test(n.data) && !n.parentElement.closest("code,pre,a")) nodes.push(n);
+  }
+  for (const node of nodes) {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    node.data.replace(/\[(\d+)\]/g, (m, n, at) => {
+      const s = byN.get(n);
+      if (!s) return m;
+      frag.append(node.data.slice(last, at));
+      const a = document.createElement("a");
+      a.className = "cite";
+      a.href = s.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.title = s.title || s.url;
+      a.textContent = n;
+      frag.append(a);
+      last = at + m.length;
+      return m;
+    });
+    frag.append(node.data.slice(last));
+    node.replaceWith(frag);
+  }
+}

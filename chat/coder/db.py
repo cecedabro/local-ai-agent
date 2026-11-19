@@ -112,6 +112,29 @@ CREATE TABLE IF NOT EXISTS folders (
     name     TEXT NOT NULL,
     created  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS profile_settings (
+    username     TEXT NOT NULL REFERENCES users(username),
+    profile      TEXT NOT NULL,
+    instructions TEXT NOT NULL DEFAULT '',
+    web          INTEGER NOT NULL DEFAULT 1,
+    seeded       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (username, profile)
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL REFERENCES users(username),
+    profile  TEXT NOT NULL,
+    kind     TEXT NOT NULL,
+    title    TEXT NOT NULL,
+    domain   TEXT NOT NULL DEFAULT '',
+    note     TEXT NOT NULL DEFAULT '',
+    filters  TEXT NOT NULL DEFAULT '{}',
+    content  TEXT NOT NULL DEFAULT '',
+    enabled  INTEGER NOT NULL DEFAULT 1,
+    created  TEXT NOT NULL
+);
 """
 
 
@@ -121,7 +144,7 @@ def _now_iso() -> str:
 
 class DB:
     def __init__(self, data_dir: str) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._path = Path(data_dir)
         self._path.mkdir(parents=True, exist_ok=True)
         self._db_path = self._path / "coder.db"
@@ -159,6 +182,9 @@ class DB:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
             if "stopped" not in cols:
                 conn.execute("ALTER TABLE messages ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "sources" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'")
             conn.commit()
 
     def create_user(self, username: str, pw_hash: str, rights: list[str]) -> None:
@@ -318,13 +344,13 @@ class DB:
 
     def add_message(self, chat_id: int, role: str, content: str,
                     tokens: int | None = None, tps: float | None = None,
-                    stopped: bool = False) -> int:
+                    stopped: bool = False, sources: list | None = None) -> int:
         now = _now_iso()
         with self._lock:
             conn = self._connect()
             cur = conn.execute(
-                "INSERT INTO messages (chat_id, role, content, created, tokens, tps, stopped) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, role, content, now, tokens, tps, 1 if stopped else 0),
+                "INSERT INTO messages (chat_id, role, content, created, tokens, tps, stopped, sources) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, role, content, now, tokens, tps, 1 if stopped else 0, json.dumps(sources or [])),
             )
             conn.commit()
             return cur.lastrowid
@@ -360,6 +386,7 @@ class DB:
                         "tokens": r["tokens"],
                         "tps": r["tps"],
                         "stopped": bool(r["stopped"]),
+                        "sources": json.loads(r["sources"] or "[]"),
                         "files": [],
                     }
                 if r["file_id"] is not None:
@@ -497,6 +524,8 @@ class DB:
             conn.execute("DELETE FROM files WHERE username = ?", (username,))
             conn.execute("DELETE FROM passkeys WHERE username = ?", (username,))
             conn.execute("DELETE FROM folders WHERE username = ?", (username,))
+            conn.execute("DELETE FROM profile_settings WHERE username = ?", (username,))
+            conn.execute("DELETE FROM sources WHERE username = ?", (username,))
             conn.execute("DELETE FROM users WHERE username = ?", (username,))
             conn.commit()
 
@@ -701,6 +730,121 @@ class DB:
     #      delete_folder(folder_id, username) -> True if deleted; then also
     #         UPDATE chats SET folder_id = NULL WHERE folder_id = ? AND username = ?
     #      set_chat_folder(chat_id, username, folder_id or None) -> True if the chat is yours and changed
+
+    def get_profile_settings(self, username: str, profile: str) -> dict[str, Any]:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM profile_settings WHERE username = ? AND profile = ?",
+                (username, profile),
+            ).fetchone()
+            if row is None:
+                return {"instructions": "", "web": True, "seeded": False}
+            d = dict(row)
+            return {"instructions": d["instructions"], "web": bool(d["web"]), "seeded": bool(d["seeded"])}
+
+    def set_profile_settings(self, username: str, profile: str, **fields: Any) -> None:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM profile_settings WHERE username = ? AND profile = ?",
+                (username, profile),
+            ).fetchone()
+            if row is None:
+                current = {"instructions": "", "web": True, "seeded": False}
+            else:
+                current = {"instructions": row["instructions"], "web": bool(row["web"]), "seeded": bool(row["seeded"])}
+            for k in ("instructions", "web", "seeded"):
+                if k in fields:
+                    current[k] = fields[k]
+            conn.execute(
+                "INSERT OR REPLACE INTO profile_settings (username, profile, instructions, web, seeded) VALUES (?, ?, ?, ?, ?)",
+                (username, profile, current["instructions"], 1 if current["web"] else 0, 1 if current["seeded"] else 0),
+            )
+            conn.commit()
+
+    def add_source(self, username: str, profile: str, kind: str, title: str,
+                   domain: str = "", note: str = "", filters: Any = None, content: str = "") -> dict[str, Any]:
+        now = _now_iso()
+        if filters is None:
+            filters = "{}"
+        elif isinstance(filters, dict):
+            filters = json.dumps(filters)
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "INSERT INTO sources (username, profile, kind, title, domain, note, filters, content, enabled, created) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+                (username, profile, kind, title, domain, note, filters, content, now),
+            )
+            conn.commit()
+            return self.get_source(cur.lastrowid, username)  # type: ignore[return-value]
+
+    def list_sources(self, username: str, profile: str) -> list[dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            rows = conn.execute(
+                "SELECT * FROM sources WHERE username = ? AND profile = ? ORDER BY id",
+                (username, profile),
+            ).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                d["filters"] = json.loads(d["filters"])
+                d["enabled"] = bool(d["enabled"])
+                out.append(d)
+            return out
+
+    def get_source(self, source_id: int, username: str) -> dict[str, Any] | None:
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT * FROM sources WHERE id = ? AND username = ?",
+                (source_id, username),
+            ).fetchone()
+            if row is None:
+                return None
+            d = dict(row)
+            d["filters"] = json.loads(d["filters"])
+            d["enabled"] = bool(d["enabled"])
+            return d
+
+    def update_source(self, source_id: int, username: str, **fields: Any) -> bool:
+        known = {"title", "note", "enabled", "filters", "content"}
+        set_parts = []
+        vals = []
+        for k, v in fields.items():
+            if k == "enabled":
+                set_parts.append("enabled = ?")
+                vals.append(1 if v else 0)
+            elif k == "filters":
+                set_parts.append("filters = ?")
+                vals.append(json.dumps(v))
+            elif k in known:
+                set_parts.append(f"{k} = ?")
+                vals.append(v)
+        if not set_parts:
+            return False
+        vals.append(source_id)
+        vals.append(username)
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                f"UPDATE sources SET {', '.join(set_parts)} WHERE id = ? AND username = ?",
+                tuple(vals),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def delete_source(self, source_id: int, username: str) -> bool:
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                "DELETE FROM sources WHERE id = ? AND username = ?",
+                (source_id, username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
