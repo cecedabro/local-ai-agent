@@ -15,7 +15,7 @@ Rules for every task:
   `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, and in `chat/coder/tools.py` the functions
   `html_text`, `is_public` and `fetch_page`.
 
-- [ ] E01: In chat/coder/verify.py fill in `normalize` as its docstring says
+- [x] E01: In chat/coder/verify.py fill in `normalize` as its docstring says
   accept: make chat-test K="test_step_verify and normalize"
 - [ ] E02: In chat/coder/verify.py fill in `find_quote` as its docstring says
   accept: make chat-test K="test_step_verify and find_quote"

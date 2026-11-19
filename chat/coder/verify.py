@@ -14,12 +14,13 @@ STRENGTH_WORDS = ("evidence", "bewijs", "bewijskracht", "studies", "onderzoek")
 
 
 def normalize(text: str) -> str:
-    r"""TODO (task E01). Lower case, straight quotes, plain dashes, no soft hyphens, single spaces, stripped (SPEC §13.1).
-    Steps: t = (text or "").translate(_QUOTES).lower()   (_QUOTES maps ‘’“”„ to ' " and –—− to -, drops the soft hyphen)
+    r"""Lower case, straight quotes, plain dashes, no soft hyphens, single spaces, stripped (SPEC §13.1).
+    Steps: t = (text or "").translate(_QUOTES).lower()   (_QUOTES maps '' ' '""„ to ' " and –—− to -, drops the soft hyphen)
            return re.sub(r"\s+", " ", t).strip()
     Tests: test_step_verify.py::test_normalize
     """
-    raise NotImplementedError
+    t = (text or "").translate(_QUOTES).lower()
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def find_quote(quote: str, text: str) -> bool:
