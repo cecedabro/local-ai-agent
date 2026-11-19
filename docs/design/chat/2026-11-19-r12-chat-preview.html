@@ -109,8 +109,20 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transf
 .seg span{display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:13px;font-weight:600;color:var(--muted)}
 .seg span.on{color:#fff;background:var(--primary);box-shadow:0 3px 10px var(--glow)}
 .seg svg{width:13px;height:13px}
-.send{margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;color:#fff;background:var(--primary);box-shadow:0 4px 14px var(--glow);
-  display:grid;place-items:center;font-size:17px;font-weight:700}
+.send{position:relative;margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;color:#fff;background:var(--primary);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 4px 14px var(--glow);display:grid;place-items:center;font-size:17px;font-weight:700;overflow:hidden}
+/* the Aero gloss on the top half of the ball (send and stop) */
+.send::after{content:"";position:absolute;left:8%;right:8%;top:4%;height:46%;border-radius:50% 50% 45% 45%/60% 60% 40% 40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,.1));pointer-events:none}
+.send .arrow,.send .sq{transition:opacity .25s,transform .35s cubic-bezier(.3,1.4,.5,1)}
+/* stop: the same glossy ball, a white glass square in the middle (no black block) */
+.send .sq{position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px;border-radius:3.5px;opacity:0;transform:scale(.4);
+  background:linear-gradient(180deg,#fff 0%,#eaf6ff 55%,#cfe9fb 100%);box-shadow:0 1px 2px rgba(0,40,80,.3),inset 0 1px 0 #fff}
+:root[data-theme=blossom] .send .sq{background:linear-gradient(180deg,#fff 0%,#fff0f6 55%,#ffd6e8 100%);box-shadow:0 1px 2px rgba(120,20,70,.3),inset 0 1px 0 #fff}
+.send.stop .arrow{opacity:0;transform:scale(.4)}
+.send.stop .sq{opacity:1;transform:none}
+.send.stop{animation:stopglow 1.8s ease-in-out infinite}
+@keyframes stopglow{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 4px 22px var(--glow)}}
 
 /* ------------------------------------------------------------------ the dewdrop and its phases
    Layers: .clouds (thinking), .radar (searching), .read (reading), .sum (summarising), .water (writing), .shine.
@@ -213,7 +225,7 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transf
           <span style="color:var(--muted);font-size:18px;padding:0 4px">📎</span>
           <div class="seg"><span class="on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Quick</span>
             <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>Think</span></div>
-          <span class="send" id="send">↑</span>
+          <span class="send" id="send" title="Send"><span class="arrow">↑</span><span class="sq"></span></span>
         </div>
       </div>
     </div>
@@ -227,7 +239,8 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:22px 0 8px;text-transf
   <div class="note">
     <b>Round 12:</b> searching, reading and summarising are round 3's, unchanged, now inside the drop. No more
     breathing. Thinking moves further and faster but stays eased. The water has three waves and sloshes gently.
-    "ready" is pink in Blossom. The drop has the colours of the current chat.</div>
+    "ready" is pink in Blossom. The drop has the colours of the current chat. While an answer comes, Send turns
+    into a glossy Stop (the same glass ball, a white glass square).</div>
   <div class="note"><b>Why it was laggy:</b> in the app the clouds sat in one layer and the orb was only 28 px, so the movement
     was tiny and blurry. Now every cloud, beam, line and particle is its own GPU layer that only moves
     (transform) or fades (opacity), never repaints, and the drop is 44 px while it works, settling back to
@@ -334,6 +347,7 @@ async function play() {
   const me = ++run;
   const prof = document.documentElement.dataset.profile;
   thread.innerHTML = "";
+  send.classList.remove("stop");
   await sleep(500);
   // M3: your message flies out of the send button
   const u = document.createElement("div");
@@ -344,6 +358,7 @@ async function play() {
   u.style.setProperty("--dx", `${sr.left + sr.width / 2 - ur.right}px`);
   u.style.setProperty("--dy", `${sr.top + sr.height / 2 - ur.bottom}px`);
   await sleep(450);
+  send.classList.add("stop"); send.title = "Stop";
   const ai = document.createElement("div");
   ai.className = "ai";
   ai.innerHTML = '<span class="slot"></span><div><div class="bub"></div><div class="label shimmer"></div><div class="meta"></div></div>';
@@ -383,7 +398,8 @@ async function play() {
     d.style.setProperty("--fill", (0.82 * (1 - Math.exp(-i / 14))).toFixed(3));
     await sleep(55);
   }
-  // done: the drop drains and settles to 28 px, the stats line fades in
+  // done: the drop drains and settles to 28 px, the stats line fades in, Stop turns back into Send
+  send.classList.remove("stop"); send.title = "Send";
   setPhase(d, "idle");
   d.style.setProperty("--s", "28px");
   label.remove();
