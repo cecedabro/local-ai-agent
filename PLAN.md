@@ -51,7 +51,7 @@ Rules for every task:
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [x] E18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "E18 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [ ] E19: Add a "## EvidenceHunt v2" section to chat/README.md (see "E19 details")
+- [x] E19: Add a "## EvidenceHunt v2" section to chat/README.md (see "E19 details")
   accept: grep -q "## EvidenceHunt v2" chat/README.md && grep -q "verify.py" chat/README.md && make chat-test
 
 ## E18 details

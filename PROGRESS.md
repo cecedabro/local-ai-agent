@@ -79,3 +79,7 @@ Implemented PubMed preset strictness UI per SPEC §13.4:
 
 All browser tests already passed with no changes needed:
 `make chat-test` (128/128 pass), `make chat-browser-test` (all 11 tests pass), `node --test chat/tests/js/stream.test.mjs` (13/13 pass), `make check` (36/36 pass). No modifications were required.
+
+## Task E19 - EvidenceHunt v2 section in chat/README.md (2026-11-19)
+
+Added a `## EvidenceHunt v2` section to `chat/README.md` describing the EvidenceHunt profile's research pipeline (planning, gathering, answering, verification), the `verify.py` checker, and the per-profile trail/thinking tracking. All greps pass, `make chat-test` (128/128), `make check` (36/36).

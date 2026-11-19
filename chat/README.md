@@ -96,3 +96,16 @@ is lost. You can organise chats into folders via the ⋯ menu or by dragging a c
 Code blocks are syntax-coloured and include Copy and Download buttons (the model puts the file name
 on the fence line). If you scroll away while a reply is still writing, the page pins your position
 and "↓ Latest" brings you back when it catches up.
+
+## EvidenceHunt v2
+
+The EvidenceHunt profile does research by the app before answering. A `chat/coder/research.py`
+pipeline plans searches, gathers sources (PubMed, sites, web), reads pages, and then asks the
+model to answer **only** from those sources. Every answer is checked by `chat/coder/verify.py`
+which verifies that quotes appear in their cited sources and flags uncited factual sentences.
+The verification report is stored with the message and displayed in the UI with pass/fail
+indicators per quote.
+
+For every profile, the app now tracks thinking (reasoning chunks) and a trail of research
+steps. Thinking appears as a collapsible "Thought for N s" block; the trail shows searches,
+reads, and tool calls with links to the original sources.
