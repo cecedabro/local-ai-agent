@@ -43,7 +43,7 @@ Rules for every task:
   accept: make chat-test K="followup or public_sources or evidence_messages"
 - [x] F14: In chat/coder/research.py fill in `investigate` as its docstring says
   accept: make chat-test K="investigate"
-- [ ] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`)
+- [~] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`) — skipped: agent made no changes
   accept: make chat-test K="test_step_research or test_step_clear or TestEvidenceV2 or mesh_in_a_real_answer"
 - [ ] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
   accept: make chat-test K="test_step_verify or summary_sentences"
