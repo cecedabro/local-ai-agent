@@ -114,9 +114,38 @@ test("sourcesHtml: cards that open to a quote and an Open link; escaped", async 
   assert.equal(sourcesHtml([]), "");
   const html = sourcesHtml([{ n: 1, title: "A <b>", url: "https://www.rivm.nl/x", kind: "web", quote: "Wie <krijgt> hem" },
     { n: 2, title: "T", url: "https://pubmed.ncbi.nlm.nih.gov/1/", meta: "BMJ · 2021" }]);
-  assert.match(html, /^<div class="sources"><details class="src" data-n="1"><summary><span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
+  assert.match(html, /^<div class="sources"><div class="src-group" data-group="other"><h4>Other sources<\/h4><div class="src-list"><details class="src" data-n="1"><summary><span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
   assert.match(html, /<blockquote>Wie &lt;krijgt&gt; hem<\/blockquote><a class="src-open" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">Open on rivm\.nl ↗<\/a>/);
   assert.match(html, /<small>BMJ · 2021<\/small><\/div><\/summary><div class="src-body"><a class="src-open"/);
+});
+
+test("sourcesHtml groups guidelines first, then studies, with their kind (SPEC §15.6)", async () => {
+  const { sourcesHtml } = await import("../../static/js/stream.js");
+  const html = sourcesHtml([{ n: 1, title: "Trial", url: "https://pubmed.ncbi.nlm.nih.gov/1/", kind: "pubmed", type: "RCT", meta: "RCT · BMJ · 2021" },
+    { n: 2, title: "CVRM", url: "https://richtlijnendatabase.nl/r", kind: "page", site: "richtlijnendatabase.nl", meta: "richtlijnendatabase.nl" }]);
+  assert.ok(html.indexOf('data-group="guide"') < html.indexOf('data-group="study"'));
+  assert.match(html, /<span class="stype" data-kind="rct">RCT<\/span> · BMJ · 2021<\/small>/);
+  assert.match(html, /<span class="stype" data-kind="guide">Guideline<\/span> · richtlijnendatabase\.nl/);
+});
+
+test("trailHtml: a Clear Source trail in four stages; other trails stay a list", async () => {
+  const { trailHtml } = await import("../../static/js/stream.js");
+  const steps = [{ kind: "plan", about: "Lp(a) <risk>", queries: ["lpa"], mesh: ["Lipoprotein(a)"] },
+    { kind: "search", source: "PubMed", query: "lpa", found: 2, url: "https://pubmed.ncbi.nlm.nih.gov/?term=lpa" },
+    { kind: "search", source: "PubMed", query: "lpa", found: 9, url: null, broader: true },
+    { kind: "read", n: 1, title: "A", url: "https://pubmed.ncbi.nlm.nih.gov/1/", quotes: 2, status: "used" },
+    { kind: "read", n: 2, title: "B", url: "https://pubmed.ncbi.nlm.nih.gov/2/", quotes: 0, status: "not relevant" }];
+  const done = trailHtml(steps);
+  assert.match(done, /<summary>Researched · 2 searches · read 2 · used 1<\/summary>/);
+  assert.equal((done.match(/<li class="stage/g) || []).length, 4);
+  assert.match(done, /Lp\(a\) &lt;risk&gt;/);
+  assert.match(done, /<span class="t">Lipoprotein\(a\)<small>MeSH<\/small><\/span>/);
+  assert.match(done, /class="step search wider"><span class="where">broader/);
+  const live = trailHtml(steps.slice(0, 2), true);
+  assert.match(live, /<summary>Searching…<\/summary>/);
+  assert.match(live, /class="stage now"><span class="orb live" data-phase="searching">/);
+  assert.equal((live.match(/<li class="stage/g) || []).length, 2, "stages appear as they start");
+  assert.match(trailHtml([{ kind: "search", source: "the web", query: "x", found: 1, url: null }]), /<summary>Searched 1 time<\/summary><ol><li class="step search">/);
 });
 
 test("orbHtml: a live drop with every phase layer", async () => {

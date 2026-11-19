@@ -10,6 +10,8 @@ const LANGS = [["english", "English"], ["dutch", "Dutch"]];
 const PRESETS = [["strict", "Strict", "Reviews, meta-analyses and guidelines · last 10 years · humans"],
   ["balanced", "Balanced", "+ randomised trials · last 15 years · humans"], ["broad", "Broad", "All study types · any year"]];
 const KIND = { pubmed: "PubMed", website: "Website", file: "Document" };
+const GROUPS = [["guidelines", "Guidelines"], ["medicines", "Medicines"], ["research", "Research"], ["documents", "Your documents"],
+  ["websites", "Other websites"]];
 
 /** fetch() for /api with the CSRF header; on 401 go to /login. (done) */
 async function api(path, opts = {}) {
@@ -96,14 +98,23 @@ function round(n) { return Math.round(n); }
 function cardHtml(s) {
   const enabled = s.enabled ? " checked" : "";
   const off = s.enabled ? "" : " off";
-  const kindLabel = KIND[s.kind];
   let h = `<article class="src-card${off}" data-source="${esc(s.id)}" data-kind="${s.kind}">`;
+  // TODO (task F18), SPEC §15.6: a row instead of the kind tag. Replace the next lines (the <header> start, up to and
+  //   including the file tokens) with: name = s.label || s.title; desc = `${fmt(s.tokens || 0)} tokens` for a file, the
+  //   name of the card's preset (PRESETS: the [key, name, desc] whose key is s.filters.preset; none -> "Custom filters")
+  //   for pubmed, s.domain for a website; bubble = "📄" for a file, else esc of the first character of name, upper case;
+  //   h += `<header><span class="bubble">${bubble}</span><div class="who"><b>${esc(name)}</b><small>${esc(desc)}</small></div>`
+  //   (the switch and Remove stay in the header). Also delete the now unused `kindLabel` line above.
+  const kindLabel = KIND[s.kind];
   h += `<header><span class="src-kind">${kindLabel}</span><b>${esc(s.title)}</b>`;
   if (s.kind === "file" && s.tokens) {
     h += `<small>${fmt(s.tokens)} tokens</small>`;
   }
   h += `<label class="switch" title="${s.enabled ? "On" : "Off"}"><input type="checkbox" data-enabled${enabled}><span class="track"></span></label>`;
   h += `<button type="button" class="link danger" data-delete>Remove</button></header>`;
+  // TODO (task F18): everything after the </header> goes inside
+  //   `<details class="more"${pubmed ? " open" : ""}><summary>${pubmed ? "Strictness and note" : "Note"}</summary>` … `</details>`
+  //   (before the closing </article>).
   if (s.kind === "pubmed") {
     const f = s.filters || {};
     const cur = f.preset || "custom";
@@ -144,6 +155,10 @@ function draw() {
   document.querySelectorAll(".pf-tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.profile === state.profile)));
   if (document.activeElement !== $("#pf-instructions")) $("#pf-instructions").value = d.instructions;
   $("#pf-web").checked = d.web;
+  // TODO (task F18), SPEC §15.6: group the cards. For each [g, title] of GROUPS: list = the sources whose (s.group ||
+  //   "websites") is g; skip empty groups; on = how many are enabled; a group is
+  //   `<section class="pf-group" data-group="${g}"><header><span class="title">${title}</span><small>${on} of ${list.length} on</small></header>`
+  //   + `<div class="pf-list">${list.map(cardHtml).join("")}</div></section>`. Nothing at all -> the "No sources yet." line.
   $("#pf-sources").innerHTML = d.sources.map(cardHtml).join("") || '<p class="small muted">No sources yet.</p>';
   $("#add-pubmed").hidden = d.sources.some((s) => s.kind === "pubmed");
   drawBudget(d.budget);
@@ -311,6 +326,11 @@ async function start() {
     }
     refresh();
   });
+  // TODO (task F09): the #add-defaults button (SPEC §14.3). On click: POST /api/profiles/${state.profile}/defaults with
+  //   api(…, { method: "POST" }); not ok -> say("That did not work, try again.", true); ok -> data = await res.json() and
+  //   say(`Added ${data.added} source${data.added === 1 ? "" : "s"}.`) when data.added > 0, else
+  //   say("You already have all the default sources."); then refresh(). Errors (catch) -> say(String(e), true).
+  //   Judge: make chat-browser-test ("round 5: the Dutch guideline sources and the add-defaults button").
   $("#add-doc").addEventListener("change", async () => {
     const files = $("#add-doc").files;
     for (const file of files) {

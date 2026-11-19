@@ -18,7 +18,17 @@ import httpx
 
 PUBMED = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 MAX_BYTES = 2_000_000          # a page larger than this is cut
-PAGE_CHARS = 6000              # text of one page handed to the model
+PAGE_CHARS = 8000              # text of one page handed to the model
+# Bot checks and consent walls instead of the page (SPEC §15.3): such a "page" is never a source.
+BOT_CHECK = re.compile(r"checking your browser|just a moment\.\.\.|verify (that )?you are (a )?human|are you a robot|"
+                       r"beveiligingscontrole|recaptcha|hcaptcha|attention required|access denied|"
+                       r"enable javascript and cookies|ddos protection", re.I)
+
+
+def looks_blocked(title: str, text: str) -> bool:
+    """True when a fetched page is a bot check rather than the page: the title matches BOT_CHECK, or the text is short
+    (under 1500 characters) and matches it."""
+    return bool(BOT_CHECK.search(title or "")) or (len(text or "") < 1500 and bool(BOT_CHECK.search(text or "")))
 ABSTRACT_CHARS = 1200
 UA = "Dewdrop/1.0 (private research assistant)"
 QUOTE_CHARS = 600              # the quote a source card shows (SPEC §12.4)
@@ -139,6 +149,8 @@ async def fetch_page(client: httpx.AsyncClient, url: str, resolve: Callable = so
             title, text = "", body.strip()
         else:
             title, text = html_text(body)
+        if looks_blocked(title, text):
+            raise ToolError("blocked by a bot check")
         return {"title": title or host, "url": url, "text": text[:PAGE_CHARS]}
     raise ToolError("too many redirects")
 
@@ -189,7 +201,49 @@ def _within(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
-def pubmed_term(query: str, filters: dict | None) -> str:
+# PubMed publication types -> the label shown on a source (SPEC §14.2), strongest first.
+STUDY_TYPES = (
+    ("Guideline", ("Practice Guideline", "Guideline")),
+    ("Meta-analysis", ("Meta-Analysis",)),
+    ("Systematic review", ("Systematic Review",)),
+    ("RCT", ("Randomized Controlled Trial",)),
+    ("Clinical trial", ("Clinical Trial",)),          # also "Clinical Trial, Phase III" etc.: a prefix match
+    ("Observational study", ("Observational Study",)),
+    ("Review", ("Review",)),
+    ("Case report", ("Case Reports",)),
+)
+
+
+def study_type(pub_types: list[str] | None) -> str | None:
+    r"""The study type label of a PubMed article from its publication types (SPEC §14.2): the first label of
+    STUDY_TYPES with a matching type ("Clinical trial" also matches any type starting with "Clinical Trial"); none -> None.
+    """
+    types = [str(p).strip() for p in pub_types or []]
+    for label, names in STUDY_TYPES:
+        for name in names:
+            if any(p == name or (label == "Clinical trial" and p.startswith(name)) for p in types):
+                return label
+    return None
+
+
+async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list[str]:
+    r"""TODO (task F03). The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
+      want = per term: str(term).strip(); skip empty ones, ones longer than 80 characters, ones with a '"', and ones
+        already in want (case-insensitive); keep at most 8. want empty -> return [] without any request.
+      r = GET PUBMED + "/esearch.fcgi" params {"db": "mesh", "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
+          "retmode": "json", "retmax": 20} (headers User-Agent UA, timeout 20); status != 200 -> []
+      ids = r.json()["esearchresult"]["idlist"]; none -> []
+      r = GET PUBMED + "/esummary.fcgi" params {"db": "mesh", "id": ",".join(ids), "retmode": "json"} (same headers, timeout);
+          status != 200 -> []; res = r.json()["result"]; records = [res[uid]["ds_meshterms"] (a list) for uid in res["uids"]]
+      httpx.HTTPError, ValueError, KeyError, TypeError or AttributeError anywhere -> return [] (never raise)
+      out: for each t in want: the first record that has t among its terms (case-insensitive) -> its heading record[0],
+        added once (skip it when it is already in out); a term without a record is dropped.
+    Tests: test_step_clear.py::test_mesh_check
+    """
+    raise NotImplementedError
+
+
+def pubmed_term(query: str, filters: dict | None, mesh: list[str] | None = None) -> str:
     """The PubMed search term for `query` with a source card's filters (SPEC §12.1).
 
     TODO (task B02). parts = [f"({query.strip()})"], then, only when present (filters may be None):
@@ -199,7 +253,10 @@ def pubmed_term(query: str, filters: dict | None) -> str:
       languages -> "(" + " OR ".join(LANGS[x] for each known x) + ")"
     Return " AND ".join(parts). Unknown types/languages are skipped.
     """
-    parts = [f"({query.strip()})"]
+    if mesh:
+        parts = ['((' + ' AND '.join(f'"{m}"[MeSH Terms]' for m in mesh) + ') OR (' + query.strip() + '))']
+    else:
+        parts = [f"({query.strip()})"]
     if filters:
         types = filters.get("types")
         if types:
@@ -219,7 +276,8 @@ def pubmed_term(query: str, filters: dict | None) -> str:
     return " AND ".join(parts)
 
 
-async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | None = None, n: int = 5) -> list[dict]:
+async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | None = None, n: int = 5,
+                        mesh: list[str] | None = None, info: dict | None = None) -> list[dict]:
     """PubMed via E-utilities: [{"pmid", "title", "journal", "year", "types", "abstract", "url"}], most relevant first.
 
     TODO (task B02). Tests: test_step_tools.py::test_pubmed_search
@@ -235,10 +293,17 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
          types = the PublicationType texts (max 4); url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
       4. sort the results in the order of `ids` (PubMed's ranking), return them.
     """
+    # TODO (task F02), SPEC §14.1-14.2. Tests: test_step_clear.py::test_pubmed_search_mesh_info_and_type
+    #   1. term = pubmed_term(query, filters, mesh) and send that term.
+    #   2. after reading esearchresult (call it esr): when `info` is a dict, set info["term"] = term,
+    #      info["translation"] = str(esr.get("querytranslation") or ""), info["count"] = int(esr.get("count") or len(ids))
+    #      (a count that is not a number -> len(ids)); do this before the "no ids -> []" return.
+    #   3. per article: all_types = every PublicationType text; "types" stays all_types[:4]; add "type": study_type(all_types).
+    term = pubmed_term(query, filters, mesh)
     try:
         r = await client.get(
             PUBMED + "/esearch.fcgi",
-            params={"db": "pubmed", "term": pubmed_term(query, filters), "retmode": "json",
+            params={"db": "pubmed", "term": term, "retmode": "json",
                     "retmax": n, "sort": "relevance"},
             headers={"User-Agent": UA}, timeout=20)
     except httpx.HTTPError as e:
@@ -246,9 +311,18 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     if r.status_code != 200:
         raise ToolError(f"PubMed answered {r.status_code}")
     try:
-        ids = r.json()["esearchresult"]["idlist"]
+        esr = r.json()["esearchresult"]
+        ids = esr["idlist"]
     except (ValueError, KeyError) as e:
         raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    if info is not None:
+        try:
+            count = int(esr.get("count") or len(ids))
+        except (ValueError, TypeError):
+            count = len(ids)
+        info["term"] = term
+        info["translation"] = str(esr.get("querytranslation") or "")
+        info["count"] = count
     if not ids:
         return []
     try:
@@ -293,21 +367,20 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
                 year = ""
             journal_el = article.find(".//Journal/Title")
             journal = journal_el.text if journal_el is not None and journal_el.text else ""
-            type_list = []
+            all_types = []
             pt_el = article.find(".//PublicationTypeList")
             if pt_el is not None:
                 for pt in pt_el.iter("PublicationType"):
                     if pt.text:
-                        type_list.append(pt.text)
-                    if len(type_list) >= 4:
-                        break
+                        all_types.append(pt.text)
             url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid_el}/"
             results.append((pmid_el, {
                 "pmid": pmid_el,
                 "title": title,
                 "journal": journal,
                 "year": year,
-                "types": type_list,
+                "types": all_types[:4],
+                "type": study_type(all_types),
                 "abstract": abstract,
                 "url": url,
             }))
@@ -316,6 +389,32 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     order = {pid: i for i, pid in enumerate(ids)}
     results.sort(key=lambda x: order.get(x[0], 999999))
     return [r[1] for r in results]
+
+
+_PMC = re.compile(r"^https?://(?:pmc\.ncbi\.nlm\.nih\.gov|(?:www\.)?ncbi\.nlm\.nih\.gov/pmc)/articles/(PMC\d+)", re.I)
+
+
+def pmc_id(url: str) -> str | None:
+    r"""TODO (task F11). The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
+      m = _PMC.match(url or ""); return m.group(1).upper() when it matched, else None.
+    Tests: test_step_flow.py::test_pmc
+    """
+    raise NotImplementedError
+
+
+async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
+    r"""TODO (task F11). The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
+      digits = pmcid upper-cased without its "PMC"; r = GET PUBMED + "/efetch.fcgi" params {"db": "pmc", "id": digits,
+        "retmode": "xml"} (headers User-Agent UA, timeout 30); httpx.HTTPError -> ToolError(f"PubMed Central failed (<type name>)");
+        status != 200 -> ToolError(f"PubMed Central answered {status}"); ET.ParseError -> ToolError("PubMed Central failed (ParseError)")
+      art = root.find(".//article"); None -> ToolError("PubMed Central has no text for " + pmcid)
+      title = the itertext of art's .//article-title joined, whitespace collapsed, stripped ("" when missing)
+      text = every <p> inside art's <abstract> elements, then inside its <body> elements: each p's itertext joined, whitespace
+        collapsed (re.sub(r"\s+", " ", …)), stripped; the non-empty ones joined with " "; empty -> the same ToolError as above
+      return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/", "text": text[:PAGE_CHARS]}
+    Tests: test_step_flow.py::test_pmc
+    """
+    raise NotImplementedError
 
 
 # ------------------------------------------------------------------ the tools offered to the model

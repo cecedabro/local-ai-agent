@@ -465,6 +465,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     def _source_json(s: dict) -> dict:
         out = {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled", "created")}
         out["tokens"] = profiles.tokens(s.get("content", "") or "") if s.get("kind") == "file" else 0
+        # TODO (task F17): out["group"], out["label"] = profiles.group_of(s), profiles.label_of(s)   (SPEC §15.6)
         return out
 
     @app.post("/api/profiles/{profile}/sources", status_code=201)
@@ -494,6 +495,13 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse(_source_json(src), status_code=201)
         else:
             return JSONResponse({"error": "Invalid kind"}, status_code=400)
+
+    # TODO (task F08): POST /api/profiles/{profile}/defaults (SPEC §14.3). Tests: test_accept_clear.py::TestClearSource
+    #   r = _profile_access(request, profile) (a Response -> return it); cfg = profiles.config(app.state.db, username, profile);
+    #   cards = profiles.missing_defaults(profile, cfg["sources"]); per card: app.state.db.add_source(username, profile,
+    #   card["kind"], card["title"], domain=card.get("domain", ""), note=card["note"], filters=card.get("filters"));
+    #   return JSONResponse({"added": len(cards), "sources": [_source_json(s) for s in app.state.db.list_sources(username, profile)]})
+    #   (the X-Coder check is already done for every POST by the middleware)
 
     @app.patch("/api/profiles/{profile}/sources/{source_id}")
     async def api_update_source(profile: str, source_id: int, request: Request) -> Response:
