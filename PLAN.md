@@ -37,7 +37,7 @@ Rules for every task:
   accept: make chat-test K="test_step_research and evidence_messages"
 - [x] E11: In chat/coder/research.py fill in `run_evidence` as its docstring says
   accept: make chat-test K="test_step_research"
-- [ ] E12: In chat/coder/answer.py do `TODO (task E12)` (EvidenceHunt's pipeline; thinking and trail for every profile)
+- [x] E12: In chat/coder/answer.py do `TODO (task E12)` (EvidenceHunt's pipeline; thinking and trail for every profile)
   accept: make chat-test K="test_step_answer or test_step_round2 or test_step_profiles or TestStream or TestEvidenceV2"
 - [ ] E13: In chat/coder/profiles.py add PubMed strictness and in chat/coder/app.py clean the filters of a source PATCH (`TODO (task E13)`)
   accept: make chat-test K="test_presets or TestProfileApi"

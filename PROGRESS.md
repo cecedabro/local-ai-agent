@@ -36,3 +36,16 @@ Confirmed both functions were already implemented per their docstrings. `evidenc
 ## Task E11 - run_evidence verification (2026-11-19)
 
 Confirmed `run_evidence` in `chat/coder/research.py:279` is fully implemented per its docstring (SPEC §13.2 step 6). All `test_step_research` tests pass (10/10) and `make check` passes (36/36). No changes needed.
+
+## Task E12 - EvidenceHunt pipeline integration in chat/coder/answer.py (2026-11-19)
+
+Implemented EvidenceHunt's pipeline integration and per-profile thinking/trail tracking in `run_answer`:
+- Added `from . import research` import.
+- After compress (before build_messages): when `chat["profile"] == "evidence"`, delegates to `research.run_evidence()` and returns.
+- Before tool rounds: initialized `trail = []`, `thinking_text = ""`, `th0 = None`.
+- In the events loop: when `tag == "reasoning"` and `val` is non-empty, sets `th0`, accumulates `thinking_text`, and yields `sse("thinking", {"text": val})` events.
+- After each `run_tool` call: builds a trail step via `tools.trail_step()`, appends to `trail`, and yields `sse("trail", {"step": step})`.
+- Both `db.add_message` calls now include `trail`, `thinking`, and (normal path) `thought_s`.
+- The `done` event now includes `"trail": trail`.
+
+All `test_step_answer`, `test_step_round2`, `test_step_profiles`, `TestStream`, and `TestEvidenceV2` tests pass (29/29). `make check` passes (36/36).
