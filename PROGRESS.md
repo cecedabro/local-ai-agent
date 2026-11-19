@@ -77,3 +77,9 @@
 - `drawMessage` assistant: added `sourcesHtml(m.sources)` between `.bub` and `.meta2` in the innerHTML, and called `citeLinks(bub, m.sources)` after appending to convert `[n]` citations to links.
 - `send` done handling: when `data.sources` is non-empty, renders `bub.innerHTML = md.render(full)`, calls `citeLinks(bub, data.sources)`, and inserts `sourcesHtml(data.sources)` before the stats line (doneMeta).
 - All acceptance commands pass: `node --check chat/static/js/app.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+
+## Task B16 - drawBudget and cardHtml (chat/static/js/profiles.js)
+- Implemented `drawBudget(budget)`: clears/repopulates `#budget-bar` `<i>` segments with CSS var `--w`, toggles `over` class when used > max/2, formats `#budget-text`, populates `#budget-legend`, and sets conditional `#budget-hint` text.
+- Implemented `cardHtml(s)`: generates `<article class="src-card[ off]">` with kind label, title, file token count, on/off switch, delete button, PubMed filter controls (types, years select, humans checkbox, languages), and kind-specific textarea placeholders.
+- Added `round(n)` helper for percentage calculation.
+- All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).

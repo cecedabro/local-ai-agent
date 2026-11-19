@@ -45,7 +45,7 @@ Rules for every task:
   accept: make chat-test
 - [x] B15: In chat/static/js/app.js show sources under answers (`TODO (task B15)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] B16: In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say
+- [x] B16: In chat/static/js/profiles.js fill in `drawBudget` and `cardHtml` as their comments say
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [ ] B17: In chat/static/js/profiles.js fill in `start` as its comment says
   accept: node --check chat/static/js/profiles.js && make chat-test

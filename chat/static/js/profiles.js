@@ -52,8 +52,30 @@ function later(key, fn, ms = 600) {
  *     the notes so there is room for the conversation." ; else "Room left for the conversation: fmt(max - used) tokens."
  */
 function drawBudget(budget) {
-  // TODO (task B16): see the comment above.
+  const { used, max, parts } = budget;
+  const bar = $("#budget-bar");
+  // Clear existing <i> elements, keep span.half
+  bar.querySelectorAll("i").forEach((i) => i.remove());
+  for (const p of parts) {
+    const i = document.createElement("i");
+    i.style.setProperty("--w", (p.tokens / max).toFixed(3));
+    i.title = `${p.label}: ${fmt(p.tokens)} tokens`;
+    bar.appendChild(i);
+  }
+  bar.classList.toggle("over", used > max / 2);
+  const pct = round(100 * used / max);
+  $("#budget-text").textContent = `${fmt(used)} of ${fmt(max)} tokens (${pct}%)`;
+  const legend = $("#budget-legend");
+  legend.innerHTML = parts.map((p) => `<li><b>${esc(p.label)}</b> ${fmt(p.tokens)}</li>`).join("");
+  const hint = $("#budget-hint");
+  if (used > max / 2) {
+    hint.textContent = "This profile takes more than half of the context: remove a document or shorten the notes so there is room for the conversation.";
+  } else {
+    hint.textContent = `Room left for the conversation: ${fmt(max - used)} tokens.`;
+  }
 }
+
+function round(n) { return Math.round(n); }
 
 /**
  * TODO (task B16). One source card (SPEC §12.5):
@@ -70,8 +92,41 @@ function drawBudget(budget) {
  * Placeholders: pubmed "Only use reliable studies: …", website "When to use this site…", file "What this document is…".
  */
 function cardHtml(s) {
-  // TODO (task B16): see the comment above.
-  return "";
+  const enabled = s.enabled ? " checked" : "";
+  const off = s.enabled ? "" : " off";
+  const kindLabel = KIND[s.kind];
+  let h = `<article class="src-card${off}" data-source="${esc(s.id)}" data-kind="${s.kind}">`;
+  h += `<header><span class="src-kind">${kindLabel}</span><b>${esc(s.title)}</b>`;
+  if (s.kind === "file" && s.tokens) {
+    h += `<small>${fmt(s.tokens)} tokens</small>`;
+  }
+  h += `<label class="switch" title="${s.enabled ? "On" : "Off"}"><input type="checkbox" data-enabled${enabled}><span class="track"></span></label>`;
+  h += `<button type="button" class="link danger" data-delete>Remove</button></header>`;
+  if (s.kind === "pubmed") {
+    const f = s.filters || {};
+    h += `<div class="filters">`;
+    for (const [key, label] of TYPES) {
+      const on = (f.types && f.types.includes(key)) ? " checked" : "";
+      h += `<label><input type="checkbox" data-type="${key}"${on}> ${label}</label>`;
+    }
+    const yr = f.years;
+    h += `<label>Last <select data-years>`;
+    for (const y of ["", 5, 10, 20]) {
+      h += `<option value="${y}"${y === String(yr) ? " selected" : ""}>${y || "any"}</option>`;
+    }
+    h += `</select> years</label>`;
+    const humans = f.humans ? " checked" : "";
+    h += `<label><input type="checkbox" data-humans${humans}> Humans only</label>`;
+    for (const [key, label] of LANGS) {
+      const on = (f.languages && f.languages.includes(key)) ? " checked" : "";
+      h += `<label><input type="checkbox" data-lang="${key}"${on}> ${label}</label>`;
+    }
+    h += `</div>`;
+  }
+  const placeholders = { pubmed: "Only use reliable studies: \u2026", website: "When to use this site\u2026", file: "What this document is\u2026" };
+  h += `<textarea data-note rows="2" maxlength="1000" placeholder="${placeholders[s.kind]}">${esc(s.note || "")}</textarea>`;
+  h += `</article>`;
+  return h;
 }
 
 /** Draw the whole profile: tabs (aria-selected on the open one), instructions, web switch, cards, budget. (done) */
