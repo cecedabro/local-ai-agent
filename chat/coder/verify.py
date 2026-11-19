@@ -24,7 +24,7 @@ def normalize(text: str) -> str:
 
 
 def find_quote(quote: str, text: str) -> bool:
-    r"""TODO (task E02). True when the quote is in the text; an ellipsis splits it into parts that must appear in order (SPEC §13.1).
+    r"""True when the quote is in the text; an ellipsis splits it into parts that must appear in order (SPEC §13.1).
     Steps: hay = normalize(text)
            parts = [normalize(p).strip(" '\".,;:") for p in _ELLIPSIS.split(quote or "")]   (_ELLIPSIS: ... … [...])
            keep only parts of 3+ characters; none left -> False
@@ -129,7 +129,7 @@ def sentences(answer: str) -> list[dict]:
 
 
 def check(answer: str, sources: list[dict]) -> dict:
-    r"""TODO (task E04). The report for an answer and its sources ([{"n", "text"}]), SPEC §13.1.
+    r"""The report for an answer and its sources ([{"n", "text"}]), SPEC §13.1.
       by_n = {int(s["n"]): s.get("text") or "" for s in sources}
       quotes: each q in quotes(answer): no cites -> {**q, "ok": False, "why": "no source"}; else ok = any(find_quote(q["text"],
         by_n[n]) for n in q["cites"] if n in by_n), why = "" if ok else "not in source " + ", ".join(the cites)

@@ -871,7 +871,7 @@ class DB:
             conn.commit()
             return cur.rowcount > 0
 
-    # TODO (task E05): EvidenceHunt v2 storage (chat/SPEC.md §13). Tests: test_step_research.py (storage parts),
+    # Notes (task E05): EvidenceHunt v2 storage (chat/SPEC.md §13). Tests: test_step_research.py (storage parts),
     #   test_accept_evidence.py.
     #   1. init_schema migration, like "sources": messages gets trail TEXT NOT NULL DEFAULT '[]', verify TEXT DEFAULT NULL,
     #      thinking TEXT NOT NULL DEFAULT '' and thought_s REAL DEFAULT NULL when missing; users gets

@@ -165,7 +165,7 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
  *     bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources))  (before the stats line is drawn).
  */
 /*
- * TODO (task E16): thinking, the search trail and the checker's marks (SPEC §13.3). Import trailHtml, thoughtHtml and
+ * Notes (task E16): thinking, the search trail and the checker's marks (SPEC §13.3). Import trailHtml, thoughtHtml and
  * markVerify from ./stream.js. Judge: make chat-browser-test ("round 4: EvidenceHunt…").
  *   drawMessage, assistant: put <div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div> right
  *     before the .bub; after citeLinks: markVerify(the .bub, m.verify).

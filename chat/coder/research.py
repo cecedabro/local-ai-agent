@@ -75,7 +75,7 @@ def plan_messages(question: str, cfg: dict) -> list[dict]:
 
 
 def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
-    r"""TODO (task E08). The searches in the model's plan (SPEC §13.2 step 1).
+    r"""The searches in the model's plan (SPEC §13.2 step 1).
       allowed = enabled_sources(cfg); t = text stripped
       if there is a ``` fence (re.search(r"```(?:json)?\s*(.*?)```", t, re.S)): t = its inside; else t = from the first "["
         to the last "]" when both exist
@@ -133,7 +133,7 @@ def label(step: dict) -> str:
 
 async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: Any = tools,
                  on_step: Callable[[dict], Any] | None = None) -> tuple[list[dict], list[dict]]:
-    r"""TODO (task E09). Run the plan: (sources, trail), SPEC §13.2 step 2. `t` has pubmed_search, web_search and fetch_page (tools or fakes).
+    r"""Run the plan: (sources, trail), SPEC §13.2 step 2. `t` has pubmed_search, web_search and fetch_page (tools or fakes).
       pub = the enabled pubmed card (or None). add(title, url, kind, meta, text): skip when MAX_SOURCES reached or the url is
         already a source; else append {"n": len(sources)+1, "title": title or url, "url", "kind", "meta", "text": text[:SOURCE_CHARS]}
       step(s): append s to trail; call on_step(s) when given (await it when it returns a coroutine)
@@ -280,7 +280,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
                        stream: Callable = gateway.stream_chat, complete: Callable = gateway.complete,
                        t: Any = tools, clock: Callable[[], float] = time.monotonic,
                        stop: asyncio.Event | None = None) -> AsyncIterator[str]:
-    r"""TODO (task E11). One EvidenceHunt answer as SSE text (SPEC §13.2, the event order there). The user's message is already stored.
+    r"""One EvidenceHunt answer as SSE text (SPEC §13.2, the event order there). The user's message is already stored.
       question = the last user message of the chat; cfg = profiles.config(db, username, profile)
       yield _phase("reading", "Reading your question…"); yield _phase("thinking", "Choosing search terms…")
       plan_text = await complete(settings, plan_messages(question, cfg)) (gateway.Busy/GatewayError -> ""); plan = parse_plan(...)
@@ -310,7 +310,10 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     yield _phase("reading", "Reading your question…")
     yield _phase("thinking", "Choosing search terms…")
 
-    plan_text = await complete(settings, plan_messages(question, cfg))
+    try:
+        plan_text = await complete(settings, plan_messages(question, cfg))
+    except (gateway.Busy, gateway.GatewayError):
+        plan_text = ""                                  # the question itself becomes the PubMed search
     plan = parse_plan(plan_text, cfg, question)
 
     sources: list[dict] = []
@@ -348,7 +351,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
         chat = db.get_chat(chat["id"], chat["username"])
         yield _sse("done", {"message_id": msg_id, "tokens": 0, "tps": None,
                             "context": context.info(db, chat, settings),
-                            "title": chat["title"], "stopped": True,
+                            "title": chat["title"], "stopped": False,
                             "sources": [], "trail": trail, "verify": None})
         return
 
@@ -372,9 +375,6 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
                 stopped = True
                 break
             if tag == "reasoning":
-                if not writing_sent:
-                    yield _phase("writing", "Writing the answer…")
-                    writing_sent = True
                 if val:
                     if th0 is None:
                         th0 = clock()
@@ -383,12 +383,11 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
             elif tag == "content":
                 if not writing_sent:
                     yield _phase("writing", "Writing the answer…")
+                    writing_sent = True
                 if t0 is None:
                     t0 = clock()
                 text += val
                 yield _sse("delta", {"text": val})
-            elif tag == "usage":
-                usage = val
             elif tag == "usage":
                 usage = val
     except (gateway.Busy, gateway.GatewayError) as e:
@@ -410,7 +409,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped,
                             sources=public_sources(sources), trail=trail, verify=report,
                             thinking=reasoning_text,
-                                thought_s=round(t0 - th0, 1) if th0 and t0 else None)
+                            thought_s=round(t0 - th0, 1) if th0 and t0 else None)
     if usage:
         db.update_chat_usage(chat["id"], usage["prompt_tokens"], usage["completion_tokens"])
 
