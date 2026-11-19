@@ -118,10 +118,17 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
     if fence:
         t = fence.group(1)
     else:
-        first = t.find("[")
-        last = t.rfind("]")
-        if first != -1 and last != -1:
-            t = t[first:last + 1]
+        first_bracket = t.find("[")
+        last_bracket = t.rfind("]")
+        first_brace = t.find("{")
+        last_brace = t.rfind("}")
+        if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+            if first_brace != -1 and last_brace != -1:
+                t = t[first_brace:last_brace + 1]
+            else:
+                t = ""
+        elif first_bracket != -1 and last_bracket != -1:
+            t = t[first_bracket:last_bracket + 1]
         else:
             t = ""
     try:
@@ -129,8 +136,13 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
     except ValueError:
         items = []
     # TODO (task F04), SPEC §15.1: the plan may be an object {"about", "searches": [...]}: a dict -> items = its
-    #   "searches" (or []); anything that is not a list then -> []. (Also the slicing above: when a "{" comes before any
+    #   "searches" (or []); anything that not a list then -> []. (Also the slicing above: when a "{" comes before any
     #   "[", take t from the first "{" to the last "}" instead.) Tests: test_step_flow.py::test_plan_object_and_about
+    if isinstance(items, dict):
+        searches = items.get("searches")
+        items = searches if isinstance(searches, list) else []
+    elif not isinstance(items, list):
+        items = []
     result = []
     for item in items:
         if not isinstance(item, dict):
@@ -142,7 +154,12 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         # TODO (task F04): MeSH (SPEC §14.1). Only for a "pubmed" item whose "mesh" is a list: heads = [str(m).strip()[:80]
         #   for each m whose str(m).strip() is not empty][:4]; when heads is not empty the dict also gets "mesh": heads.
         #   Other sources never get "mesh". Tests: test_step_clear.py::test_parse_plan_mesh
-        result.append({"source": source, "query": query})
+        entry = {"source": source, "query": query}
+        if source == "pubmed" and isinstance(item.get("mesh"), list):
+            heads = [str(m).strip()[:80] for m in item["mesh"] if str(m).strip()]
+            if heads:
+                entry["mesh"] = heads[:4]
+        result.append(entry)
         if len(result) >= MAX_SEARCHES:
             break
     if not result and "pubmed" in allowed and question.strip():
@@ -151,13 +168,32 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
 
 
 def plan_about(text: str) -> str:
-    r"""TODO (task F04). The plan's "about" sentence (SPEC §15.1), "" when there is none.
+    r"""The plan's "about" sentence (SPEC §15.1), "" when there is none.
       t = text stripped (None counts as ""); a ``` fence (re.search(r"```(?:json)?\s*(.*?)```", t, re.S)) -> its inside
       from the first "{" to the last "}" (none -> ""); json.loads (ValueError -> ""); not a dict, or "about" not a str -> ""
       return " ".join(about.split())[:300]
     Tests: test_step_flow.py::test_plan_object_and_about
     """
-    raise NotImplementedError
+    t = text.strip() if text else ""
+    fence = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
+    if fence:
+        t = fence.group(1)
+    first = t.find("{")
+    last = t.rfind("}")
+    if first != -1 and last != -1:
+        t = t[first:last + 1]
+    else:
+        return ""
+    try:
+        obj = json.loads(t)
+    except ValueError:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    about = obj.get("about")
+    if not isinstance(about, str):
+        return ""
+    return " ".join(about.split())[:300]
 
 
 def label(step: dict) -> str:
