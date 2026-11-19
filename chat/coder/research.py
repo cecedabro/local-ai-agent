@@ -4,6 +4,7 @@ and the checker reads every answer (chat/SPEC.md §13.2). Tests: chat/tests/test
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 import time
@@ -118,19 +119,28 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
     if fence:
         t = fence.group(1)
     else:
-        first = t.find("[")
-        last = t.rfind("]")
-        if first != -1 and last != -1:
-            t = t[first:last + 1]
+        first_bracket = t.find("[")
+        last_bracket = t.rfind("]")
+        first_brace = t.find("{")
+        last_brace = t.rfind("}")
+        if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+            if first_brace != -1 and last_brace != -1:
+                t = t[first_brace:last_brace + 1]
+            else:
+                t = ""
+        elif first_bracket != -1 and last_bracket != -1:
+            t = t[first_bracket:last_bracket + 1]
         else:
             t = ""
     try:
         items = json.loads(t)
     except ValueError:
         items = []
-    # TODO (task F04), SPEC §15.1: the plan may be an object {"about", "searches": [...]}: a dict -> items = its
-    #   "searches" (or []); anything that is not a list then -> []. (Also the slicing above: when a "{" comes before any
-    #   "[", take t from the first "{" to the last "}" instead.) Tests: test_step_flow.py::test_plan_object_and_about
+    if isinstance(items, dict):
+        searches = items.get("searches")
+        items = searches if isinstance(searches, list) else []
+    elif not isinstance(items, list):
+        items = []
     result = []
     for item in items:
         if not isinstance(item, dict):
@@ -139,10 +149,12 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         query = str(item.get("query", "")).strip()[:200]
         if source not in allowed or not query:
             continue
-        # TODO (task F04): MeSH (SPEC §14.1). Only for a "pubmed" item whose "mesh" is a list: heads = [str(m).strip()[:80]
-        #   for each m whose str(m).strip() is not empty][:4]; when heads is not empty the dict also gets "mesh": heads.
-        #   Other sources never get "mesh". Tests: test_step_clear.py::test_parse_plan_mesh
-        result.append({"source": source, "query": query})
+        entry = {"source": source, "query": query}
+        if source == "pubmed" and isinstance(item.get("mesh"), list):
+            heads = [str(m).strip()[:80] for m in item["mesh"] if str(m).strip()]
+            if heads:
+                entry["mesh"] = heads[:4]
+        result.append(entry)
         if len(result) >= MAX_SEARCHES:
             break
     if not result and "pubmed" in allowed and question.strip():
@@ -151,13 +163,32 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
 
 
 def plan_about(text: str) -> str:
-    r"""TODO (task F04). The plan's "about" sentence (SPEC §15.1), "" when there is none.
+    r"""The plan's "about" sentence (SPEC §15.1), "" when there is none.
       t = text stripped (None counts as ""); a ``` fence (re.search(r"```(?:json)?\s*(.*?)```", t, re.S)) -> its inside
       from the first "{" to the last "}" (none -> ""); json.loads (ValueError -> ""); not a dict, or "about" not a str -> ""
       return " ".join(about.split())[:300]
     Tests: test_step_flow.py::test_plan_object_and_about
     """
-    raise NotImplementedError
+    t = text.strip() if text else ""
+    fence = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
+    if fence:
+        t = fence.group(1)
+    first = t.find("{")
+    last = t.rfind("}")
+    if first != -1 and last != -1:
+        t = t[first:last + 1]
+    else:
+        return ""
+    try:
+        obj = json.loads(t)
+    except ValueError:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    about = obj.get("about")
+    if not isinstance(about, str):
+        return ""
+    return " ".join(about.split())[:300]
 
 
 def label(step: dict) -> str:
@@ -177,7 +208,7 @@ def label(step: dict) -> str:
 
 async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: Any = tools,
                  on_step: Callable[[dict], Any] | None = None) -> tuple[list[dict], list[dict]]:
-    r"""TODO (task F05). Run the plan: (sources, trail), SPEC §13.2 step 2, §14.1-14.2, §15.2. `t` has mesh_check,
+    r"""Run the plan: (sources, trail), SPEC §13.2 step 2, §14.1-14.2, §15.2. `t` has mesh_check,
     pubmed_search, web_search, pmc_id, pmc_text and fetch_page (tools or fakes).
       pub = the first enabled pubmed card of cfg["sources"] (or None); filters = pub["filters"] or None (None without a card)
       add(title, url, kind, meta, text, type_=None, site=None): skip when MAX_SOURCES sources exist or the url is already
@@ -208,20 +239,136 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
     Tests: test_step_research.py::test_gather, ::test_gather_caps_sources, test_step_clear.py::test_gather_mesh_types_and_sites,
       test_step_flow.py::test_gather_broadens_and_reads_pmc
     """
-    raise NotImplementedError
+    sources: list[dict] = []
+    trail: list[dict] = []
+    seen_urls: set[str] = set()
+
+    pub = None
+    for s in cfg.get("sources", []):
+        if s.get("kind") == "pubmed" and s.get("enabled", True):
+            pub = s
+            break
+    filters = pub["filters"] if pub else None
+    if filters is None:
+        filters = None
+
+    async def step(s: dict) -> None:
+        trail.append(s)
+        if on_step is not None:
+            result = on_step(s)
+            if inspect.isawaitable(result):
+                await result
+
+    def add(title: str, url: str, kind: str, meta: str, text: str,
+            type_: str | None = None, site: str | None = None) -> None:
+        if len(sources) >= MAX_SOURCES or url in seen_urls:
+            return
+        seen_urls.add(url)
+        sources.append({
+            "n": len(sources) + 1,
+            "title": title or url,
+            "url": url,
+            "kind": kind,
+            "meta": meta,
+            "text": text[:SOURCE_CHARS],
+            "type": type_,
+            "site": site,
+        })
+
+    def articles(res: list[dict]) -> None:
+        for a in res:
+            parts = [p for p in (a.get("type"), a.get("journal"), a.get("year")) if p]
+            meta = " · ".join(parts)
+            add(a["title"], a["url"], "pubmed", meta, a.get("abstract", ""), type_=a.get("type"))
+
+    for item in plan:
+        source = item["source"]
+        q = item["query"]
+
+        if source == "pubmed":
+            # Resolve MeSH headings
+            mesh = []
+            if item.get("mesh"):
+                mesh = await t.mesh_check(client, item["mesh"])
+
+            info: dict = {}
+            try:
+                res = await t.pubmed_search(client, q, filters, n=PUBMED_N, mesh=mesh, info=info)
+            except tools.ToolError as e:
+                await step({"kind": "search", "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)})
+                continue
+
+            await step({"kind": "search", "source": "PubMed", "query": q, "found": len(res),
+                  "url": PUBMED_WEB + quote_plus(info.get("term") or q),
+                  "mesh": mesh, "translation": info.get("translation", "")})
+            articles(res)
+
+            # Broader search
+            if len(res) < MIN_FOUND and (filters or mesh):
+                info2: dict = {}
+                try:
+                    res2 = await t.pubmed_search(client, q, None, n=PUBMED_N, mesh=[], info=info2)
+                except tools.ToolError as e:
+                    await step({"kind": "search", "source": "PubMed", "query": q, "found": 0,
+                          "url": None, "error": str(e), "broader": True})
+                    continue
+                term_or_q = info2.get("term") or q
+                await step({"kind": "search", "source": "PubMed", "query": q, "found": len(res2),
+                      "url": PUBMED_WEB + quote_plus(term_or_q),
+                      "mesh": [], "translation": info2.get("translation", ""), "broader": True})
+                articles(res2)
+
+        else:
+            # site:<d> or web
+            domain = source.removeprefix("site:") if source.startswith("site:") else None
+            source_label = domain or "the web"
+
+            try:
+                res = await t.web_search(client, searxng_url, q, site=domain)
+            except tools.ToolError as e:
+                await step({"kind": "search", "source": source_label, "query": q, "found": 0, "url": None, "error": str(e)})
+                continue
+
+            await step({"kind": "search", "source": source_label, "query": q, "found": len(res), "url": None})
+
+            for r in res[:PAGES_PER_SEARCH]:
+                if len(sources) >= MAX_SOURCES:
+                    break
+                pmc = t.pmc_id(r.get("url", ""))
+                if pmc:
+                    try:
+                        page = await t.pmc_text(client, pmc)
+                    except tools.ToolError as e:
+                        await step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        continue
+                else:
+                    allowed = (lambda h, d=domain: tools._within(h, d)) if domain else None
+                    try:
+                        page = await t.fetch_page(client, r["url"], allowed=allowed)
+                    except tools.ToolError as e:
+                        await step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        continue
+
+                await step({"kind": "open", "title": page["title"], "url": page["url"]})
+                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=domain)
+
+    return sources, trail
 
 
 def extract_messages(question: str, src: dict) -> list[dict]:
-    r"""TODO (task F12). The messages that ask the model to read one source (SPEC §15.4):
+    r"""The messages that ask the model to read one source (SPEC §15.4):
       [{"role": "system", "content": EXTRACT_PROMPT},
        {"role": "user", "content": f"Question: {question}\n\nSource: {src['title']} ({src.get('meta') or src['url']})\n\n{src['text']}"}]
     Tests: test_step_flow.py::test_extract_messages_and_parse_quotes
     """
-    raise NotImplementedError
+    return [
+        {"role": "system", "content": EXTRACT_PROMPT},
+        {"role": "user", "content": f"Question: {question}\n\nSource: {src['title']} ({src.get('meta') or src['url']})\n\n{src['text']}"},
+    ]
 
 
 def parse_quotes(text: str) -> list[str]:
-    r"""TODO (task F12). The passages in the model's reply (SPEC §15.4), [] when it has none.
+    r"""The passages in the model's reply (SPEC §15.4), [] when it has none.
       t = text stripped; a ``` fence -> its inside, stripped
       then t = from the first "{" to the last "}" when a "{" comes before any "[", else from the first "[" to the last "]"
       json.loads (ValueError -> []); items = obj["quotes"] (obj.get) for a dict, else obj; not a list -> []
@@ -229,11 +376,52 @@ def parse_quotes(text: str) -> list[str]:
         (len(re.findall(r"\w+", q)) >= 4) and is not kept already; stop at MAX_PASSAGES
     Tests: test_step_flow.py::test_extract_messages_and_parse_quotes
     """
-    raise NotImplementedError
+    t = text.strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
+    if fence:
+        t = fence.group(1).strip()
+    first_bracket = t.find("[")
+    last_bracket = t.rfind("]")
+    first_brace = t.find("{")
+    last_brace = t.rfind("}")
+    if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+        if first_brace != -1 and last_brace != -1:
+            t = t[first_brace:last_brace + 1]
+        else:
+            t = ""
+    elif first_bracket != -1 and last_bracket != -1:
+        t = t[first_bracket:last_bracket + 1]
+    else:
+        t = ""
+    try:
+        obj = json.loads(t)
+    except ValueError:
+        return []
+    if isinstance(obj, dict):
+        items = obj.get("quotes", obj)
+    else:
+        items = obj
+    if not isinstance(items, list):
+        return []
+    result = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        q = item.strip().strip('"“”').strip()
+        if len(re.findall(r"\w+", q)) < 4:
+            continue
+        if q in seen:
+            continue
+        seen.add(q)
+        result.append(q)
+        if len(result) >= MAX_PASSAGES:
+            break
+    return result
 
 
 async def read_one(question: str, src: dict, settings: Any, complete: Callable) -> tuple[list[str], dict]:
-    r"""TODO (task F12). Read one source: (passages, trail step), SPEC §15.4.
+    r"""Read one source: (passages, trail step), SPEC §15.4.
       step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
       reply = await complete(settings, extract_messages(question, src)); gateway.Busy or gateway.GatewayError ->
         return [], {**step, "quotes": 0, "status": "error"}
@@ -241,11 +429,17 @@ async def read_one(question: str, src: dict, settings: Any, complete: Callable) 
       return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
     Tests: test_step_flow.py::test_read_one
     """
-    raise NotImplementedError
+    step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
+    try:
+        reply = await complete(settings, extract_messages(question, src))
+    except (gateway.Busy, gateway.GatewayError):
+        return [], {**step, "quotes": 0, "status": "error"}
+    found = [q for q in parse_quotes(reply) if verify.find_quote(q, src["text"])]
+    return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
 
 
 def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]:
-    r"""TODO (task F13). The messages for one more round of searches (SPEC §15.5):
+    r"""The messages for one more round of searches (SPEC §15.5):
       src = ", ".join(enabled_sources(cfg)) or "none"
       done = one line f"- {s['source']}: {s['query']} ({s['found']} found)" per trail step of kind "search"
       used = the number of trail steps of kind "read" with status "used"
@@ -253,27 +447,35 @@ def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]
        {"role": "user", "content": f"Question: {question}\n\nSearches so far:\n" + "\n".join(done) + f"\n\nUseful sources found: {used}"}]
     Tests: test_step_flow.py::test_followup_and_passages
     """
-    raise NotImplementedError
+    src = ", ".join(enabled_sources(cfg)) or "none"
+    done = [f"- {s['source']}: {s['query']} ({s['found']} found)" for s in trail if s.get("kind") == "search"]
+    used = sum(1 for s in trail if s.get("kind") == "read" and s.get("status") == "used")
+    return [
+        {"role": "system", "content": FOLLOWUP_PROMPT.replace("{sources}", src)},
+        {"role": "user", "content": f"Question: {question}\n\nSearches so far:\n" + "\n".join(done) + f"\n\nUseful sources found: {used}"},
+    ]
 
 
 RANKS = {"Guideline": 1, "Meta-analysis": 2, "Systematic review": 2, "RCT": 3}
 
 
 def rank(src: dict) -> int:
-    r"""TODO (task F06). A source's group for `order` (SPEC §14.2), lower comes first:
+    r"""A source's group for `order` (SPEC §14.2), lower comes first:
       kind "page" -> 0 when src.get("site") (a page of a guideline website card), else 5 (a web page)
       anything else (PubMed) -> RANKS.get(src.get("type") or "", 4)
     Tests: test_step_clear.py::test_order
     """
-    raise NotImplementedError
+    if src.get("kind") == "page":
+        return 0 if src.get("site") else 5
+    return RANKS.get(src.get("type") or "", 4)
 
 
 def order(sources: list[dict]) -> list[dict]:
-    r"""TODO (task F06). The sources sorted by rank (a stable sort: the same rank keeps its order), as new dicts
+    r"""The sources sorted by rank (a stable sort: the same rank keeps its order), as new dicts
     ({**s, "n": i + 1}) numbered from 1; the input list and its dicts stay unchanged.
     Tests: test_step_clear.py::test_order
     """
-    raise NotImplementedError
+    return [{**s, "n": i + 1} for i, s in enumerate(sorted(sources, key=rank))]
 
 
 def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dict]:
@@ -282,9 +484,14 @@ def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dic
       system = RULES, plus "\n\nExtra instructions from the user:\n" + cfg["instructions"].strip() when not empty
       return [{"role": "system", "content": system}, {"role": "user", "content": f"Sources:\n\n{pack}\n\nQuestion: {question}"}]
     """
-    # TODO (task F13), SPEC §15.5: a source with "passages" shows them instead of its text, one line each: '- "<passage>"'
-    #   (joined with "\n"). Tests: test_step_flow.py::test_followup_and_passages
-    pack = "\n\n".join(f"[{s['n']}] {s['title']} ({s.get('meta') or s['url']})\n{s['text']}" for s in sources)
+    def src_block(s: dict) -> str:
+        meta_or_url = s.get("meta") or s["url"]
+        if s.get("passages"):
+            passage_lines = "\n".join(f'- "{p}"' for p in s["passages"])
+            return f"[{s['n']}] {s['title']} ({meta_or_url})\n{passage_lines}"
+        return f"[{s['n']}] {s['title']} ({meta_or_url})\n{s['text']}"
+
+    pack = "\n\n".join(src_block(s) for s in sources)
     extra = cfg.get("instructions", "")
     if extra and extra.strip():
         system = RULES + "\n\nExtra instructions from the user:\n" + extra.strip()
@@ -299,11 +506,13 @@ def public_sources(sources: list[dict]) -> list[dict]:
     """
     result = []
     for s in sources:
-        # TODO (task F13): also "type" and "site" (s.get: None when missing), SPEC §14.2/§15.6, and the quote is
-        #   tools._cut(the first passage) when the source has "passages". Tests: test_step_clear.py::test_public_sources_type,
-        #   test_step_flow.py::test_followup_and_passages
-        out = {k: s[k] for k in ("n", "title", "url", "kind", "meta")}
-        out["quote"] = tools._cut(s.get("text", ""))
+        out = {k: s[k] for k in ("n", "title", "url", "kind", "meta") if k in s}
+        if s.get("passages"):
+            out["quote"] = tools._cut("\n".join(s["passages"]))
+        else:
+            out["quote"] = tools._cut(s.get("text", ""))
+        out["type"] = s.get("type")
+        out["site"] = s.get("site")
         result.append(out)
     return result
 
@@ -322,7 +531,7 @@ def _site_first(plan: list[dict]) -> list[dict]:
 
 async def investigate(question: str, cfg: dict, settings: Any, complete: Callable, t: Any = tools,
                       stop: asyncio.Event | None = None, out: dict | None = None) -> AsyncIterator[str]:
-    r"""TODO (task F14). The research stages as SSE text (SPEC §15.1-15.5); the results go into `out`.
+    r"""The research stages as SSE text (SPEC §15.1-15.5); the results go into `out`.
       out = out or {}; trail, candidates, used = [], [], []; done_q = set() of (source, query.lower()); out.update(used=used, trail=trail)
       note(step): append it to trail and return _sse("trail", {"step": step})   (yield what it returns)
       yield _phase("thinking", "Understanding the question…")
@@ -345,7 +554,74 @@ async def investigate(question: str, cfg: dict, settings: Any, complete: Callabl
       at the end, after the rounds: used[:] = [{**s, "n": i + 1} for i, s in enumerate(order(used)[:MAX_USED])]   (change `used` in place: out holds it)
     Tests: test_step_flow.py::test_investigate_two_rounds, ::test_investigate_enough_in_one_round_and_stop
     """
-    raise NotImplementedError
+    if out is None:
+        out = {}
+    trail: list[dict] = []
+    candidates: list[dict] = []
+    used: list[dict] = []
+    done_q: set[tuple[str, str]] = set()
+    out.update(used=used, trail=trail)
+
+    def note(step: dict) -> str:
+        trail.append(step)
+        return _sse("trail", {"step": step})
+
+    yield _phase("thinking", "Understanding the question…")
+
+    try:
+        plan_text = await complete(settings, plan_messages(question, cfg))
+    except (gateway.Busy, gateway.GatewayError):
+        plan_text = ""
+    plan = parse_plan(plan_text, cfg, question)
+
+    yield note({"kind": "plan", "about": plan_about(plan_text),
+                "queries": [i["query"] for i in plan],
+                "mesh": [m for i in plan for m in i.get("mesh", [])]})
+
+    async with httpx.AsyncClient() as client:
+        for rnd in range(1, MAX_ROUNDS + 1):
+            new: list[dict] = []
+            for item in _site_first(plan):
+                if stop and stop.is_set():
+                    break
+                src_key = (item["source"], item["query"].lower())
+                if src_key in done_q:
+                    continue
+                done_q.add(src_key)
+                yield _phase("searching", label(item))
+                got, steps = await gather([item], cfg, client, settings.SEARXNG_URL, t)
+                for s in steps:
+                    yield note(s)
+                for src in got:
+                    if len(candidates) < MAX_SOURCES and src.get("url") not in {c["url"] for c in candidates}:
+                        src = {**src, "n": len(candidates) + 1}
+                        candidates.append(src)
+                        new.append(src)
+            for i, src in enumerate(new, 1):
+                if stop and stop.is_set():
+                    break
+                yield _phase("reading", f"Reading {i} of {len(new)}: {src['title'][:60]}…")
+                quotes, st = await read_one(question, src, settings, complete)
+                yield note(st)
+                if quotes:
+                    used.append({**src, "passages": quotes})
+            if len(used) >= MIN_USED or rnd == MAX_ROUNDS or (stop and stop.is_set()):
+                break
+            yield _phase("thinking", "Looking further with other words…")
+            try:
+                more = await complete(settings, followup_messages(question, cfg, trail))
+            except (gateway.Busy, gateway.GatewayError):
+                break
+            plan = [i for i in parse_plan(more, cfg)
+                    if (i["source"], i["query"].lower()) not in done_q]
+            if not plan:
+                break
+            yield note({"kind": "plan", "about": plan_about(more),
+                        "queries": [i["query"] for i in plan],
+                        "mesh": [m for i in plan for m in i.get("mesh", [])],
+                        "round": rnd + 1})
+
+    used[:] = [{**s, "n": i + 1} for i, s in enumerate(order(used)[:MAX_USED])]
 
 
 async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
@@ -378,11 +654,11 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     msgs = db.get_messages(chat["id"], chat["username"])
     question = msgs[-1]["content"]
     cfg = profiles.config(db, chat["username"], chat["profile"])
-    # TODO (task F15), SPEC §15.5: run the research: out = {}; yield every chunk of
-    #   investigate(question, cfg, settings, complete, t, stop, out); then sources, trail = out["used"], out["trail"].
-    #   Tests: test_step_research.py (run_evidence), test_step_clear.py::test_run_evidence_sites_first_and_ordered
-    sources: list[dict] = []
-    trail: list[dict] = []
+    out: dict = {}
+    async for ev in investigate(question, cfg, settings, complete, t, stop, out):
+        yield ev
+    sources = out.get("used", [])
+    trail = out.get("trail", [])
 
     lang = "nl" if looks_dutch(question) else "en"
 

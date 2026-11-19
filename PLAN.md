@@ -23,37 +23,37 @@ Rules for every task:
   accept: make chat-test K="test_step_clear and study_type"
 - [x] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
   accept: make chat-test K="test_step_clear and (pubmed_term_mesh or pubmed_search_mesh) or test_step_tools"
-- [ ] F03: In chat/coder/tools.py fill in `mesh_check` as its docstring says
+- [x] F03: In chat/coder/tools.py fill in `mesh_check` as its docstring says
   accept: make chat-test K="test_step_clear and mesh_check"
-- [ ] F04: In chat/coder/research.py do the `TODO (task F04)` comments in `parse_plan` and fill in `plan_about`
+- [x] F04: In chat/coder/research.py do the `TODO (task F04)` comments in `parse_plan` and fill in `plan_about`
   accept: make chat-test K="parse_plan or plan_object"
-- [ ] F05: In chat/coder/research.py fill in `gather` as its docstring says
+- [x] F05: In chat/coder/research.py fill in `gather` as its docstring says
   accept: make chat-test K="gather"
-- [ ] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
+- [x] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
   accept: make chat-test K="test_step_clear and order"
-- [ ] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
+- [x] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
   accept: make chat-test K="missing_defaults or add_defaults"
-- [ ] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
+- [x] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
   accept: node --check chat/static/js/profiles.js && make chat-test K="add_defaults"
-- [ ] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
+- [x] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
   accept: make chat-test K="test_step_flow and pmc"
-- [ ] F12: In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say
+- [x] F12: In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say
   accept: make chat-test K="test_step_flow and (extract or read_one)"
-- [ ] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
+- [x] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
   accept: make chat-test K="followup or public_sources or evidence_messages"
-- [ ] F14: In chat/coder/research.py fill in `investigate` as its docstring says
+- [x] F14: In chat/coder/research.py fill in `investigate` as its docstring says
   accept: make chat-test K="investigate"
-- [ ] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`)
+- [~] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`) — skipped: agent made no changes
   accept: make chat-test K="test_step_research or test_step_clear or TestEvidenceV2 or mesh_in_a_real_answer"
-- [ ] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
+- [x] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
   accept: make chat-test K="test_step_verify or summary_sentences"
-- [ ] F17: In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json)
+- [x] F17: In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json)
   accept: make chat-test
-- [ ] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
+- [x] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
   accept: node --check chat/static/js/profiles.js && make chat-test
-- [ ] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
+- [x] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [ ] F20: Add a "## Clear Source, rounds 2 and 3" section to chat/README.md (see "F20 details")
+- [x] F20: Add a "## Clear Source, rounds 2 and 3" section to chat/README.md (see "F20 details")
   accept: grep -q "## Clear Source, rounds 2 and 3" chat/README.md && grep -q "read_one" chat/README.md && make chat-test
 
 ## F19 details

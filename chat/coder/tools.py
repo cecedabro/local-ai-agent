@@ -227,7 +227,7 @@ def study_type(pub_types: list[str] | None) -> str | None:
 
 
 async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list[str]:
-    r"""TODO (task F03). The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
+    r"""The MeSH headings that exist for the model's terms, in the order asked, each once (SPEC §14.1).
       want = per term: str(term).strip(); skip empty ones, ones longer than 80 characters, ones with a '"', and ones
         already in want (case-insensitive); keep at most 8. want empty -> return [] without any request.
       r = GET PUBMED + "/esearch.fcgi" params {"db": "mesh", "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
@@ -240,7 +240,63 @@ async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list
         added once (skip it when it is already in out); a term without a record is dropped.
     Tests: test_step_clear.py::test_mesh_check
     """
-    raise NotImplementedError
+    try:
+        want = []
+        seen = set()
+        if terms:
+            for t in terms:
+                t = str(t).strip()
+                if not t or len(t) > 80 or '"' in t:
+                    continue
+                if t.lower() in seen:
+                    continue
+                seen.add(t.lower())
+                want.append(t)
+                if len(want) >= 8:
+                    break
+
+        if not want:
+            return []
+
+        r = await client.get(
+            PUBMED + "/esearch.fcgi",
+            params={
+                "db": "mesh",
+                "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
+                "retmode": "json",
+                "retmax": 20,
+            },
+            headers={"User-Agent": UA},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return []
+        ids = r.json()["esearchresult"].get("idlist")
+        if not ids:
+            return []
+
+        r = await client.get(
+            PUBMED + "/esummary.fcgi",
+            params={"db": "mesh", "id": ",".join(ids), "retmode": "json"},
+            headers={"User-Agent": UA},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return []
+        res = r.json()["result"]
+        records = [res[uid]["ds_meshterms"] for uid in res["uids"]]
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        return []
+
+    out = []
+    for t in want:
+        for record in records:
+            if any(t.lower() == term.lower() for term in record):
+                heading = record[0]
+                if heading not in out:
+                    out.append(heading)
+                break
+    return out
 
 
 def pubmed_term(query: str, filters: dict | None, mesh: list[str] | None = None) -> str:
@@ -293,12 +349,6 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
          types = the PublicationType texts (max 4); url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
       4. sort the results in the order of `ids` (PubMed's ranking), return them.
     """
-    # TODO (task F02), SPEC §14.1-14.2. Tests: test_step_clear.py::test_pubmed_search_mesh_info_and_type
-    #   1. term = pubmed_term(query, filters, mesh) and send that term.
-    #   2. after reading esearchresult (call it esr): when `info` is a dict, set info["term"] = term,
-    #      info["translation"] = str(esr.get("querytranslation") or ""), info["count"] = int(esr.get("count") or len(ids))
-    #      (a count that is not a number -> len(ids)); do this before the "no ids -> []" return.
-    #   3. per article: all_types = every PublicationType text; "types" stays all_types[:4]; add "type": study_type(all_types).
     term = pubmed_term(query, filters, mesh)
     try:
         r = await client.get(
@@ -395,15 +445,16 @@ _PMC = re.compile(r"^https?://(?:pmc\.ncbi\.nlm\.nih\.gov|(?:www\.)?ncbi\.nlm\.n
 
 
 def pmc_id(url: str) -> str | None:
-    r"""TODO (task F11). The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
+    r"""The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
       m = _PMC.match(url or ""); return m.group(1).upper() when it matched, else None.
     Tests: test_step_flow.py::test_pmc
     """
-    raise NotImplementedError
+    m = _PMC.match(url or "")
+    return m.group(1).upper() if m else None
 
 
 async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
-    r"""TODO (task F11). The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
+    r"""The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
       digits = pmcid upper-cased without its "PMC"; r = GET PUBMED + "/efetch.fcgi" params {"db": "pmc", "id": digits,
         "retmode": "xml"} (headers User-Agent UA, timeout 30); httpx.HTTPError -> ToolError(f"PubMed Central failed (<type name>)");
         status != 200 -> ToolError(f"PubMed Central answered {status}"); ET.ParseError -> ToolError("PubMed Central failed (ParseError)")
@@ -414,7 +465,51 @@ async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
       return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/", "text": text[:PAGE_CHARS]}
     Tests: test_step_flow.py::test_pmc
     """
-    raise NotImplementedError
+    digits = pmcid.upper().removeprefix("PMC")
+    try:
+        r = await client.get(
+            f"{PUBMED}/efetch.fcgi",
+            params={"db": "pmc", "id": digits, "retmode": "xml"},
+            headers={"User-Agent": UA},
+            timeout=30,
+        )
+    except httpx.HTTPError as e:
+        raise ToolError(f"PubMed Central failed ({type(e).__name__})") from e
+
+    if r.status_code != 200:
+        raise ToolError(f"PubMed Central answered {r.status_code}")
+
+    try:
+        root = ET.fromstring(r.text)
+    except ET.ParseError:
+        raise ToolError("PubMed Central failed (ParseError)")
+
+    art = root.find(".//article")
+    if art is None:
+        raise ToolError(f"PubMed Central has no text for {pmcid}")
+
+    # Extract title
+    title_el = art.find(".//article-title")
+    if title_el is not None:
+        title = "".join(title_el.itertext()).strip()
+        title = re.sub(r"\s+", " ", title)
+    else:
+        title = ""
+
+    # Extract text from <abstract> and <body> <p> elements
+    parts: list[str] = []
+    for p in art.findall(".//abstract//p") + art.findall(".//body//p"):
+        txt = "".join(p.itertext()).strip()
+        txt = re.sub(r"\s+", " ", txt)
+        if txt:
+            parts.append(txt)
+
+    if not parts:
+        raise ToolError(f"PubMed Central has no text for {pmcid}")
+
+    text = " ".join(parts)
+    return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/",
+            "text": text[:PAGE_CHARS]}
 
 
 # ------------------------------------------------------------------ the tools offered to the model

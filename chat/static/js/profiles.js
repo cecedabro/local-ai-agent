@@ -99,28 +99,29 @@ function cardHtml(s) {
   const enabled = s.enabled ? " checked" : "";
   const off = s.enabled ? "" : " off";
   let h = `<article class="src-card${off}" data-source="${esc(s.id)}" data-kind="${s.kind}">`;
-  // TODO (task F18), SPEC §15.6: a row instead of the kind tag. Replace the next lines (the <header> start, up to and
-  //   including the file tokens) with: name = s.label || s.title; desc = `${fmt(s.tokens || 0)} tokens` for a file, the
-  //   name of the card's preset (PRESETS: the [key, name, desc] whose key is s.filters.preset; none -> "Custom filters")
-  //   for pubmed, s.domain for a website; bubble = "📄" for a file, else esc of the first character of name, upper case;
-  //   h += `<header><span class="bubble">${bubble}</span><div class="who"><b>${esc(name)}</b><small>${esc(desc)}</small></div>`
-  //   (the switch and Remove stay in the header). Also delete the now unused `kindLabel` line above.
-  const kindLabel = KIND[s.kind];
-  h += `<header><span class="src-kind">${kindLabel}</span><b>${esc(s.title)}</b>`;
-  if (s.kind === "file" && s.tokens) {
-    h += `<small>${fmt(s.tokens)} tokens</small>`;
+  const name = s.label || s.title;
+  let desc;
+  if (s.kind === "file") {
+    desc = `${fmt(s.tokens || 0)} tokens`;
+  } else if (s.kind === "pubmed") {
+    const pkey = s.filters?.preset;
+    const p = pkey ? PRESETS.find((x) => x[0] === pkey) : null;
+    desc = p ? p[1] : "Custom filters";
+  } else {
+    desc = s.domain || "";
   }
+  const bubble = s.kind === "file" ? "\uD83D\uDCD4" : esc(name.charAt(0).toUpperCase());
+  h += `<header><span class="bubble">${bubble}</span><div class="who"><b>${esc(name)}</b><small>${esc(desc)}</small></div>`;
   h += `<label class="switch" title="${s.enabled ? "On" : "Off"}"><input type="checkbox" data-enabled${enabled}><span class="track"></span></label>`;
   h += `<button type="button" class="link danger" data-delete>Remove</button></header>`;
-  // TODO (task F18): everything after the </header> goes inside
-  //   `<details class="more"${pubmed ? " open" : ""}><summary>${pubmed ? "Strictness and note" : "Note"}</summary>` … `</details>`
-  //   (before the closing </article>).
-  if (s.kind === "pubmed") {
+  const isPubmed = s.kind === "pubmed";
+  h += `<details class="more"${isPubmed ? " open" : ""}><summary>${isPubmed ? "Strictness and note" : "Note"}</summary>`;
+  if (isPubmed) {
     const f = s.filters || {};
     const cur = f.preset || "custom";
     h += `<div class="presets">`;
-    for (const [key, name, desc] of PRESETS) {
-      h += `<button type="button" class="preset${cur === key ? " on" : ""}" data-preset="${key}"><b>${name}</b><small>${desc}</small></button>`;
+    for (const [key, presetName, desc] of PRESETS) {
+      h += `<button type="button" class="preset${cur === key ? " on" : ""}" data-preset="${key}"><b>${presetName}</b><small>${desc}</small></button>`;
     }
     h += `</div>`;
     h += `<details class="custom"${cur === "custom" ? " open" : ""}><summary>Customise</summary>`;
@@ -145,7 +146,7 @@ function cardHtml(s) {
   }
   const placeholders = { pubmed: "Only use reliable studies: \u2026", website: "When to use this site\u2026", file: "What this document is\u2026" };
   h += `<textarea data-note rows="2" maxlength="1000" placeholder="${placeholders[s.kind]}">${esc(s.note || "")}</textarea>`;
-  h += `</article>`;
+  h += `</details></article>`;
   return h;
 }
 
@@ -155,11 +156,21 @@ function draw() {
   document.querySelectorAll(".pf-tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.profile === state.profile)));
   if (document.activeElement !== $("#pf-instructions")) $("#pf-instructions").value = d.instructions;
   $("#pf-web").checked = d.web;
-  // TODO (task F18), SPEC §15.6: group the cards. For each [g, title] of GROUPS: list = the sources whose (s.group ||
-  //   "websites") is g; skip empty groups; on = how many are enabled; a group is
-  //   `<section class="pf-group" data-group="${g}"><header><span class="title">${title}</span><small>${on} of ${list.length} on</small></header>`
-  //   + `<div class="pf-list">${list.map(cardHtml).join("")}</div></section>`. Nothing at all -> the "No sources yet." line.
-  $("#pf-sources").innerHTML = d.sources.map(cardHtml).join("") || '<p class="small muted">No sources yet.</p>';
+  const sources = d.sources;
+  if (sources.length === 0) {
+    $("#pf-sources").innerHTML = '<p class="small muted">No sources yet.</p>';
+  } else {
+    let html = "";
+    for (const [g, title] of GROUPS) {
+      const list = sources.filter((s) => (s.group || "websites") === g);
+      if (list.length === 0) continue;
+      const on = list.filter((s) => s.enabled).length;
+      html += `<section class="pf-group" data-group="${esc(g)}"><header><span class="title">${esc(title)}</span><small>${on} of ${list.length} on</small></header>`;
+      html += `<div class="pf-list">${list.map(cardHtml).join("")}</div>`;
+      html += `</section>`;
+    }
+    $("#pf-sources").innerHTML = html;
+  }
   $("#add-pubmed").hidden = d.sources.some((s) => s.kind === "pubmed");
   drawBudget(d.budget);
 }
@@ -326,11 +337,24 @@ async function start() {
     }
     refresh();
   });
-  // TODO (task F09): the #add-defaults button (SPEC §14.3). On click: POST /api/profiles/${state.profile}/defaults with
-  //   api(…, { method: "POST" }); not ok -> say("That did not work, try again.", true); ok -> data = await res.json() and
-  //   say(`Added ${data.added} source${data.added === 1 ? "" : "s"}.`) when data.added > 0, else
-  //   say("You already have all the default sources."); then refresh(). Errors (catch) -> say(String(e), true).
-  //   Judge: make chat-browser-test ("round 5: the Dutch guideline sources and the add-defaults button").
+  $("#add-defaults").addEventListener("click", async () => {
+    try {
+      const res = await api(`/api/profiles/${state.profile}/defaults`, { method: "POST" });
+      if (!res.ok) {
+        say("That did not work, try again.", true);
+        return;
+      }
+      const data = await res.json();
+      if (data.added > 0) {
+        say(`Added ${data.added} source${data.added === 1 ? "" : "s"}.`);
+      } else {
+        say("You already have all the default sources.");
+      }
+    } catch (e) {
+      say(String(e), true);
+    }
+    refresh();
+  });
   $("#add-doc").addEventListener("change", async () => {
     const files = $("#add-doc").files;
     for (const file of files) {
