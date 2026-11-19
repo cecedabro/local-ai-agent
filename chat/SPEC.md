@@ -51,7 +51,7 @@ Settings values in tests are strings or numbers; treat `"0"`/`0` as false.
 
 - Usernames: `^[a-z0-9][a-z0-9_.-]{1,31}$` (lower-case). Passwords: 10–200 characters.
 - Passwords are hashed with argon2id (`argon2-cffi` defaults). Never stored or logged in clear.
-- Rights: `chat` (General profile), `evidence` (EvidenceHunt profile), `admin` (invites and
+- Rights: `chat` (General profile), `evidence` (Clear Source profile), `admin` (invites and
   users; implies every right). Stored per account.
 - First admin: at start, if the accounts table is empty and both `ADMIN_USER` and
   `ADMIN_PASSWORD` are set, create that account with right `admin`.
@@ -324,7 +324,7 @@ open pages when it helps) and a list of **source cards**:
 - `file`: a document (PDF via pypdf, text, Markdown, HTML; ≤ 5 MB, ≤ 200 000 characters of text,
   else **413**; unreadable **415**). Its whole text goes into the system prompt.
 Every card has a `note` (0–1000 characters: how the model should use it) and `enabled`.
-A user's EvidenceHunt starts with two cards (seeded once, deletable): PubMed (reviews,
+A user's Clear Source starts with two cards (seeded once, deletable): PubMed (reviews,
 meta-analyses, RCTs and guidelines, last 10 years, humans) and rivm.nl.
 
 Endpoints (JSON; a source as `{"id", "kind", "title", "domain", "note", "filters", "enabled",
@@ -379,7 +379,9 @@ PubMed the filters `[data-type]`, `select[data-years]`, `[data-humans]`, `[data-
 `#budget-bar` has one `<i>` per budget part (`--w` = tokens / max) and a line at half;
 `#budget-text`, `#budget-legend`, `#budget-hint` explain it; the bar gets class `over` above half.
 
-## 13. EvidenceHunt v2: research by the app, a checker for every answer
+## 13. Clear Source v2: research by the app, a checker for every answer
+
+Clear Source was called EvidenceHunt until 2026-11-19 (the name is taken). Only the shown name changed: the profile id, the right and the CSS stay `evidence`.
 
 The model is never trusted to stay within the evidence; the app enforces it.
 
@@ -400,7 +402,7 @@ The model is never trusted to stay within the evidence; the app enforces it.
   no `[n]` (the closing line on evidence strength is allowed without one); `bad_refs` = numbers cited that are
   not a source; `ok` = every quote ok and no bad refs.
 
-### 13.2 The research pipeline (`chat/coder/research.py`), EvidenceHunt only
+### 13.2 The research pipeline (`chat/coder/research.py`), Clear Source only
 1. **Plan**: one non-streaming call (`gateway.complete`) with `PLAN_PROMPT` asks for a JSON list of up to 6
    searches `{"source": "pubmed" | "site:<domain>" | "web", "query"}`; `parse_plan(text, cfg)` reads it
    (also inside a ```` ``` ```` fence), keeps only sources the profile enables, drops empty queries, max 6.

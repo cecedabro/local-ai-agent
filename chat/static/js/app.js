@@ -100,7 +100,7 @@ async function loadChats() {
   convs.innerHTML = html;
 }
 
-const PROFILE_NAMES = { general: "General", evidence: "EvidenceHunt" };
+const PROFILE_NAMES = { general: "General", evidence: "Clear Source" };
 
 /** Show which profile the chat is in: the profile button, html[data-profile] (strip, colours) and the placeholder. */
 function setProfile(p) {
@@ -108,7 +108,7 @@ function setProfile(p) {
   $("#profile-name").textContent = PROFILE_NAMES[p] || p;
   $("#profile").dataset.profile = p;
   document.documentElement.dataset.profile = p;
-  $("#input").placeholder = p === "evidence" ? "Ask EvidenceHunt…" : "Message Dewdrop…";
+  $("#input").placeholder = p === "evidence" ? "Ask Clear Source…" : "Message Dewdrop…";
 }
 
 async function openChat(id) {
@@ -166,7 +166,7 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
  */
 /*
  * Notes (task E16): thinking, the search trail and the checker's marks (SPEC §13.3). Import trailHtml, thoughtHtml and
- * markVerify from ./stream.js. Judge: make chat-browser-test ("round 4: EvidenceHunt…").
+ * markVerify from ./stream.js. Judge: make chat-browser-test ("round 4: Clear Source…").
  *   drawMessage, assistant: put <div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div> right
  *     before the .bub; after citeLinks: markVerify(the .bub, m.verify).
  *   send: the new div.ai gets an empty <div class="pre"></div> before its .bub. Keep thinking = "", th0 = null,

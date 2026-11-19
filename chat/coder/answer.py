@@ -45,7 +45,7 @@ def make_title(text: str) -> str:
     return title
 
 
-# Notes (task E12): EvidenceHunt has its own pipeline, and every profile keeps its thinking and trail (SPEC §13.2-13.3).
+# Notes (task E12): Clear Source has its own pipeline, and every profile keeps its thinking and trail (SPEC §13.2-13.3).
 # Tests: test_step_answer.py, test_step_round2.py, test_step_profiles.py, test_accept_core.py::TestStream,
 # test_accept_evidence.py::TestEvidenceV2.
 #   1. `from . import research`. In run_answer, right after the optional compress (before build_messages):
@@ -81,7 +81,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         await context.compress(db, chat, settings, complete)
         chat = db.get_chat(chat["id"], chat["username"])
 
-    # EvidenceHunt profile: run its own pipeline
+    # Clear Source profile: run its own pipeline
     if chat["profile"] == "evidence":
         async for chunk in research.run_evidence(db, settings, chat, think, stream=stream, complete=complete, stop=stop):
             yield chunk

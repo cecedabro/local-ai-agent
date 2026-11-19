@@ -9,11 +9,11 @@ from urllib.parse import urlsplit
 from . import context
 
 PROFILES = ("general", "evidence")
-NAMES = {"general": "General", "evidence": "EvidenceHunt"}
+NAMES = {"general": "General", "evidence": "Clear Source"}
 RIGHT = {"general": "chat", "evidence": "evidence"}
 FILTER_TYPES = ("systematic_review", "meta_analysis", "rct", "guideline", "review")
 FILTER_LANGS = ("english", "dutch")
-# A new EvidenceHunt profile starts with these cards (the user can change or delete them).
+# A new Clear Source profile starts with these cards (the user can change or delete them).
 SEED = {
     "evidence": [
         {"kind": "pubmed", "title": "PubMed",

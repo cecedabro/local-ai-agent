@@ -39,7 +39,7 @@ class Script(dict):
         msgs = self.gw.requests[-1]["body"]["messages"]
         if key == "tool_calls":                   # "search ..." -> one web search first (SPEC §12.3)
             return [{"name": "web_search", "arguments": '{"query": "flu shot"}'}] if "search" in msgs[-1]["content"] else None
-        if key == "content" and str(msgs[-1]["content"]).startswith("Sources:"):     # EvidenceHunt's answer (SPEC §13)
+        if key == "content" and str(msgs[-1]["content"]).startswith("Sources:"):     # Clear Source's answer (SPEC §13)
             return [w + " " for w in EH_ANSWER.split(" ")]
         if key == "content" and msgs[-1]["role"] == "tool":
             return [w + " " for w in "Yes, people over 60 get it every autumn [1].".split(" ")]

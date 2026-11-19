@@ -97,9 +97,9 @@ Code blocks are syntax-coloured and include Copy and Download buttons (the model
 on the fence line). If you scroll away while a reply is still writing, the page pins your position
 and "↓ Latest" brings you back when it catches up.
 
-## EvidenceHunt v2
+## Clear Source v2
 
-The EvidenceHunt profile does research by the app before answering. A `chat/coder/research.py`
+The Clear Source profile does research by the app before answering. A `chat/coder/research.py`
 pipeline plans searches, gathers sources (PubMed, sites, web), reads pages, and then asks the
 model to answer **only** from those sources. Every answer is checked by `chat/coder/verify.py`
 which verifies that quotes appear in their cited sources and flags uncited factual sentences.
