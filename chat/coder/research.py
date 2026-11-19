@@ -4,6 +4,7 @@ and the checker reads every answer (chat/SPEC.md §13.2). Tests: chat/tests/test
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 import time
@@ -135,9 +136,6 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         items = json.loads(t)
     except ValueError:
         items = []
-    # TODO (task F04), SPEC §15.1: the plan may be an object {"about", "searches": [...]}: a dict -> items = its
-    #   "searches" (or []); anything that not a list then -> []. (Also the slicing above: when a "{" comes before any
-    #   "[", take t from the first "{" to the last "}" instead.) Tests: test_step_flow.py::test_plan_object_and_about
     if isinstance(items, dict):
         searches = items.get("searches")
         items = searches if isinstance(searches, list) else []
@@ -151,9 +149,6 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         query = str(item.get("query", "")).strip()[:200]
         if source not in allowed or not query:
             continue
-        # TODO (task F04): MeSH (SPEC §14.1). Only for a "pubmed" item whose "mesh" is a list: heads = [str(m).strip()[:80]
-        #   for each m whose str(m).strip() is not empty][:4]; when heads is not empty the dict also gets "mesh": heads.
-        #   Other sources never get "mesh". Tests: test_step_clear.py::test_parse_plan_mesh
         entry = {"source": source, "query": query}
         if source == "pubmed" and isinstance(item.get("mesh"), list):
             heads = [str(m).strip()[:80] for m in item["mesh"] if str(m).strip()]
@@ -213,7 +208,7 @@ def label(step: dict) -> str:
 
 async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: Any = tools,
                  on_step: Callable[[dict], Any] | None = None) -> tuple[list[dict], list[dict]]:
-    r"""TODO (task F05). Run the plan: (sources, trail), SPEC §13.2 step 2, §14.1-14.2, §15.2. `t` has mesh_check,
+    r"""Run the plan: (sources, trail), SPEC §13.2 step 2, §14.1-14.2, §15.2. `t` has mesh_check,
     pubmed_search, web_search, pmc_id, pmc_text and fetch_page (tools or fakes).
       pub = the first enabled pubmed card of cfg["sources"] (or None); filters = pub["filters"] or None (None without a card)
       add(title, url, kind, meta, text, type_=None, site=None): skip when MAX_SOURCES sources exist or the url is already
@@ -257,12 +252,12 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
     if filters is None:
         filters = None
 
-    def step(s: dict) -> None:
+    async def step(s: dict) -> None:
         trail.append(s)
         if on_step is not None:
             result = on_step(s)
-            if asyncio.iscoroutine(result):
-                asyncio.get_event_loop().run_until_complete(result)
+            if inspect.isawaitable(result):
+                await result
 
     def add(title: str, url: str, kind: str, meta: str, text: str,
             type_: str | None = None, site: str | None = None) -> None:
@@ -300,10 +295,10 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
             try:
                 res = await t.pubmed_search(client, q, filters, n=PUBMED_N, mesh=mesh, info=info)
             except tools.ToolError as e:
-                step({"kind": "search", "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)})
+                await step({"kind": "search", "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)})
                 continue
 
-            step({"kind": "search", "source": "PubMed", "query": q, "found": len(res),
+            await step({"kind": "search", "source": "PubMed", "query": q, "found": len(res),
                   "url": PUBMED_WEB + quote_plus(info.get("term") or q),
                   "mesh": mesh, "translation": info.get("translation", "")})
             articles(res)
@@ -314,11 +309,11 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                 try:
                     res2 = await t.pubmed_search(client, q, None, n=PUBMED_N, mesh=[], info=info2)
                 except tools.ToolError as e:
-                    step({"kind": "search", "source": "PubMed", "query": q, "found": 0,
+                    await step({"kind": "search", "source": "PubMed", "query": q, "found": 0,
                           "url": None, "error": str(e), "broader": True})
                     continue
                 term_or_q = info2.get("term") or q
-                step({"kind": "search", "source": "PubMed", "query": q, "found": len(res2),
+                await step({"kind": "search", "source": "PubMed", "query": q, "found": len(res2),
                       "url": PUBMED_WEB + quote_plus(term_or_q),
                       "mesh": [], "translation": info2.get("translation", ""), "broader": True})
                 articles(res2)
@@ -331,10 +326,10 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
             try:
                 res = await t.web_search(client, searxng_url, q, site=domain)
             except tools.ToolError as e:
-                step({"kind": "search", "source": source_label, "query": q, "found": 0, "url": None, "error": str(e)})
+                await step({"kind": "search", "source": source_label, "query": q, "found": 0, "url": None, "error": str(e)})
                 continue
 
-            step({"kind": "search", "source": source_label, "query": q, "found": len(res), "url": None})
+            await step({"kind": "search", "source": source_label, "query": q, "found": len(res), "url": None})
 
             for r in res[:PAGES_PER_SEARCH]:
                 if len(sources) >= MAX_SOURCES:
@@ -344,24 +339,24 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                     try:
                         page = await t.pmc_text(client, pmc)
                     except tools.ToolError as e:
-                        step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        await step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
                         continue
                 else:
                     allowed = (lambda h, d=domain: tools._within(h, d)) if domain else None
                     try:
                         page = await t.fetch_page(client, r["url"], allowed=allowed)
                     except tools.ToolError as e:
-                        step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        await step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
                         continue
 
-                step({"kind": "open", "title": page["title"], "url": page["url"]})
+                await step({"kind": "open", "title": page["title"], "url": page["url"]})
                 add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=domain)
 
     return sources, trail
 
 
 def extract_messages(question: str, src: dict) -> list[dict]:
-    r"""TODO (task F12). The messages that ask the model to read one source (SPEC §15.4):
+    r"""The messages that ask the model to read one source (SPEC §15.4):
       [{"role": "system", "content": EXTRACT_PROMPT},
        {"role": "user", "content": f"Question: {question}\n\nSource: {src['title']} ({src.get('meta') or src['url']})\n\n{src['text']}"}]
     Tests: test_step_flow.py::test_extract_messages_and_parse_quotes
@@ -444,7 +439,7 @@ async def read_one(question: str, src: dict, settings: Any, complete: Callable) 
 
 
 def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]:
-    r"""TODO (task F13). The messages for one more round of searches (SPEC §15.5):
+    r"""The messages for one more round of searches (SPEC §15.5):
       src = ", ".join(enabled_sources(cfg)) or "none"
       done = one line f"- {s['source']}: {s['query']} ({s['found']} found)" per trail step of kind "search"
       used = the number of trail steps of kind "read" with status "used"
@@ -536,7 +531,7 @@ def _site_first(plan: list[dict]) -> list[dict]:
 
 async def investigate(question: str, cfg: dict, settings: Any, complete: Callable, t: Any = tools,
                       stop: asyncio.Event | None = None, out: dict | None = None) -> AsyncIterator[str]:
-    r"""TODO (task F14). The research stages as SSE text (SPEC §15.1-15.5); the results go into `out`.
+    r"""The research stages as SSE text (SPEC §15.1-15.5); the results go into `out`.
       out = out or {}; trail, candidates, used = [], [], []; done_q = set() of (source, query.lower()); out.update(used=used, trail=trail)
       note(step): append it to trail and return _sse("trail", {"step": step})   (yield what it returns)
       yield _phase("thinking", "Understanding the question…")

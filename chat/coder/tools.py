@@ -349,12 +349,6 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
          types = the PublicationType texts (max 4); url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
       4. sort the results in the order of `ids` (PubMed's ranking), return them.
     """
-    # TODO (task F02), SPEC §14.1-14.2. Tests: test_step_clear.py::test_pubmed_search_mesh_info_and_type
-    #   1. term = pubmed_term(query, filters, mesh) and send that term.
-    #   2. after reading esearchresult (call it esr): when `info` is a dict, set info["term"] = term,
-    #      info["translation"] = str(esr.get("querytranslation") or ""), info["count"] = int(esr.get("count") or len(ids))
-    #      (a count that is not a number -> len(ids)); do this before the "no ids -> []" return.
-    #   3. per article: all_types = every PublicationType text; "types" stays all_types[:4]; add "type": study_type(all_types).
     term = pubmed_term(query, filters, mesh)
     try:
         r = await client.get(
@@ -451,7 +445,7 @@ _PMC = re.compile(r"^https?://(?:pmc\.ncbi\.nlm\.nih\.gov|(?:www\.)?ncbi\.nlm\.n
 
 
 def pmc_id(url: str) -> str | None:
-    r"""TODO (task F11). The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
+    r"""The PubMed Central id in a link, upper case ("PMC1234567"), or None (SPEC §15.2):
       m = _PMC.match(url or ""); return m.group(1).upper() when it matched, else None.
     Tests: test_step_flow.py::test_pmc
     """
@@ -460,7 +454,7 @@ def pmc_id(url: str) -> str | None:
 
 
 async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
-    r"""TODO (task F11). The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
+    r"""The text of a PubMed Central article as a page {"title", "url", "text"} (SPEC §15.2).
       digits = pmcid upper-cased without its "PMC"; r = GET PUBMED + "/efetch.fcgi" params {"db": "pmc", "id": digits,
         "retmode": "xml"} (headers User-Agent UA, timeout 30); httpx.HTTPError -> ToolError(f"PubMed Central failed (<type name>)");
         status != 200 -> ToolError(f"PubMed Central answered {status}"); ET.ParseError -> ToolError("PubMed Central failed (ParseError)")
