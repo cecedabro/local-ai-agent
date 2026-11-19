@@ -12,7 +12,7 @@ import socket
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from typing import Any, Callable
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote_plus, urljoin, urlsplit
 
 import httpx
 
@@ -467,7 +467,7 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
 
 
 def trail_step(name: str, arguments: str, found: list[dict]) -> dict:
-    r"""TODO (task E06). One step of the search trail for a tool call (SPEC §13.3).
+    r"""One step of the search trail for a tool call (SPEC §13.3).
       args = json.loads(arguments or "{}") (not JSON or not a dict -> {}); q = str(args.get("query") or "").strip()
       open_page     -> {"kind": "read", "title": found[0]["title"] if found else the url, "url": found[0]["url"] if found else the url}
                        (the url = str(args.get("url") or ""))
@@ -477,7 +477,49 @@ def trail_step(name: str, arguments: str, found: list[dict]) -> dict:
       anything else -> the same with "source": "the web"
     Tests: test_step_research.py::test_trail_step
     """
-    raise NotImplementedError
+    try:
+        args = json.loads(arguments or "{}")
+        if not isinstance(args, dict):
+            args = {}
+    except (json.JSONDecodeError, TypeError):
+        args = {}
+    q = str(args.get("query") or "").strip()
+
+    if name == "open_page":
+        url = str(args.get("url") or "")
+        if found:
+            title = found[0].get("title") or url
+            url_out = found[0].get("url") or url
+        else:
+            title = url
+            url_out = url
+        return {"kind": "read", "title": title, "url": url_out}
+
+    if name == "search_pubmed":
+        return {
+            "kind": "search",
+            "source": "PubMed",
+            "query": q,
+            "found": len(found),
+            "url": "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(q),
+        }
+
+    if name == "search_site":
+        return {
+            "kind": "search",
+            "source": str(args.get("site", "")),
+            "query": q,
+            "found": len(found),
+            "url": None,
+        }
+
+    return {
+        "kind": "search",
+        "source": "the web",
+        "query": q,
+        "found": len(found),
+        "url": None,
+    }
 
 
 def _cut(text: str, n: int = QUOTE_CHARS) -> str:
