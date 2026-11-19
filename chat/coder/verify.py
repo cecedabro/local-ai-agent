@@ -139,4 +139,26 @@ def check(answer: str, sources: list[dict]) -> dict:
       ok = all quotes ok and no bad_refs; return {"ok", "quotes", "uncited", "bad_refs"}
     Tests: test_step_verify.py::test_check_report, ::test_check_bad_refs_and_no_source, ::test_check_uncited_claims_are_strict
     """
-    raise NotImplementedError
+    by_n = {int(s["n"]): s.get("text") or "" for s in sources}
+    quoted: list[dict] = []
+    cited_nums: set[int] = set()
+    for q in quotes(answer):
+        cited_nums.update(q["cites"])
+        if not q["cites"]:
+            quoted.append({**q, "ok": False, "why": "no source"})
+        else:
+            ok = any(find_quote(q["text"], by_n[n]) for n in q["cites"] if n in by_n)
+            cited = [n for n in q["cites"] if n in by_n]
+            why = "" if ok else "not in source " + ", ".join(str(c) for c in cited)
+            quoted.append({**q, "ok": ok, "why": why})
+    sents = sentences(answer)
+    uncited: list[str] = []
+    for idx, s in enumerate(sents):
+        cited_nums.update(s["cites"])
+        if not s["cites"] and len(re.findall(r"\w+", s["text"])) >= 8:
+            if idx == len(sents) - 1 and any(w in normalize(s["text"]) for w in STRENGTH_WORDS):
+                continue
+            uncited.append(s["text"])
+    bad_refs = sorted(n for n in cited_nums if n not in by_n)
+    ok = all(q["ok"] for q in quoted) and not bad_refs
+    return {"ok": ok, "quotes": quoted, "uncited": uncited, "bad_refs": bad_refs}
