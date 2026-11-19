@@ -21,7 +21,7 @@ Rules for every task:
 
 - [x] F01: In chat/coder/tools.py fill in `study_type` as its docstring says
   accept: make chat-test K="test_step_clear and study_type"
-- [ ] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
+- [x] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
   accept: make chat-test K="test_step_clear and (pubmed_term_mesh or pubmed_search_mesh) or test_step_tools"
 - [ ] F03: In chat/coder/tools.py fill in `mesh_check` as its docstring says
   accept: make chat-test K="test_step_clear and mesh_check"

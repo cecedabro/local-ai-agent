@@ -253,10 +253,10 @@ def pubmed_term(query: str, filters: dict | None, mesh: list[str] | None = None)
       languages -> "(" + " OR ".join(LANGS[x] for each known x) + ")"
     Return " AND ".join(parts). Unknown types/languages are skipped.
     """
-    # TODO (task F02): with `mesh` (a non-empty list of headings) the first part becomes
-    #   '((' + ' AND '.join(f'"{m}"[MeSH Terms]' for m in mesh) + ') OR (' + query.strip() + '))'   (SPEC §14.1)
-    #   Tests: test_step_clear.py::test_pubmed_term_mesh
-    parts = [f"({query.strip()})"]
+    if mesh:
+        parts = ['((' + ' AND '.join(f'"{m}"[MeSH Terms]' for m in mesh) + ') OR (' + query.strip() + '))']
+    else:
+        parts = [f"({query.strip()})"]
     if filters:
         types = filters.get("types")
         if types:
@@ -299,10 +299,11 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     #      info["translation"] = str(esr.get("querytranslation") or ""), info["count"] = int(esr.get("count") or len(ids))
     #      (a count that is not a number -> len(ids)); do this before the "no ids -> []" return.
     #   3. per article: all_types = every PublicationType text; "types" stays all_types[:4]; add "type": study_type(all_types).
+    term = pubmed_term(query, filters, mesh)
     try:
         r = await client.get(
             PUBMED + "/esearch.fcgi",
-            params={"db": "pubmed", "term": pubmed_term(query, filters), "retmode": "json",
+            params={"db": "pubmed", "term": term, "retmode": "json",
                     "retmax": n, "sort": "relevance"},
             headers={"User-Agent": UA}, timeout=20)
     except httpx.HTTPError as e:
@@ -310,9 +311,18 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     if r.status_code != 200:
         raise ToolError(f"PubMed answered {r.status_code}")
     try:
-        ids = r.json()["esearchresult"]["idlist"]
+        esr = r.json()["esearchresult"]
+        ids = esr["idlist"]
     except (ValueError, KeyError) as e:
         raise ToolError(f"PubMed failed ({type(e).__name__})") from e
+    if info is not None:
+        try:
+            count = int(esr.get("count") or len(ids))
+        except (ValueError, TypeError):
+            count = len(ids)
+        info["term"] = term
+        info["translation"] = str(esr.get("querytranslation") or "")
+        info["count"] = count
     if not ids:
         return []
     try:
@@ -357,21 +367,20 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
                 year = ""
             journal_el = article.find(".//Journal/Title")
             journal = journal_el.text if journal_el is not None and journal_el.text else ""
-            type_list = []
+            all_types = []
             pt_el = article.find(".//PublicationTypeList")
             if pt_el is not None:
                 for pt in pt_el.iter("PublicationType"):
                     if pt.text:
-                        type_list.append(pt.text)
-                    if len(type_list) >= 4:
-                        break
+                        all_types.append(pt.text)
             url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid_el}/"
             results.append((pmid_el, {
                 "pmid": pmid_el,
                 "title": title,
                 "journal": journal,
                 "year": year,
-                "types": type_list,
+                "types": all_types[:4],
+                "type": study_type(all_types),
                 "abstract": abstract,
                 "url": url,
             }))
