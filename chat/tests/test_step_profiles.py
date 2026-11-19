@@ -130,7 +130,7 @@ def test_document_text():
 
 # ---------------------------------------------------------------- B10 answer: tool rounds
 def test_tool_rounds(db):
-    # SPEC §13: EvidenceHunt has its own pipeline now; tool rounds are General's, here with the same sources
+    # SPEC §13: Clear Source has its own pipeline now; tool rounds are General's, here with the same sources
     db.add_source("lisa", "general", "pubmed", "PubMed", filters={"types": ["rct"]})
     db.add_source("lisa", "general", "website", "rivm.nl", domain="rivm.nl")
     c = db.create_chat("lisa", "general")

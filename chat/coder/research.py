@@ -1,4 +1,4 @@
-"""EvidenceHunt v2: the app does the research, the model only plans the searches and writes from the excerpts,
+"""Clear Source v2: the app does the research, the model only plans the searches and writes from the excerpts,
 and the checker reads every answer (chat/SPEC.md §13.2). Tests: chat/tests/test_step_research.py
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ NO_EVIDENCE = {
 _DUTCH = {"de", "het", "een", "is", "bij", "van", "en", "niet", "wat", "hoe", "welke", "voor", "met", "zijn",
           "wordt", "mag", "kan", "helpt", "tegen", "tijdens", "patiënten", "dosis"}
 RULES = (
-    "You are EvidenceHunt. Answer ONLY from the numbered sources below; never use your own knowledge. "
+    "You are Clear Source. Answer ONLY from the numbered sources below; never use your own knowledge. "
     "Answer in the language of the question. Structure: first a short answer of one or two sentences; then the "
     "reasoning, built from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
     '> "exact words from the source" [2]; every other claim also ends with its [n]; finally one line on how strong '
@@ -280,7 +280,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
                        stream: Callable = gateway.stream_chat, complete: Callable = gateway.complete,
                        t: Any = tools, clock: Callable[[], float] = time.monotonic,
                        stop: asyncio.Event | None = None) -> AsyncIterator[str]:
-    r"""One EvidenceHunt answer as SSE text (SPEC §13.2, the event order there). The user's message is already stored.
+    r"""One Clear Source answer as SSE text (SPEC §13.2, the event order there). The user's message is already stored.
       question = the last user message of the chat; cfg = profiles.config(db, username, profile)
       yield _phase("reading", "Reading your question…"); yield _phase("thinking", "Choosing search terms…")
       plan_text = await complete(settings, plan_messages(question, cfg)) (gateway.Busy/GatewayError -> ""); plan = parse_plan(...)

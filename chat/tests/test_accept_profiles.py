@@ -14,7 +14,7 @@ class TestProfileApi:
     def test_get_seeds_evidence(self, client):
         login(client)
         p = client.get("/api/profiles/evidence").json()
-        assert p["profile"] == "evidence" and p["name"] == "EvidenceHunt" and p["web"] is True and p["instructions"] == ""
+        assert p["profile"] == "evidence" and p["name"] == "Clear Source" and p["web"] is True and p["instructions"] == ""
         assert [(s["kind"], s["title"]) for s in p["sources"]] == [("pubmed", "PubMed"), ("website", "rivm.nl")]
         assert set(p["sources"][0]) == {"id", "kind", "title", "domain", "note", "filters", "enabled", "created", "tokens"}
         assert p["budget"]["max"] == 32768 and 0 < p["budget"]["used"] < 2000

@@ -449,7 +449,7 @@ a.cite{cursor:pointer;margin:0 1px}
 .send.stop .arrow{opacity:0;transform:scale(.4)}
 .send.stop .sq{opacity:1;transform:none}
 @keyframes stopglow{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 4px 22px var(--glow)}}
-/* EvidenceHunt (html[data-profile=evidence], set by app.js): a glowing profile button, a thin strip under the top
+/* Clear Source (html[data-profile=evidence], set by app.js): a glowing profile button, a thin strip under the top
    bar, the composer's edge, the phase label in its colour */
 .strip{display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;opacity:0;font-size:12px;font-weight:650;color:var(--eh-ink);
   transition:height .4s cubic-bezier(.3,.9,.3,1),opacity .4s}

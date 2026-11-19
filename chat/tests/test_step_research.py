@@ -1,4 +1,4 @@
-"""Judge for chat/coder/research.py, the EvidenceHunt pipeline (chat/SPEC.md §13.2). Protected.
+"""Judge for chat/coder/research.py, the Clear Source pipeline (chat/SPEC.md §13.2). Protected.
 
 Run one: make chat-test K="test_step_research and parse_plan"
 """

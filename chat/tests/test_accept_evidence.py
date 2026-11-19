@@ -1,4 +1,4 @@
-"""Judge for EvidenceHunt v2, the trail, thinking, strictness and the app icon over HTTP (chat/SPEC.md §13).
+"""Judge for Clear Source v2, the trail, thinking, strictness and the app icon over HTTP (chat/SPEC.md §13).
 Protected: change the code, not this file.
 
 Run: make chat-test K=TestEvidenceV2   (one group)

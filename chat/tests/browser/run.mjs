@@ -3,7 +3,7 @@
 //   smoke:   sign in with the password, send a message, wait for the finished answer, no console errors
 //   round 2: phases, code blocks + download, scroll freeze + "Latest", stop, folders (chat/SPEC.md §11)
 //   round 3: the profiles page (notes, filters, a website, a document, the budget bar), sources under answers
-//   round 4: EvidenceHunt's trail, thinking and checked quotes; PubMed strictness (C); the app icon picker
+//   round 4: Clear Source's trail, thinking and checked quotes; PubMed strictness (C); the app icon picker
 //   passkey: add a passkey on /account (Chromium's virtual authenticator), sign out, sign in with it
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -202,13 +202,13 @@ async function main() {
     if (!/Wie krijgt hem/.test(await ev(`${last("details.src blockquote")}?.textContent||''`))) throw new Error("the source card has no quote");
   });
 
-  await check("round 4: EvidenceHunt: search trail, thinking, quotes checked against the source", async () => {
+  await check("round 4: Clear Source: search trail, thinking, quotes checked against the source", async () => {
     await go("/");
     await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "the chat page");
     await ev(`document.getElementById('profile').click()`);
     await ev(`document.querySelector('#pmenu .opt[data-profile=evidence]').click()`);
     await waitFor(() => ev(`document.documentElement.dataset.profile==='evidence'`), 3000, "html[data-profile=evidence]");
-    if ((await ev(`document.getElementById('input').placeholder`)) !== "Ask EvidenceHunt…") throw new Error("placeholder is not 'Ask EvidenceHunt…'");
+    if ((await ev(`document.getElementById('input').placeholder`)) !== "Ask Clear Source…") throw new Error("placeholder is not 'Ask Clear Source…'");
     await sendText("Is apixaban veilig bij een eGFR onder 30?");
     await waitFor(() => ev(`!!${last(".trail .step.search")}`), 15000, "a live trail step while researching");
     await idle();

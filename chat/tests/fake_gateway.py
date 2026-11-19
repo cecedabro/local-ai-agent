@@ -23,7 +23,7 @@ class FakeGateway:
         self.summary = "SUMMARY OF EARLIER MESSAGES"
         self.busy_left = 0
         self.search_results: list[dict] = []
-        self.plan = '[{"source": "pubmed", "query": "apixaban renal"}]'   # EvidenceHunt's planning call (SPEC §13.2)
+        self.plan = '[{"source": "pubmed", "query": "apixaban renal"}]'   # Clear Source's planning call (SPEC §13.2)
         self.pubmed: list[dict] = []          # fake PubMed: [{"pmid", "title", "abstract", "journal", "year"}]
         self._lock = threading.Lock()
         gw = self
