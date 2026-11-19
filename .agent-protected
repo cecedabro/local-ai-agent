@@ -38,3 +38,4 @@ chat/tests/test_step_round2.py
 chat/tests/test_step_tools.py
 chat/tests/test_step_profiles.py
 chat/tests/test_accept_profiles.py
+chat/tests/test_step_textcalls.py

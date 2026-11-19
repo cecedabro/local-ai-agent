@@ -6,6 +6,7 @@ Tests: chat/tests/test_step_gateway.py
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, AsyncIterator
 
 import httpx
@@ -180,3 +181,52 @@ async def complete(settings: Any, messages: list[dict]) -> str:
 
 def _unused() -> None:  # keeps the json import for the code you will write
     json.dumps({})
+
+
+# ------------------------------------------------------------------ tool calls written as text (SPEC §12.3)
+# Qwen sometimes writes its tool calls into the answer text instead of the tool_calls field (llama-server
+# then fails to parse them), in its XML form or the Hermes JSON form:
+#   <tool_call><function=open_page><parameter=url>https://x</parameter></function></tool_call>
+#   <tool_call>{"name": "web_search", "arguments": {"query": "x"}}</tool_call>
+# The chat holds such text back and runs the calls anyway.
+TOOL_TAG = "<tool_call"
+_XML_CALL = re.compile(r"<tool_call>\s*<function=([\w.-]+)>(.*?)</function>\s*</tool_call>", re.S)
+_XML_PARAM = re.compile(r"<parameter=([\w.-]+)>\s*(.*?)\s*</parameter>", re.S)
+_JSON_CALL = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
+
+
+def text_tool_calls(text: str) -> list[dict]:
+    """Tool calls written as text, as [{"id": "", "name", "arguments": JSON string}], in order."""
+    found: list[tuple[int, dict]] = []
+    for m in _XML_CALL.finditer(text):
+        args = {}
+        for p in _XML_PARAM.finditer(m.group(2)):
+            raw = p.group(2)
+            try:
+                val = json.loads(raw)
+                args[p.group(1)] = val if not isinstance(val, str) else raw
+            except ValueError:
+                args[p.group(1)] = raw
+        found.append((m.start(), {"id": "", "name": m.group(1), "arguments": json.dumps(args, ensure_ascii=False)}))
+    for m in _JSON_CALL.finditer(text):
+        try:
+            obj = json.loads(m.group(1))
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("name"), str):
+            args = obj.get("arguments", {})
+            found.append((m.start(), {"id": "", "name": obj["name"],
+                                      "arguments": args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)}))
+    return [c for _, c in sorted(found, key=lambda x: x[0])]
+
+
+def tag_split(text: str) -> tuple[str, str]:
+    """Split streamed text into (safe to show, held back): everything from the first "<tool_call" is held back,
+    and so is a trailing piece that could be the start of it (like "<to")."""
+    i = text.find(TOOL_TAG)
+    if i >= 0:
+        return text[:i], text[i:]
+    for k in range(min(len(TOOL_TAG) - 1, len(text)), 0, -1):
+        if TOOL_TAG.startswith(text[-k:]):
+            return text[:-k], text[-k:]
+    return text, ""
