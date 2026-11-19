@@ -118,3 +118,12 @@ test("sourcesHtml: cards that open to a quote and an Open link; escaped", async 
   assert.match(html, /<blockquote>Wie &lt;krijgt&gt; hem<\/blockquote><a class="src-open" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">Open on rivm\.nl ↗<\/a>/);
   assert.match(html, /<small>BMJ · 2021<\/small><\/div><\/summary><div class="src-body"><a class="src-open"/);
 });
+
+test("orbHtml: a live drop with every phase layer", async () => {
+  const { orbHtml, startOrb } = await import("../../static/js/stream.js");
+  const h = orbHtml("tiny", "writing");
+  assert.match(h, /^<span class="orb live tiny" data-phase="writing">/);
+  for (const layer of ["pool", "clouds", "radar", "read", "sum", "water"]) assert.match(h, new RegExp(`class="${layer}"`));
+  assert.equal((h.match(/class="wave/g) || []).length, 3);
+  assert.doesNotThrow(() => startOrb(null).stop(), "no element, no animation: a no-op");
+});

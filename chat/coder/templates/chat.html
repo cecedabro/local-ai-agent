@@ -31,6 +31,7 @@
       <span class="thumb"></span>
     </div>
   </div>
+  <div class="strip" id="eh-strip" aria-hidden="true"><span><i></i>EvidenceHunt · answers only from sources</span></div>
   <div class="pmenu hidden" id="pmenu">
     <button class="opt" data-profile="general"><b>General</b><small>Everyday questions, code, writing.</small></button>
     {% if 'evidence' in me.rights or 'admin' in me.rights %}
@@ -52,7 +53,7 @@
           <span class="thumb"></span>
         </div>
         <span class="spacer"></span>
-        <button class="primary send" id="send" title="Send">↑</button>
+        <button class="primary send" id="send" title="Send" aria-label="Send"><span class="arrow">↑</span><span class="sq"></span></button>
       </div>
     </form>
     <div class="ctx"><span id="ctx-text">Context 0 / 0</span>

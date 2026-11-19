@@ -3,6 +3,7 @@
 :root{color-scheme:light;
 --ink:#0b1f33;--muted:#53677c;--link:#0a6cdf;--accent:#0a84ff;
 --ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#8090a0;
+--eh:#14b8a6;--eh-soft:rgba(20,184,166,.15);--eh-glow:rgba(20,184,166,.45);--eh-ink:#0f766e;
 --bg:#dff2ff;
 --scene:radial-gradient(42vmax 38vmax at 6% 2%,#5fc2ff 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#6ee7d0 0,transparent 70%),
   radial-gradient(30vmax 26vmax at 55% 45%,#b8e6ff 0,transparent 70%),
@@ -25,6 +26,7 @@
 :root[data-theme=dark]{color-scheme:dark;
 --ink:#eaf4ff;--muted:#97abc0;--link:#6cc4ff;--accent:#4cc2ff;
 --ok:#3ee08f;--warn:#ffb340;--bad:#ff6b6b;--off:#7d8a99;
+--eh:#2dd4bf;--eh-soft:rgba(45,212,191,.14);--eh-glow:rgba(45,212,191,.5);--eh-ink:#99f6e4;
 --bg:#06121f;
 --scene:radial-gradient(45vmax 40vmax at 10% 0%,#0f4f7a 0,transparent 70%),radial-gradient(40vmax 36vmax at 95% 15%,#0c5e5a 0,transparent 70%),
   radial-gradient(50vmax 40vmax at 70% 100%,#1d4d2b 0,transparent 70%),radial-gradient(40vmax 40vmax at 0% 95%,#23306e 0,transparent 70%),
@@ -49,6 +51,7 @@
 :root[data-theme=blossom]{color-scheme:light;
 --ink:#3a1028;--muted:#8a5a74;--link:#d0367f;--accent:#ec4899;
 --ok:#16a34a;--warn:#c2410c;--bad:#dc2626;--off:#a08090;
+--ok:#e5488f;--eh:#d9367a;--eh-soft:rgba(217,54,122,.12);--eh-glow:rgba(217,54,122,.4);--eh-ink:#b0225f;
 --bg:#ffeef6;
 --scene:radial-gradient(42vmax 38vmax at 6% 2%,#ffb3d9 0,transparent 70%),radial-gradient(38vmax 34vmax at 96% 12%,#ffd6c2 0,transparent 70%),
   radial-gradient(30vmax 26vmax at 55% 45%,#ffe3f1 0,transparent 70%),
