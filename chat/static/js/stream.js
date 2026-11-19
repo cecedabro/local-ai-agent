@@ -152,6 +152,7 @@ export function metaText(tokens, tps) {
  *   const follow = new Follow(thread, (on) => (jump.hidden = on));
  *   follow.stick()   // after new text: scroll down only while following
  *   follow.bottom()  // after sending: always jump to the bottom and follow again
+ *   follow.bottom(true)  // the same, scrolling smoothly ("↓ Latest")
  */
 export class Follow {
   constructor(el, onChange = () => {}) {
@@ -172,7 +173,11 @@ export class Follow {
   gap() { return this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight; }
   set(on) { if (on !== this.on) { this.on = on; this.onChange(on); } }
   stick() { if (this.on) { this.el.scrollTop = this.el.scrollHeight; this.lastTop = this.el.scrollTop; } }
-  bottom() { this.set(true); this.stick(); }
+  bottom(smooth = false) {
+    this.set(true);
+    if (smooth && this.el.scrollTo) this.el.scrollTo({ top: this.el.scrollHeight, behavior: "smooth" });
+    else this.stick();
+  }
 }
 
 const EXT = { javascript: "js", js: "js", mjs: "mjs", jsx: "jsx", typescript: "ts", ts: "ts", tsx: "tsx", python: "py",
@@ -266,14 +271,22 @@ export function codeActions(root) {
 
 // ------------------------------------------------------------------ round 3: sources (SPEC §12.4)
 
-/** The cards under an answer: <div class="sources"> + per source <a class="src" href target=_blank rel=noopener>
- * <span class="n">N</span><div><b>TITLE</b><small>META or the host</small></div></a>. "" when there are none. */
+/**
+ * The cards under an answer (SPEC §12.4): each opens to show its quote and an "Open" link.
+ * <div class="sources"><details class="src" data-n="N"><summary><span class="n">N</span><div><b>TITLE</b>
+ * <small>META or the host</small></div></summary><div class="src-body">[<blockquote>QUOTE</blockquote>]
+ * <a class="src-open" href=URL target=_blank rel=noopener noreferrer>Open on HOST ↗</a></div></details>…</div>
+ * "" when there are none.
+ */
 export function sourcesHtml(sources) {
   if (!sources || !sources.length) return "";
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   return '<div class="sources">' + sources.map((s) =>
-    `<a class="src" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer"><span class="n">${Number(s.n)}</span>` +
-    `<div><b>${escHtml(s.title || s.url)}</b><small>${escHtml(s.meta || host(s.url))}</small></div></a>`).join("") + "</div>";
+    `<details class="src" data-n="${Number(s.n)}"><summary><span class="n">${Number(s.n)}</span>` +
+    `<div><b>${escHtml(s.title || s.url)}</b><small>${escHtml(s.meta || host(s.url))}</small></div></summary>` +
+    `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
+    `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` +
+    "</div></details>").join("") + "</div>";
 }
 
 /** Turn "[n]" in the text of `el` into <a class="cite" href=URL>n</a> for the answer's sources (not inside code). */
@@ -284,27 +297,43 @@ export function citeLinks(el, sources) {
   const nodes = [];
   while (walker.nextNode()) {
     const n = walker.currentNode;
-    if (/\[\d+\]/.test(n.data) && !n.parentElement.closest("code,pre,a")) nodes.push(n);
+    if (/\[\d+(?:\s*,\s*\d+)*\]/.test(n.data) && !n.parentElement.closest("code,pre,a")) nodes.push(n);
   }
   for (const node of nodes) {
     const frag = document.createDocumentFragment();
     let last = 0;
-    node.data.replace(/\[(\d+)\]/g, (m, n, at) => {
-      const s = byN.get(n);
-      if (!s) return m;
+    node.data.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (m, list, at) => {
+      const found = list.split(",").map((x) => byN.get(x.trim())).filter(Boolean);
+      if (!found.length) return m;
       frag.append(node.data.slice(last, at));
-      const a = document.createElement("a");
-      a.className = "cite";
-      a.href = s.url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.title = s.title || s.url;
-      a.textContent = n;
-      frag.append(a);
+      for (const s of found) {
+        const a = document.createElement("a");
+        a.className = "cite";
+        a.href = s.url;
+        a.dataset.n = String(s.n);
+        a.title = s.title || s.url;
+        a.textContent = String(s.n);
+        frag.append(a);
+      }
       last = at + m.length;
       return m;
     });
     frag.append(node.data.slice(last));
     node.replaceWith(frag);
   }
+}
+
+/** Tapping a [n] opens that source's card under the same answer (and scrolls to it) instead of leaving the app. */
+export function sourceActions(root) {
+  root.addEventListener("click", (e) => {
+    const a = e.target.closest("a.cite");
+    if (!a) return;
+    const card = a.closest(".ai")?.querySelector(`details.src[data-n="${a.dataset.n}"]`);
+    if (!card) return;
+    e.preventDefault();
+    card.open = true;
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card.classList.add("flash");
+    setTimeout(() => card.classList.remove("flash"), 1200);
+  });
 }

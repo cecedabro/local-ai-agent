@@ -192,12 +192,12 @@ def test_run_tool():
         async with client_for(handler) as c:
             text, found = await tools.run_tool("web_search", '{"query": "griep"}', cfg(), c, "http://searx")
             assert json.loads(text)[0]["url"] == "https://www.rivm.nl/a"
-            assert found == [{"title": "T", "url": "https://www.rivm.nl/a", "kind": "web"}]
+            assert found == [{"title": "T", "url": "https://www.rivm.nl/a", "kind": "web", "quote": "s"}]
             text, found = await tools.run_tool("search_pubmed", '{"query": "vitamin D"}', cfg(), c, "http://searx")
             assert json.loads(text)[0]["title"] == "Vitamin D and mood"
-            assert found[0]["kind"] == "pubmed" and found[0]["meta"] == "BMJ · 2021"
+            assert found[0]["kind"] == "pubmed" and found[0]["meta"] == "BMJ · 2021" and found[0]["quote"] == "No effect. Really."
             text, found = await tools.run_tool("open_page", '{"url": "https://www.rivm.nl/a"}', cfg(web=False), c, "", resolve)
-            assert text.startswith("A\nhttps://www.rivm.nl/a\n\nBody") and found[0]["kind"] == "page"
+            assert text.startswith("A\nhttps://www.rivm.nl/a\n\nBody") and found[0]["kind"] == "page" and found[0]["quote"] == "Body"
             # web off: only the profile's websites can be opened
             text, found = await tools.run_tool("open_page", '{"url": "https://example.org/"}', cfg(web=False), c, "", resolve)
             assert text.startswith("Error:") and found == []

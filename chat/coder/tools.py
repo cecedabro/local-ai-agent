@@ -21,6 +21,7 @@ MAX_BYTES = 2_000_000          # a page larger than this is cut
 PAGE_CHARS = 6000              # text of one page handed to the model
 ABSTRACT_CHARS = 1200
 UA = "Dewdrop/1.0 (private research assistant)"
+QUOTE_CHARS = 600              # the quote a source card shows (SPEC §12.4)
 
 # PubMed filters (SPEC §12.1): the source card's checkboxes -> search terms
 PUB_TYPES = {
@@ -432,12 +433,12 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
             if not cfg.get("web") or not q:
                 return (f"Error: the tool {name} is not available here.", [])
             res = await web_search(client, searxng_url, q)
-            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "web"} for r in res])
+            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "web", "quote": r["snippet"]} for r in res])
         if name == "search_site":
             if not sites or not q or args.get("site") not in sites:
                 return (f"Error: the tool {name} is not available here.", [])
             res = await web_search(client, searxng_url, q, site=args["site"])
-            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "site"} for r in res])
+            return (_results(res), [{"title": r["title"], "url": r["url"], "kind": "site", "quote": r["snippet"]} for r in res])
         if name == "search_pubmed":
             if not pub or not q:
                 return (f"Error: the tool {name} is not available here.", [])
@@ -451,7 +452,7 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
                 parts = [p for p in (a["journal"], a["year"]) if p]
                 meta.append(" · ".join(parts))
             return (json.dumps(out, ensure_ascii=False),
-                    [{"title": a["title"], "url": a["url"], "kind": "pubmed", "meta": m}
+                    [{"title": a["title"], "url": a["url"], "kind": "pubmed", "meta": m, "quote": _cut(a["abstract"])}
                      for a, m in zip(res, meta)])
         if name == "open_page":
             if not cfg.get("web") and not sites:
@@ -459,10 +460,16 @@ async def run_tool(name: str, arguments: str, cfg: dict, client: httpx.AsyncClie
             allowed = None if cfg.get("web") else (lambda h: any(_within(h, d) for d in sites))
             page = await fetch_page(client, args.get("url", ""), resolve, allowed)
             return (f"{page['title']}\n{page['url']}\n\n{page['text']}",
-                    [{"title": page["title"], "url": page["url"], "kind": "page"}])
+                    [{"title": page["title"], "url": page["url"], "kind": "page", "quote": _cut(page["text"])}])
     except ToolError as e:
         return (f"Error: {e}", [])
     return (f"Error: the tool {name} is not available here.", [])
+
+
+def _cut(text: str, n: int = QUOTE_CHARS) -> str:
+    """The first `n` characters of a text for the source card's quote, cut at a word."""
+    text = " ".join((text or "").split())
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"
 
 
 def _results(res: list[dict]) -> str:

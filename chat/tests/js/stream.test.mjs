@@ -109,12 +109,12 @@ test("Follow: stops on scroll up, follows again at the bottom", () => {
   assert.deepEqual(seen, [false, true, false, true]);
 });
 
-test("sourcesHtml: cards with number, title, meta or host; escaped", async () => {
+test("sourcesHtml: cards that open to a quote and an Open link; escaped", async () => {
   const { sourcesHtml } = await import("../../static/js/stream.js");
   assert.equal(sourcesHtml([]), "");
-  const html = sourcesHtml([{ n: 1, title: "A <b>", url: "https://www.rivm.nl/x", kind: "web" },
+  const html = sourcesHtml([{ n: 1, title: "A <b>", url: "https://www.rivm.nl/x", kind: "web", quote: "Wie <krijgt> hem" },
     { n: 2, title: "T", url: "https://pubmed.ncbi.nlm.nih.gov/1/", meta: "BMJ · 2021" }]);
-  assert.match(html, /^<div class="sources"><a class="src" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">/);
-  assert.match(html, /<span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
-  assert.match(html, /<small>BMJ · 2021<\/small>/);
+  assert.match(html, /^<div class="sources"><details class="src" data-n="1"><summary><span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
+  assert.match(html, /<blockquote>Wie &lt;krijgt&gt; hem<\/blockquote><a class="src-open" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">Open on rivm\.nl ↗<\/a>/);
+  assert.match(html, /<small>BMJ · 2021<\/small><\/div><\/summary><div class="src-body"><a class="src-open"/);
 });

@@ -112,7 +112,7 @@ function cardHtml(s) {
     const yr = f.years;
     h += `<label>Last <select data-years>`;
     for (const y of ["", 5, 10, 20]) {
-      h += `<option value="${y}"${y === String(yr) ? " selected" : ""}>${y || "any"}</option>`;
+      h += `<option value="${y}"${String(y) === String(yr ?? "") ? " selected" : ""}>${y || "any"}</option>`;
     }
     h += `</select> years</label>`;
     const humans = f.humans ? " checked" : "";
