@@ -29,10 +29,21 @@ def find_quote(quote: str, text: str) -> bool:
            parts = [normalize(p).strip(" '\".,;:") for p in _ELLIPSIS.split(quote or "")]   (_ELLIPSIS: ... … [...])
            keep only parts of 3+ characters; none left -> False
            pos = 0; for each part: i = hay.find(part, pos); i < 0 -> False; pos = i + len(part)
-           return True
+            return True
     Tests: test_step_verify.py::test_find_quote_exact_and_tolerant and ::test_find_quote_catches_changes
     """
-    raise NotImplementedError
+    hay = normalize(text)
+    parts = [normalize(p).strip(" '\".,;:") for p in _ELLIPSIS.split(quote or "")]
+    parts = [p for p in parts if len(p) >= 3]
+    if not parts:
+        return False
+    pos = 0
+    for part in parts:
+        i = hay.find(part, pos)
+        if i < 0:
+            return False
+        pos = i + len(part)
+    return True
 
 
 def cites_in(text: str) -> list[int]:

@@ -17,7 +17,7 @@ Rules for every task:
 
 - [x] E01: In chat/coder/verify.py fill in `normalize` as its docstring says
   accept: make chat-test K="test_step_verify and normalize"
-- [ ] E02: In chat/coder/verify.py fill in `find_quote` as its docstring says
+- [x] E02: In chat/coder/verify.py fill in `find_quote` as its docstring says
   accept: make chat-test K="test_step_verify and find_quote"
 - [ ] E03: In chat/coder/verify.py fill in `cites_in`, `_strip_marks`, `quotes` and `sentences` as their docstrings say
   accept: make chat-test K="test_step_verify and (quotes or sentences)"
