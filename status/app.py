@@ -1360,7 +1360,7 @@ def render_live(st: dict) -> str:
 
 STATIC = Path(__file__).resolve().parent / "static"
 STATIC_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-                ".svg": "image/svg+xml"}
+                ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/manifest+json"}
 
 
 def static_files() -> dict[str, tuple[bytes, str]]:
@@ -1385,7 +1385,12 @@ THEME_SCRIPT = """
 document.querySelectorAll('.theme input').forEach(i=>{i.checked=i.value===(document.documentElement.dataset.themePref||'auto');
   i.addEventListener('change',()=>window.setTheme(i.value))});
 """
-HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+HEAD = ('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+        # a home-screen app on phones: full screen, its own icon and name (static/manifest.json)
+        '<meta name="theme-color" content="#0a2f36"><meta name="apple-mobile-web-app-capable" content="yes">'
+        '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+        '<meta name="apple-mobile-web-app-title" content="Agent"><link rel="manifest" href="/static/manifest.json">'
+        f'<link rel="apple-touch-icon" href="/static/app-icon-180.png?v={STATIC_VERSION}">'
         f'{THEME_HEAD}<link rel="stylesheet" href="/static/style.css?v={STATIC_VERSION}">'
         f'<link rel="icon" type="image/svg+xml" href="/static/icon.svg?v={STATIC_VERSION}">')
 ICON = {
@@ -1524,62 +1529,80 @@ lockState();localTimes();
 
 CHAT_SCRIPT = r"""
 (function(){
+// The status page's quick chat: the same look and writing as Dewdrop (chat/static/js/stream.js),
+// but a scratchpad: nothing is saved, a refresh starts over. The full chat lives at CHAT_URL.
 const box=document.getElementById('chat');if(!box)return;
-const KEY='agent-status-chat';
 const log=box.querySelector('.log'),form=box.querySelector('form'),ta=form.q,stopB=box.querySelector('.stop');
-let hist=[];try{hist=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){}
-let ctl=null;
+const ORB='<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
+let hist=[],ctl=null;
 const sys=()=>'You are a helpful assistant running on a local model in a home lab. Today is '+
   new Date().toDateString()+'. Answer concisely; use plain text or simple Markdown.';
-function save(){try{localStorage.setItem(KEY,JSON.stringify(hist.slice(-40)))}catch(e){}}
-function bubble(role,text){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;
-  log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
-function draw(){log.textContent='';hist.forEach(m=>bubble(m.role,m.content));
-  if(!hist.length)bubble('note','Ask the local model anything. Chat requests go before agent work; the history stays in this browser.')}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const near=()=>log.scrollHeight-log.scrollTop-log.clientHeight<40;
+function note(t){log.insertAdjacentHTML('beforeend','<div class="msg note">'+esc(t)+'</div>')}
+function draw(){log.textContent='';note('Ask the local model anything. This is a scratchpad: a refresh starts over. Your chats are kept in the full chat.')}
 draw();
-box.querySelector('.clear').addEventListener('click',()=>{if(ctl)ctl.abort();hist=[];save();draw()});
+box.querySelector('.clear').addEventListener('click',()=>{if(ctl)ctl.abort();hist=[];draw()});
 stopB.addEventListener('click',()=>{if(ctl)ctl.abort()});
 const MODE='agent-status-chat-mode';
 try{const m=localStorage.getItem(MODE);if(m&&form.mode)form.mode.value=m}catch(e){}
 form.addEventListener('change',ev=>{if(ev.target.name==='mode'){try{localStorage.setItem(MODE,ev.target.value)}catch(e){}}});
 ta.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();form.requestSubmit()}});
+// Steady writing, like Dewdrop's Typewriter: text goes into a buffer and comes out every frame at a pace
+// that eases towards how much is waiting (30-600 letters/s), so bursts never jump.
+function writer(el,onFrame){let text='',pos=0,shown=0,rate=0,last=0,run=false,done=null;
+  function frame(now){const dt=Math.min(.064,Math.max(0,(now-last)/1000));last=now;
+    const want=Math.max(30,Math.min(600,(text.length-pos)*3.5));rate+=(want-rate)*Math.min(1,dt*4);
+    pos=Math.min(text.length,pos+rate*dt);const to=Math.floor(pos);
+    if(to>shown){shown=to;el.textContent=text.slice(0,to);onFrame(to)}
+    if(shown<text.length){requestAnimationFrame(frame);return}run=false;if(done){done();done=null}}
+  return{push(t){text+=t;if(!run){run=true;last=performance.now();requestAnimationFrame(frame)}},
+    finish(){return new Promise(r=>{if(!run&&shown>=text.length)r();else done=r})}}}
 form.addEventListener('submit',async ev=>{
   ev.preventDefault();const q=ta.value.trim();if(!q||ctl)return;
   if(!hist.length)log.textContent='';
-  hist.push({role:'user',content:q});bubble('user',q);ta.value='';save();
-  const out=bubble('assistant','');const meta=document.createElement('div');meta.className='meta';
-  log.appendChild(meta);
-  const load=document.createElement('div');load.className='loading';
-  load.innerHTML='<span class="orb"><i></i></span><span class="shimmer"></span>';out.appendChild(load);
-  const say=(t,fast)=>{load.lastChild.textContent=t;load.classList.toggle('fast',!!fast)};
-  say('Waiting for the model…');log.scrollTop=log.scrollHeight;
-  ctl=new AbortController();stopB.hidden=false;let text='',n=0,tps='';
+  hist.push({role:'user',content:q});
+  log.insertAdjacentHTML('beforeend','<div class="msg user">'+esc(q)+'</div>');ta.value='';
+  const ai=document.createElement('div');ai.className='ai';
+  ai.innerHTML=ORB+'<div class="content"><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>';
+  log.appendChild(ai);log.scrollTop=log.scrollHeight;
+  const orb=ai.querySelector('.orb'),bub=ai.querySelector('.bub'),meta=ai.querySelector('.meta2');
+  const phase=(p,label)=>{orb.dataset.phase=p;meta.innerHTML='<span class="phase-label">'+esc(label)+'</span>'};
+  phase('reading','Reading your message…');
+  ctl=new AbortController();stopB.hidden=false;let text='',n=0,tps=null,t0=0,wrote=false,thought=false;
   const think=form.mode.value==='think';
+  const w=writer(bub,len=>{const t=(performance.now()-t0)/1000;
+    orb.style.setProperty('--fill',(0.82*(1-Math.exp(-t/2.6))).toFixed(3));
+    meta.innerHTML='<span class="live">'+Math.round(len/4)+' tokens</span>';if(follow)log.scrollTop=log.scrollHeight});
+  let follow=true;const onScroll=()=>{follow=near()};log.addEventListener('scroll',onScroll,{passive:true});
   try{
     const r=await fetch('/v1/chat/completions',{method:'POST',signal:ctl.signal,
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok()},
-      body:JSON.stringify({model:'coder',stream:true,max_tokens:think?8192:2048,
+      body:JSON.stringify({model:'coder',stream:true,max_tokens:think?8192:2048,stream_options:{include_usage:true},
         messages:[{role:'system',content:sys()},...hist.slice(-20)],chat_template_kwargs:{enable_thinking:think}})});
     if(!r.ok){let j={};try{j=await r.json()}catch(e){}
       if(r.status===401){try{localStorage.removeItem(TK)}catch(e){};lockState()}
+      if(r.status===503||r.status===429)throw new Error('the model is busy with agent work, try again in a minute');
       throw new Error((j.error&&j.error.message)||('HTTP '+r.status))}
-    say('Reading your message…');
     const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
       let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
         if(!line.startsWith('data: ')||line==='data: [DONE]')continue;
         let o;try{o=JSON.parse(line.slice(6))}catch(e){continue}
         const d=(o.choices&&o.choices[0]&&o.choices[0].delta)||{};
-        if(d.reasoning_content&&!text)say('Thinking…',true);
-        if(d.content){text+=d.content;n++;out.textContent=text;log.scrollTop=log.scrollHeight}
-        if(o.timings&&o.timings.predicted_per_second)tps=' · '+o.timings.predicted_per_second.toFixed(1)+' tok/s';
+        if(d.reasoning_content&&!thought&&!wrote){thought=true;phase('thinking','Thinking…')}
+        if(d.content){if(!wrote){wrote=true;t0=performance.now();phase('writing','Writing the answer…')}
+          text+=d.content;n++;w.push(d.content)}
+        if(o.usage&&o.usage.completion_tokens)n=o.usage.completion_tokens;
+        if(o.timings&&o.timings.predicted_per_second)tps=o.timings.predicted_per_second.toFixed(1);
       }
-      if(text)meta.textContent=n+' tokens'+tps;
     }
-    if(!text){load.remove();out.remove();meta.textContent='(empty answer)'}
-  }catch(e){meta.textContent=e.name==='AbortError'?'stopped':'error: '+e.message;if(!text)out.remove()}
+    await w.finish();
+    meta.textContent=text?'Dewdrop · '+n+' tokens'+(tps?' · '+tps+' tok/s':''):'(empty answer)';
+  }catch(e){await w.finish();meta.textContent=e.name==='AbortError'?'stopped':'error: '+e.message}
+  orb.dataset.phase='idle';log.removeEventListener('scroll',onScroll);
   ctl=null;stopB.hidden=true;
-  if(text){hist.push({role:'assistant',content:text});save()}
+  if(text)hist.push({role:'assistant',content:text});
 });
 })();
 """

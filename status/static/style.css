@@ -236,23 +236,80 @@ body.locked #chat{display:none}
 .seg input:checked+label{color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.2)}
 .seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 
-/* Loading: an Aero orb that turns and breathes, with a shimmering status line.
-   .fast while the model is thinking. */
-.loading{display:flex;align-items:center;gap:12px;padding:2px 0;white-space:normal}
-.orb{position:relative;flex:none;width:30px;height:30px;border-radius:50%;overflow:hidden;
-  box-shadow:0 0 16px rgba(34,195,238,.55);animation:breathe 1.8s ease-in-out infinite}
-.orb i{position:absolute;inset:0;border-radius:50%;
-  background:conic-gradient(from 0deg,#22c3ee,#34d399,#a6ec7e,#5fc2ff,#8f7bff,#22c3ee);animation:spin 2.4s linear infinite}
-.orb::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;
-  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,.25) 34%,transparent 60%)}
-.loading.fast .orb i{animation-duration:.9s}
-.loading.fast .orb{box-shadow:0 0 20px rgba(143,123,255,.6)}
 .shimmer{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 @keyframes sweep{from{background-position:120% 0}to{background-position:-130% 0}}
-@media (prefers-reduced-motion:reduce){.orb,.orb i,.shimmer,.progress.live i{animation:none}}
+/* The quick chat looks and writes like Dewdrop (chat/static/css/orb.css + chat.css, scoped to #chat):
+   the dewdrop orb with its phases, the shimmering phase label, the stats line under every answer. */
+#chat .ai{display:grid;grid-template-columns:26px minmax(0,1fr);gap:12px;align-self:stretch;min-width:0}
+#chat .ai>.orb{--s:26px;margin-top:2px}
+#chat .ai .bub{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+#chat .meta2{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+#chat .meta2 .live{color:#22c3ee}
+#chat .phase-label{font-weight:600;background:linear-gradient(90deg,var(--muted) 30%,#22c3ee 50%,var(--muted) 70%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
+#chat .orb{--s:30px;
+  --d-core:rgba(255,255,255,.95);--d-mid:rgba(170,228,255,.38);--d-edge:rgba(80,170,230,.55);--d-glow:rgba(34,160,230,.22);--d-rim:rgba(255,255,255,.85);
+  --w-top:rgba(140,215,250,.34);--w-deep:rgba(40,140,220,.5);--c1:#bfe9ff;--c2:#d9f5e6;--c3:#e3dcff;
+  position:relative;display:inline-block;flex:none;width:var(--s);height:var(--s);border-radius:50%;overflow:hidden;isolation:isolate;vertical-align:middle;
+  transform:translateZ(0);
+  background:radial-gradient(circle at 50% 72%,var(--d-core) 0 11%,var(--d-mid) 42%,var(--d-edge) 100%);
+  box-shadow:inset 0 0 0 1px var(--d-rim),inset 0 -4px 9px rgba(0,0,0,.10),0 3px 12px var(--d-glow)}
+:root[data-theme=dark] #chat .orb{--d-core:rgba(150,240,255,.95);--d-mid:rgba(40,170,220,.5);--d-edge:#0b3b5e;--d-glow:rgba(60,200,255,.32);--d-rim:rgba(150,220,255,.35);
+  --w-top:rgba(90,200,250,.3);--w-deep:rgba(20,120,210,.52);--c1:#2f6f9c;--c2:#2a7d74;--c3:#4b4f9a}
+/* Blossom: rose quartz, pink water, a white glow (never blue) */
+:root[data-theme=blossom] #chat .orb{--d-core:rgba(255,255,255,.97);--d-mid:rgba(255,214,232,.55);--d-edge:rgba(232,128,176,.6);--d-glow:rgba(255,190,220,.45);
+  --d-rim:rgba(255,255,255,.9);--w-top:rgba(255,190,222,.36);--w-deep:rgba(226,104,160,.48);--c1:#ffd6ea;--c2:#ffe4f0;--c3:#ead9ff}
+/* the drop's own shine, on top of everything */
+#chat .orb::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:6;
+  background:radial-gradient(40% 26% at 35% 22%,rgba(255,255,255,.92),transparent 72%)}
+#chat .orb i{position:absolute;display:block}
+
+/* 4: pooled light at the bottom, softly glinting */
+#chat .orb i:nth-child(4){left:18%;right:18%;bottom:9%;height:22%;border-radius:50%;z-index:5;
+  background:radial-gradient(closest-side,#fff,transparent);animation:orb-glint 5s ease-in-out infinite}
+@keyframes orb-glint{50%{transform:scaleX(1.15);opacity:.7}}
+
+/* 1: clouds, only while thinking (the drop clouds over softly) */
+#chat .orb i:nth-child(1){inset:-10%;border-radius:50%;opacity:0;transition:opacity .6s;
+  background:radial-gradient(38% 34% at 30% 35%,var(--c1),transparent 70%),radial-gradient(36% 32% at 70% 45%,var(--c3),transparent 70%),
+    radial-gradient(40% 34% at 45% 72%,var(--c2),transparent 70%)}
+#chat .orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]) i:nth-child(1){
+  opacity:.85;animation:orb-cloud 7s ease-in-out infinite}
+@keyframes orb-cloud{0%,100%{transform:rotate(0) scale(1)}33%{transform:rotate(25deg) scale(1.08) translate3d(4%,-3%,0)}66%{transform:rotate(-15deg) scale(.95) translate3d(-4%,3%,0)}}
+#chat .orb:is([data-phase=thinking],[data-phase=searching],[data-phase=reading],[data-phase=summarising],[data-phase=compressing]){
+  animation:orb-breath 3.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes orb-breath{0%,100%{transform:scale(.97)}50%{transform:scale(1.03)}}
+
+/* 2: water. Its body starts below the waves (no darker band); two wave strips slide at different
+   speeds with a bright waterline; it rises with --fill and drains when the phase ends. */
+#chat .orb i:nth-child(2){left:0;right:0;top:0;height:100%;z-index:2;transform:translate3d(0,100%,0);
+  transition:transform 1.4s cubic-bezier(.33,0,.2,1);
+  background:linear-gradient(180deg,transparent 0 9%,var(--w-top) 9%,var(--w-deep))}
+#chat .orb[data-phase=writing] i:nth-child(2){transform:translate3d(0,calc((1 - var(--fill,.15)) * 100%),0)}
+#chat .orb i:nth-child(2)::before,#chat .orb i:nth-child(2)::after{content:"";position:absolute;left:0;width:200%;top:0;height:10%;
+  background-repeat:repeat-x;background-size:50% 100%;animation:orb-wave 4.2s linear infinite}
+#chat .orb i:nth-child(2)::before{opacity:.7;animation-duration:6.5s;animation-direction:reverse;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q12.5 1 25 5 T50 5 T75 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.22)'/%3E%3C/svg%3E")}
+#chat .orb i:nth-child(2)::after{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5 V10 H0Z' fill='rgba(255,255,255,0.16)'/%3E%3Cpath d='M0 5 Q16.7 9 33.3 5 T66.7 5 T100 5' fill='none' stroke='white' stroke-opacity='0.95' stroke-width='0.9'/%3E%3C/svg%3E")}
+@keyframes orb-wave{to{transform:translate3d(-50%,0,0)}}
+/* 3: little bubbles rising inside the water (only while writing) */
+#chat .orb i:nth-child(3){left:0;right:0;bottom:0;height:200%;z-index:3;opacity:0;transition:opacity .5s;
+  background:radial-gradient(circle at 30% 80%,transparent 0 1.3%,rgba(255,255,255,.9) 1.6% 2.2%,transparent 2.6%),
+    radial-gradient(circle at 62% 62%,transparent 0 1%,rgba(255,255,255,.85) 1.3% 1.8%,transparent 2.2%),
+    radial-gradient(circle at 45% 92%,transparent 0 1.1%,rgba(255,255,255,.85) 1.4% 2%,transparent 2.4%)}
+#chat .orb[data-phase=writing] i:nth-child(3){opacity:1;animation:orb-bubbles 3.6s linear infinite}
+@keyframes orb-bubbles{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+
+/* waiting in line: the drop asleep, grey and slowly breathing */
+#chat .orb[data-phase=waiting]{filter:grayscale(1);animation:orb-sleep 4s ease-in-out infinite}
+@keyframes orb-sleep{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:.8;transform:scale(1)}}
+
+@media (prefers-reduced-motion:reduce){.orb,#chat .orb *,#chat .orb i::before,#chat .orb i::after{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.shimmer,#chat .phase-label,.progress.live i{animation:none}}
 
 /* ------------------------------------------------------------------ phone */
 @media (max-width:700px){
@@ -291,3 +348,21 @@ body.locked .loop-intro{display:none}
 #add .start-loop{justify-self:end;padding:8px 22px}
 @media (max-width:760px){#add .loop-fields{grid-template-columns:minmax(0,1fr)}}
 .hidden-repos{margin:8px 0 0}
+
+/* ------------------------------------------------------------------ phones and the home-screen app */
+header{padding-top:max(12px,env(safe-area-inset-top))}
+main{padding-bottom:max(16px,env(safe-area-inset-bottom))}
+@media (max-width:700px){
+  html,body{overflow-x:hidden}
+  header{flex-wrap:nowrap;gap:8px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  header h1{font-size:17px;white-space:nowrap}
+  header #updated{display:none}
+  header .badge{font-size:12px;padding:4px 10px 4px 22px;white-space:nowrap}
+  header .seg label{padding:5px 7px}
+  /* wide tables scroll inside their card instead of widening the page */
+  .card table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card{min-width:0;overflow-wrap:anywhere}
+  .card code{white-space:normal;word-break:break-all}
+  #chat textarea{font-size:16px}   /* 16px: iOS does not zoom in on focus */
+  #unlock input,#add input,#add select{font-size:16px}
+}
