@@ -59,3 +59,7 @@ Updated `PATCH /api/me` to handle `icon` key (validates against ICONS, calls `up
 Added `GET /manifest.json` route returning PWA manifest with icons sized 192/512 using the session icon (or "aero" when no session), content-type `application/manifest+json`.
 Added `GET /apple-touch-icon.png` route serving `{icon}-180.png` bytes from the static icons directory with `Cache-Control: no-cache`.
 All 128 chat tests pass. `make check` passes (36/36).
+
+## Task E15 - Wire icon picker in chat/static/js/icons.js (2026-11-19)
+
+Implemented `start()` in `chat/static/js/icons.js`. On load, fetches `GET /api/me` and marks the matching `button[data-icon]` with class "on". On click, sends `PATCH /api/me` with `{"icon": ...}` and required headers; on success moves "on" class and shows save message, on failure shows error message. `node --check` passes, all 128 chat tests pass, `make check` passes (36/36).

@@ -43,7 +43,7 @@ Rules for every task:
   accept: make chat-test K="test_presets or TestProfileApi"
 - [x] E14: In chat/coder/app.py add the app icon to /api/me and the routes /manifest.json and /apple-touch-icon.png (`TODO (task E14)`)
   accept: make chat-test
-- [ ] E15: In chat/static/js/icons.js fill in `start` as its comment says
+- [x] E15: In chat/static/js/icons.js fill in `start` as its comment says
   accept: node --check chat/static/js/icons.js && make chat-test
 - [ ] E16: In chat/static/js/app.js show thinking, the search trail and the checker's marks (`TODO (task E16)`)
   accept: node --check chat/static/js/app.js && make chat-test && node --test chat/tests/js/stream.test.mjs
