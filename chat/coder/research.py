@@ -452,7 +452,13 @@ def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]
        {"role": "user", "content": f"Question: {question}\n\nSearches so far:\n" + "\n".join(done) + f"\n\nUseful sources found: {used}"}]
     Tests: test_step_flow.py::test_followup_and_passages
     """
-    raise NotImplementedError
+    src = ", ".join(enabled_sources(cfg)) or "none"
+    done = [f"- {s['source']}: {s['query']} ({s['found']} found)" for s in trail if s.get("kind") == "search"]
+    used = sum(1 for s in trail if s.get("kind") == "read" and s.get("status") == "used")
+    return [
+        {"role": "system", "content": FOLLOWUP_PROMPT.replace("{sources}", src)},
+        {"role": "user", "content": f"Question: {question}\n\nSearches so far:\n" + "\n".join(done) + f"\n\nUseful sources found: {used}"},
+    ]
 
 
 RANKS = {"Guideline": 1, "Meta-analysis": 2, "Systematic review": 2, "RCT": 3}
@@ -483,9 +489,14 @@ def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dic
       system = RULES, plus "\n\nExtra instructions from the user:\n" + cfg["instructions"].strip() when not empty
       return [{"role": "system", "content": system}, {"role": "user", "content": f"Sources:\n\n{pack}\n\nQuestion: {question}"}]
     """
-    # TODO (task F13), SPEC §15.5: a source with "passages" shows them instead of its text, one line each: '- "<passage>"'
-    #   (joined with "\n"). Tests: test_step_flow.py::test_followup_and_passages
-    pack = "\n\n".join(f"[{s['n']}] {s['title']} ({s.get('meta') or s['url']})\n{s['text']}" for s in sources)
+    def src_block(s: dict) -> str:
+        meta_or_url = s.get("meta") or s["url"]
+        if s.get("passages"):
+            passage_lines = "\n".join(f'- "{p}"' for p in s["passages"])
+            return f"[{s['n']}] {s['title']} ({meta_or_url})\n{passage_lines}"
+        return f"[{s['n']}] {s['title']} ({meta_or_url})\n{s['text']}"
+
+    pack = "\n\n".join(src_block(s) for s in sources)
     extra = cfg.get("instructions", "")
     if extra and extra.strip():
         system = RULES + "\n\nExtra instructions from the user:\n" + extra.strip()
@@ -500,8 +511,11 @@ def public_sources(sources: list[dict]) -> list[dict]:
     """
     result = []
     for s in sources:
-        out = {k: s[k] for k in ("n", "title", "url", "kind", "meta")}
-        out["quote"] = tools._cut(s.get("text", ""))
+        out = {k: s[k] for k in ("n", "title", "url", "kind", "meta") if k in s}
+        if s.get("passages"):
+            out["quote"] = tools._cut("\n".join(s["passages"]))
+        else:
+            out["quote"] = tools._cut(s.get("text", ""))
         out["type"] = s.get("type")
         out["site"] = s.get("site")
         result.append(out)

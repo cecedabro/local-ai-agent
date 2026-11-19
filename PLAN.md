@@ -39,7 +39,7 @@ Rules for every task:
   accept: make chat-test K="test_step_flow and pmc"
 - [x] F12: In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say
   accept: make chat-test K="test_step_flow and (extract or read_one)"
-- [ ] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
+- [x] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
   accept: make chat-test K="followup or public_sources or evidence_messages"
 - [ ] F14: In chat/coder/research.py fill in `investigate` as its docstring says
   accept: make chat-test K="investigate"
