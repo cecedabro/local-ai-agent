@@ -28,3 +28,7 @@ Implemented `evidence_messages(question, sources, cfg)` (SPEC §13.2 step 5) whi
 ## Task E11 - run_evidence in chat/coder/research.py (2026-11-19)
 
 Implemented `run_evidence(db, settings, chat, think, *, stream, complete, t, clock, stop)` (SPEC §13.2 step 6). Yields the full EvidenceHunt pipeline as SSE text: `phase` events (reading→thinking→searching→reading→summarising→writing), `trail` events for search steps, streaming `delta`/`thinking` events from the answer model, `verify` event with citation validation report, and a `done` event with message metadata, token counts, tps, context info, sources, and trail. Handles the no-sources fallback path with `NO_EVIDENCE` messages, Busy/GatewayError retries during streaming, stop propagation, and database storage via `add_message`, `update_chat_title`, and `update_chat_usage`. All `test_step_research` evidence tests pass. `make check` passes.
+
+## Task E10 - verify evidence_messages and public_sources in chat/coder/research.py (2026-11-19)
+
+Confirmed both functions were already implemented per their docstrings. `evidence_messages` builds the system message (RULES + optional user instructions) and user message with source pack. `public_sources` strips internal `text` field and adds a `quote` via `tools._cut`. `make chat-test K="test_step_research and evidence_messages"` passes. `make check` passes.
