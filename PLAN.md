@@ -23,7 +23,7 @@ Rules for every task:
   accept: make chat-test K="test_step_verify and (quotes or sentences)"
 - [x] E04: In chat/coder/verify.py fill in `check` as its docstring says
   accept: make chat-test K="test_step_verify"
-- [ ] E05: In chat/coder/db.py add the new message fields and the user icon (`TODO (task E05)`)
+- [x] E05: In chat/coder/db.py add the new message fields and the user icon (`TODO (task E05)`)
   accept: make chat-test K="test_step_research and db_fields or test_step_profiles or test_step_round2"
 - [ ] E06: In chat/coder/tools.py fill in `trail_step` as its docstring says
   accept: make chat-test K="test_step_research and trail_step"

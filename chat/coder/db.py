@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     pw_hash     TEXT NOT NULL,
     rights      TEXT NOT NULL DEFAULT 'chat',
     theme       TEXT NOT NULL DEFAULT 'auto',
+    icon        TEXT NOT NULL DEFAULT '',
     created     TEXT NOT NULL,
     last_login  TEXT
 );
@@ -185,6 +186,21 @@ class DB:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
             if "sources" not in cols:
                 conn.execute("ALTER TABLE messages ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "trail" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN trail TEXT NOT NULL DEFAULT '[]'")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "verify" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN verify TEXT DEFAULT NULL")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "thinking" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN thinking TEXT NOT NULL DEFAULT ''")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+            if "thought_s" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN thought_s REAL DEFAULT NULL")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+            if "icon" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
             conn.commit()
 
     def create_user(self, username: str, pw_hash: str, rights: list[str]) -> None:
@@ -344,13 +360,18 @@ class DB:
 
     def add_message(self, chat_id: int, role: str, content: str,
                     tokens: int | None = None, tps: float | None = None,
-                    stopped: bool = False, sources: list | None = None) -> int:
+                    stopped: bool = False, sources: list | None = None,
+                    trail: list | None = None, verify: dict | None = None,
+                    thinking: str = "", thought_s: float | None = None) -> int:
         now = _now_iso()
         with self._lock:
             conn = self._connect()
             cur = conn.execute(
-                "INSERT INTO messages (chat_id, role, content, created, tokens, tps, stopped, sources) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, role, content, now, tokens, tps, 1 if stopped else 0, json.dumps(sources or [])),
+                "INSERT INTO messages (chat_id, role, content, created, tokens, tps, stopped, sources, trail, verify, thinking, thought_s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, role, content, now, tokens, tps, 1 if stopped else 0,
+                 json.dumps(sources or []), json.dumps(trail or []),
+                 json.dumps(verify) if verify is not None else None,
+                 thinking or "", thought_s),
             )
             conn.commit()
             return cur.lastrowid
@@ -387,6 +408,10 @@ class DB:
                         "tps": r["tps"],
                         "stopped": bool(r["stopped"]),
                         "sources": json.loads(r["sources"] or "[]"),
+                        "trail": json.loads(r["trail"] or "[]"),
+                        "verify": json.loads(r["verify"]) if r["verify"] else None,
+                        "thinking": r["thinking"] or "",
+                        "thought_s": r["thought_s"],
                         "files": [],
                     }
                 if r["file_id"] is not None:
@@ -855,6 +880,13 @@ class DB:
     #      thought_s: float | None = None; stored as json.dumps(trail or []), None or json.dumps(verify), thinking or "", thought_s.
     #   3. get_messages adds "trail": json.loads(...), "verify": json.loads(...) or None, "thinking", "thought_s".
     #   4. update_user_icon(username, icon): UPDATE users SET icon = ? WHERE username = ?
+    # Done (task E05)
+
+    def update_user_icon(self, username: str, icon: str) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute("UPDATE users SET icon = ? WHERE username = ?", (icon, username))
+            conn.commit()
 
     def update_chat_usage(self, chat_id: int, prompt_tokens: int, completion_tokens: int) -> None:
         now = _now_iso()
