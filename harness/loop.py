@@ -810,9 +810,13 @@ class Run:
         pushed = self.push()
         pr = ""
         if self.args.push and self.args.pr and pushed:
-            res = sh(["gh", "pr", "create", "--head", self.branch,
-                      "--title", f"Agent run: {plan_title(self.repo) or self.branch}", "--body-file", "REPORT.md"],
-                     cwd=self.repo, timeout=60)
+            # A run that stopped before its plan was done gets a draft PR: its branch still holds TODO stubs, and
+            # merging it would put half-built code on main.
+            unfinished = bool(parse_plan((self.repo / "PLAN.md").read_text()))
+            title = f"Agent run: {plan_title(self.repo) or self.branch}"
+            res = sh(["gh", "pr", "create", "--head", self.branch, *(["--draft"] if unfinished else []),
+                      "--title", ("Unfinished, don't merge yet: " + title) if unfinished else title,
+                      "--body-file", "REPORT.md"], cwd=self.repo, timeout=60)
             pr = res.stdout.strip().splitlines()[-1] if res.returncode == 0 and res.stdout.strip() else ""
         done = sum(r.status == "done" for r in self.results)
         notify("Agent run finished", f"{ended}: {done}/{len(self.results)} done. {pr}".strip(), "checkered_flag")
