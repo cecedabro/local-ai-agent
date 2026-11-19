@@ -50,4 +50,35 @@
     if (!e.target.closest("#pmenu") || e.target.closest(".opt")) pmenu.classList.add("hidden");
   });
   if (profile) profile.setAttribute("aria-haspopup", "true");
+
+  // The keyboard: iOS lays the keyboard over the page instead of shrinking it, so the composer ends up
+  // hidden behind it. Follow the visible area (visualViewport) and size the app to it, so the composer sits
+  // right on top of the keyboard and its buttons stay tappable.
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  const fit = () => {
+    if (!vv) return;
+    root.style.setProperty("--app-h", `${Math.round(vv.height)}px`);
+    if (window.scrollY) window.scrollTo(0, 0);           // iOS scrolls the page up on focus; undo that
+  };
+  if (vv) { vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit(); }
+
+  // The text field grows with what you type (up to the CSS max-height) and shrinks again after sending.
+  const input = document.getElementById("input");
+  const grow = () => {
+    if (!input) return;
+    input.style.setProperty("--h", "auto");                 // measure the content at its natural height
+    input.style.setProperty("--h", `${input.scrollHeight + 2}px`);
+  };
+  if (input) {
+    input.addEventListener("input", grow);
+    document.getElementById("composer")?.addEventListener("submit", () => setTimeout(grow, 0));
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) setTimeout(grow, 0); });
+  }
+
+  // Tapping Quick/Think, the paperclip or send while typing keeps the keyboard open (no blur first),
+  // so the tap always lands on the button.
+  document.querySelector(".cbar")?.addEventListener("pointerdown", (e) => {
+    if (document.activeElement === input && e.target.closest("label, button")) e.preventDefault();
+  });
 })();

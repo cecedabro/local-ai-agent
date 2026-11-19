@@ -25,7 +25,7 @@ SEED = {
     ],
 }
 CITE = ("When you use a search result or page, cite it with its number in square brackets, like [1], right after "
-        "the sentence it supports. Do not invent sources.")
+        "the sentence it supports; quote its exact words when they matter. Do not invent sources or quotes.")
 
 
 def tokens(text: str) -> int:

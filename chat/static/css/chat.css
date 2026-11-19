@@ -388,3 +388,41 @@ a.cite{text-decoration:none}
 }
 /* the home-screen app (standalone): no browser bar, so the top needs the notch space on wide screens too */
 @media (display-mode:standalone){body.app{padding-top:env(safe-area-inset-top)}}
+
+/* ================================================================ phone polish 2 */
+/* page headers (profiles, account, admin) stay clear of the notch in the home-screen app */
+body.admin>header{padding-top:max(12px,env(safe-area-inset-top));padding-left:max(16px,env(safe-area-inset-left));
+  padding-right:max(16px,env(safe-area-inset-right))}
+/* the <header> inside a source card is not a page header */
+.src-card>header{position:static;z-index:auto;padding:0;background:none;border:0;box-shadow:none;
+  backdrop-filter:none;-webkit-backdrop-filter:none;flex-wrap:nowrap}
+.src-card>header .switch{margin-left:auto}
+.src-card textarea{width:100%;display:block}
+.filters input[type=checkbox]{width:18px;height:18px;margin:0;padding:0;flex:none}
+/* send / stop: the square sits exactly in the middle */
+.send{position:relative}
+.send.stop{color:transparent;font-size:inherit}
+.send.stop::before{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+/* the composer grows with the text (mobile.js), up to ~40% of the screen */
+.composer textarea{height:var(--h,auto);max-height:40vh;overflow-y:auto}
+.cbar{flex-wrap:nowrap}
+.cbar .seg label svg{width:14px;height:14px}
+@media (max-width:760px){
+  /* follows the visible area above the keyboard (mobile.js sets --app-h from visualViewport) */
+  body.app{height:var(--app-h,100dvh)}
+  .composer textarea{max-height:30vh}
+  .cbar .seg label{padding:6px 11px}
+}
+/* source cards that open: the quote and an Open link (stream.js sourcesHtml) */
+.ai .sources{align-items:start}
+.ai details.src{display:block;padding:0;border-radius:14px;background:var(--chip);border:1px solid var(--stroke-soft);transition:border-color .3s,box-shadow .3s}
+.ai details.src>summary{list-style:none;display:flex;gap:10px;align-items:flex-start;padding:9px 11px;cursor:pointer}
+.ai details.src>summary::-webkit-details-marker{display:none}
+.ai details.src>summary>div{min-width:0}
+.ai details.src[open]{grid-column:1/-1}
+.ai details.src.flash{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.src-body{padding:0 12px 11px 41px;font-size:13px;line-height:1.5}
+.src-body blockquote{margin:0 0 8px;padding-left:10px;border-left:3px solid var(--accent);color:var(--ink);opacity:.9}
+.src-open{font-weight:600;text-decoration:none;color:var(--link)}
+a.cite{cursor:pointer;margin:0 1px}
+.filters select{padding:4px 28px 4px 10px;min-width:64px}

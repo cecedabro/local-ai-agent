@@ -116,7 +116,8 @@ class TestProfileAnswers:
             labels = [d["label"] for e, d in evs if e == "phase"]
             assert 'Searching the web for "griepprik 60+"…' in labels
             done = evs[-1][1]
-            assert done["sources"] == [{"n": 1, "title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "kind": "web"}]
+            assert done["sources"] == [{"n": 1, "title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "kind": "web",
+                                        "quote": "Wie krijgt hem"}]
             assert any(r["path"].startswith("/search?") for r in gw.requests), "SearXNG was asked"
             second = gw.chat_requests()[-1]["body"]["messages"]
             assert second[-1]["role"] == "tool" and "griepprik" in second[-1]["content"]

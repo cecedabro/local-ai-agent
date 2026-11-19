@@ -1,7 +1,7 @@
 // The chat page (chat/coder/templates/chat.html). ES module. Hooks: chat/SPEC.md §9 and §11.
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
-import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks } from "./stream.js";
+import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -639,8 +639,9 @@ function setupSidebar() {
 /** Wire everything once at start. */
 async function start() {
   state.follow = new Follow($("#thread"), (on) => { $("#jump").hidden = on; });
-  $("#jump").addEventListener("click", () => state.follow.bottom());
+  $("#jump").addEventListener("click", () => state.follow.bottom(true));
   codeActions($("#messages"));
+  sourceActions($("#messages"));
   $("#composer").addEventListener("submit", (e) => {
     e.preventDefault();
     if (state.busy) stopAnswer(); else send();

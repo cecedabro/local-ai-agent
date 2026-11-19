@@ -194,8 +194,11 @@ async function main() {
     await ev(`document.getElementById('new-chat').click()`);
     await sendText("search: do I need a flu shot?");
     await idle();
-    if (!(await ev(`${last(".sources .src")}?.href==='https://www.rivm.nl/griepprik'`))) throw new Error("no source card under the answer");
+    if (!(await ev(`${last(".sources details.src .src-open")}?.href==='https://www.rivm.nl/griepprik'`))) throw new Error("no source card under the answer");
     if (!(await ev(`${last("a.cite")}?.textContent==='1'`))) throw new Error("[1] is not a citation link");
+    await ev(`${last("a.cite")}.click()`);
+    await waitFor(() => ev(`${last("details.src")}?.open===true`), 3000, "the source card to open when [1] is tapped");
+    if (!/Wie krijgt hem/.test(await ev(`${last("details.src blockquote")}?.textContent||''`))) throw new Error("the source card has no quote");
   });
 
   await check("passkey: add one on /account, sign out, sign in with it", async () => {
