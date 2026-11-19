@@ -27,7 +27,7 @@ Rules for every task:
   accept: make chat-test K="test_step_clear and mesh_check"
 - [x] F04: In chat/coder/research.py do the `TODO (task F04)` comments in `parse_plan` and fill in `plan_about`
   accept: make chat-test K="parse_plan or plan_object"
-- [ ] F05: In chat/coder/research.py fill in `gather` as its docstring says
+- [x] F05: In chat/coder/research.py fill in `gather` as its docstring says
   accept: make chat-test K="gather"
 - [ ] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
   accept: make chat-test K="test_step_clear and order"

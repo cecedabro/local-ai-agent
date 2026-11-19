@@ -455,7 +455,8 @@ def pmc_id(url: str) -> str | None:
       m = _PMC.match(url or ""); return m.group(1).upper() when it matched, else None.
     Tests: test_step_flow.py::test_pmc
     """
-    raise NotImplementedError
+    m = _PMC.match(url or "")
+    return m.group(1).upper() if m else None
 
 
 async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
@@ -470,7 +471,51 @@ async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
       return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/", "text": text[:PAGE_CHARS]}
     Tests: test_step_flow.py::test_pmc
     """
-    raise NotImplementedError
+    digits = pmcid.upper().removeprefix("PMC")
+    try:
+        r = await client.get(
+            f"{PUBMED}/efetch.fcgi",
+            params={"db": "pmc", "id": digits, "retmode": "xml"},
+            headers={"User-Agent": UA},
+            timeout=30,
+        )
+    except httpx.HTTPError as e:
+        raise ToolError(f"PubMed Central failed ({type(e).__name__})") from e
+
+    if r.status_code != 200:
+        raise ToolError(f"PubMed Central answered {r.status_code}")
+
+    try:
+        root = ET.fromstring(r.text)
+    except ET.ParseError:
+        raise ToolError("PubMed Central failed (ParseError)")
+
+    art = root.find(".//article")
+    if art is None:
+        raise ToolError(f"PubMed Central has no text for {pmcid}")
+
+    # Extract title
+    title_el = art.find(".//article-title")
+    if title_el is not None:
+        title = "".join(title_el.itertext()).strip()
+        title = re.sub(r"\s+", " ", title)
+    else:
+        title = ""
+
+    # Extract text from <abstract> and <body> <p> elements
+    parts: list[str] = []
+    for p in art.findall(".//abstract//p") + art.findall(".//body//p"):
+        txt = "".join(p.itertext()).strip()
+        txt = re.sub(r"\s+", " ", txt)
+        if txt:
+            parts.append(txt)
+
+    if not parts:
+        raise ToolError(f"PubMed Central has no text for {pmcid}")
+
+    text = " ".join(parts)
+    return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/",
+            "text": text[:PAGE_CHARS]}
 
 
 # ------------------------------------------------------------------ the tools offered to the model

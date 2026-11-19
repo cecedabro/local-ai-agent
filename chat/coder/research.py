@@ -244,7 +244,120 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
     Tests: test_step_research.py::test_gather, ::test_gather_caps_sources, test_step_clear.py::test_gather_mesh_types_and_sites,
       test_step_flow.py::test_gather_broadens_and_reads_pmc
     """
-    raise NotImplementedError
+    sources: list[dict] = []
+    trail: list[dict] = []
+    seen_urls: set[str] = set()
+
+    pub = None
+    for s in cfg.get("sources", []):
+        if s.get("kind") == "pubmed" and s.get("enabled", True):
+            pub = s
+            break
+    filters = pub["filters"] if pub else None
+    if filters is None:
+        filters = None
+
+    def step(s: dict) -> None:
+        trail.append(s)
+        if on_step is not None:
+            result = on_step(s)
+            if asyncio.iscoroutine(result):
+                asyncio.get_event_loop().run_until_complete(result)
+
+    def add(title: str, url: str, kind: str, meta: str, text: str,
+            type_: str | None = None, site: str | None = None) -> None:
+        if len(sources) >= MAX_SOURCES or url in seen_urls:
+            return
+        seen_urls.add(url)
+        sources.append({
+            "n": len(sources) + 1,
+            "title": title or url,
+            "url": url,
+            "kind": kind,
+            "meta": meta,
+            "text": text[:SOURCE_CHARS],
+            "type": type_,
+            "site": site,
+        })
+
+    def articles(res: list[dict]) -> None:
+        for a in res:
+            parts = [p for p in (a.get("type"), a.get("journal"), a.get("year")) if p]
+            meta = " · ".join(parts)
+            add(a["title"], a["url"], "pubmed", meta, a.get("abstract", ""), type_=a.get("type"))
+
+    for item in plan:
+        source = item["source"]
+        q = item["query"]
+
+        if source == "pubmed":
+            # Resolve MeSH headings
+            mesh = []
+            if item.get("mesh"):
+                mesh = await t.mesh_check(client, item["mesh"])
+
+            info: dict = {}
+            try:
+                res = await t.pubmed_search(client, q, filters, n=PUBMED_N, mesh=mesh, info=info)
+            except tools.ToolError as e:
+                step({"kind": "search", "source": "PubMed", "query": q, "found": 0, "url": None, "error": str(e)})
+                continue
+
+            step({"kind": "search", "source": "PubMed", "query": q, "found": len(res),
+                  "url": PUBMED_WEB + quote_plus(info.get("term") or q),
+                  "mesh": mesh, "translation": info.get("translation", "")})
+            articles(res)
+
+            # Broader search
+            if len(res) < MIN_FOUND and (filters or mesh):
+                info2: dict = {}
+                try:
+                    res2 = await t.pubmed_search(client, q, None, n=PUBMED_N, mesh=[], info=info2)
+                except tools.ToolError as e:
+                    step({"kind": "search", "source": "PubMed", "query": q, "found": 0,
+                          "url": None, "error": str(e), "broader": True})
+                    continue
+                term_or_q = info2.get("term") or q
+                step({"kind": "search", "source": "PubMed", "query": q, "found": len(res2),
+                      "url": PUBMED_WEB + quote_plus(term_or_q),
+                      "mesh": [], "translation": info2.get("translation", ""), "broader": True})
+                articles(res2)
+
+        else:
+            # site:<d> or web
+            domain = source.removeprefix("site:") if source.startswith("site:") else None
+            source_label = domain or "the web"
+
+            try:
+                res = await t.web_search(client, searxng_url, q, site=domain)
+            except tools.ToolError as e:
+                step({"kind": "search", "source": source_label, "query": q, "found": 0, "url": None, "error": str(e)})
+                continue
+
+            step({"kind": "search", "source": source_label, "query": q, "found": len(res), "url": None})
+
+            for r in res[:PAGES_PER_SEARCH]:
+                if len(sources) >= MAX_SOURCES:
+                    break
+                pmc = t.pmc_id(r.get("url", ""))
+                if pmc:
+                    try:
+                        page = await t.pmc_text(client, pmc)
+                    except tools.ToolError as e:
+                        step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        continue
+                else:
+                    allowed = (lambda h, d=domain: tools._within(h, d)) if domain else None
+                    try:
+                        page = await t.fetch_page(client, r["url"], allowed=allowed)
+                    except tools.ToolError as e:
+                        step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        continue
+
+                step({"kind": "open", "title": page["title"], "url": page["url"]})
+                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=domain)
+
+    return sources, trail
 
 
 def extract_messages(question: str, src: dict) -> list[dict]:
