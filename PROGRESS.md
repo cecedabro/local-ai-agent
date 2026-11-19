@@ -47,3 +47,24 @@
 - **Change** (`parse_quotes`): Strips fence/brace/bracket delimiters from text, parses JSON, extracts "quotes" from dict or uses object directly, filters to unique strings with 4+ words after stripping quotes, caps at MAX_PASSAGES.
 - **Change** (`read_one`): Calls complete with extract_messages, catches Busy/GatewayError returning error step, filters parse_quotes results through verify.find_quote for word-for-word verification.
 - `make chat-test K="test_step_flow and (test_extract_messages_and_parse_quotes or test_read_one)"` passes (2/2). `make check` passes (36/36).
+
+## Task F14 - `investigate` implementation
+- **File**: `chat/coder/research.py` — filled in the `investigate` function (line ~539).
+- **Change**: Full research loop per docstring — parses the initial plan via `plan_messages`/`parse_plan`, iterates rounds up to `MAX_ROUNDS`, calls `gather` on each search (with broader fallback when `len(res) < MIN_FOUND` and filters/mesh present), deduplicates by URL via `done_q`, reads each candidate via `read_one` tracking `used`/`candidates`/`trail`, yields SSE `phase` and `trail` events, handles `gateway.Busy`/`GatewayError`, then calls `order` and caps `used` at `MAX_USED`. Fixed `out = out or {}` to `out = out if out is not None else {}` to avoid replacing an empty dict with a new one (which left caller's dict unmodified).
+- `make chat-test K="investigate"` passes (2/2). `make check` passes (36/36).
+
+## Task F15 - `run_evidence` wiring
+- **File**: `chat/coder/research.py:662` — replaced the old plan+gather+order research loop in `run_evidence` with a call to `investigate`.
+- **Change**: `out = {}; async for ev in investigate(question, cfg, settings, complete, t, stop, out): yield ev; sources = out.get("used", []); trail = out.get("trail", [])`. The `investigate` call now drives all search/reading phases and populates `out["used"]` and `out["trail"]`.
+- `make chat-test K="run_evidence"` passes (4/4). `make chat-test K="sites_first_and_ordered"` passes (1/1). `make check` passes (36/36).
+
+## Task F16 - `summary_sentences` and `check` integration
+- **File**: `chat/coder/verify.py` — implemented `summary_sentences` (line ~135) and integrated it into `check`.
+- **Change** (`summary_sentences`): Splits answer into sections at heading lines (`#` outside ``` code blocks), identifies summary sections (name matches `SUMMARY_HEADINGS` or name is `""`), extracts sentences via `sentences()` from those sections.
+- **Change** (`check`): Replaced the TODO with `summary = set(summary_sentences(answer))` and skips summary sentences from the uncited list.
+- `make chat-test K="summary_sentences"` passes (1/1). `make chat-test K="check"` passes (3/3). `make check` passes (36/36).
+
+## Task F17 - `group_of`, `label_of` and wiring
+- **File**: `chat/coder/profiles.py` — implemented `group_of` (line ~114, pubmed→research, file→documents, SEED card domain→card group, else websites) and `label_of` (line ~123, SEED card domain→card label, else title/domain/""); wired into `public` function (line ~283).
+- **File**: `chat/coder/app.py:468` — wired `group_of`/`label_of` into `_source_json`.
+- `make chat-test K="groups_and_labels"` passes (1/1). `make chat-test K="seeds_evidence or dutch_guidelines"` passes (2/2). `make check` passes (36/36).

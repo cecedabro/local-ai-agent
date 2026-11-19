@@ -112,19 +112,35 @@ GROUPS = ("guidelines", "medicines", "research", "documents", "websites")   # th
 
 
 def group_of(src: dict) -> str:
-    r"""TODO (task F17). The sources page's group of a source (SPEC §15.6): kind "pubmed" -> "research"; kind "file" ->
+    r"""The sources page's group of a source (SPEC §15.6): kind "pubmed" -> "research"; kind "file" ->
     "documents"; a website whose domain is the domain of a card in SEED["evidence"] -> that card's "group"; else "websites".
     Tests: test_step_flow.py::test_groups_and_labels
     """
-    raise NotImplementedError
+    kind = src.get("kind", "")
+    if kind == "pubmed":
+        return "research"
+    if kind == "file":
+        return "documents"
+    if kind == "website":
+        domain = src.get("domain", "")
+        for card in SEED.get("evidence", []):
+            if card.get("domain") == domain:
+                return card.get("group", "")
+    return "websites"
 
 
 def label_of(src: dict) -> str:
-    r"""TODO (task F17). A source's name on the page (SPEC §15.6): a website whose domain is the domain of a card in
+    r"""A source's name on the page (SPEC §15.6): a website whose domain is the domain of a card in
     SEED["evidence"] -> that card's "label"; else src["title"] (or the domain, or "").
     Tests: test_step_flow.py::test_groups_and_labels
     """
-    raise NotImplementedError
+    kind = src.get("kind", "")
+    if kind == "website":
+        domain = src.get("domain", "")
+        for card in SEED.get("evidence", []):
+            if card.get("domain") == domain and card.get("label"):
+                return card["label"]
+    return src.get("title") or src.get("domain") or ""
 
 
 def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
@@ -264,7 +280,7 @@ def public(cfg: dict, settings: Any) -> dict:
             out["tokens"] = tokens(s.get("content", ""))
         else:
             out["tokens"] = 0
-        # TODO (task F17): out["group"], out["label"] = group_of(s), label_of(s)   (SPEC §15.6)
+        out["group"], out["label"] = group_of(s), label_of(s)   # SPEC §15.6
         sources_out.append(out)
     return {"profile": profile, "name": NAMES[profile], "instructions": cfg["instructions"],
             "web": cfg["web"], "sources": sources_out, "budget": budget(cfg, settings)}

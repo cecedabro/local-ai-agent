@@ -41,7 +41,7 @@ Rules for every task:
   accept: make chat-test K="test_step_flow and (extract or read_one)"
 - [x] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
   accept: make chat-test K="followup or public_sources or evidence_messages"
-- [ ] F14: In chat/coder/research.py fill in `investigate` as its docstring says
+- [x] F14: In chat/coder/research.py fill in `investigate` as its docstring says
   accept: make chat-test K="investigate"
 - [ ] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`)
   accept: make chat-test K="test_step_research or test_step_clear or TestEvidenceV2 or mesh_in_a_real_answer"

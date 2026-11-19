@@ -559,7 +559,74 @@ async def investigate(question: str, cfg: dict, settings: Any, complete: Callabl
       at the end, after the rounds: used[:] = [{**s, "n": i + 1} for i, s in enumerate(order(used)[:MAX_USED])]   (change `used` in place: out holds it)
     Tests: test_step_flow.py::test_investigate_two_rounds, ::test_investigate_enough_in_one_round_and_stop
     """
-    raise NotImplementedError
+    if out is None:
+        out = {}
+    trail: list[dict] = []
+    candidates: list[dict] = []
+    used: list[dict] = []
+    done_q: set[tuple[str, str]] = set()
+    out.update(used=used, trail=trail)
+
+    def note(step: dict) -> str:
+        trail.append(step)
+        return _sse("trail", {"step": step})
+
+    yield _phase("thinking", "Understanding the question…")
+
+    try:
+        plan_text = await complete(settings, plan_messages(question, cfg))
+    except (gateway.Busy, gateway.GatewayError):
+        plan_text = ""
+    plan = parse_plan(plan_text, cfg, question)
+
+    yield note({"kind": "plan", "about": plan_about(plan_text),
+                "queries": [i["query"] for i in plan],
+                "mesh": [m for i in plan for m in i.get("mesh", [])]})
+
+    async with httpx.AsyncClient() as client:
+        for rnd in range(1, MAX_ROUNDS + 1):
+            new: list[dict] = []
+            for item in _site_first(plan):
+                if stop and stop.is_set():
+                    break
+                src_key = (item["source"], item["query"].lower())
+                if src_key in done_q:
+                    continue
+                done_q.add(src_key)
+                yield _phase("searching", label(item))
+                got, steps = await gather([item], cfg, client, settings.SEARXNG_URL, t)
+                for s in steps:
+                    yield note(s)
+                for src in got:
+                    if len(candidates) < MAX_SOURCES and src.get("url") not in {c["url"] for c in candidates}:
+                        src = {**src, "n": len(candidates) + 1}
+                        candidates.append(src)
+                        new.append(src)
+            for i, src in enumerate(new, 1):
+                if stop and stop.is_set():
+                    break
+                yield _phase("reading", f"Reading {i} of {len(new)}: {src['title'][:60]}…")
+                quotes, st = await read_one(question, src, settings, complete)
+                yield note(st)
+                if quotes:
+                    used.append({**src, "passages": quotes})
+            if len(used) >= MIN_USED or rnd == MAX_ROUNDS or (stop and stop.is_set()):
+                break
+            yield _phase("thinking", "Looking further with other words…")
+            try:
+                more = await complete(settings, followup_messages(question, cfg, trail))
+            except (gateway.Busy, gateway.GatewayError):
+                break
+            plan = [i for i in parse_plan(more, cfg)
+                    if (i["source"], i["query"].lower()) not in done_q]
+            if not plan:
+                break
+            yield note({"kind": "plan", "about": plan_about(more),
+                        "queries": [i["query"] for i in plan],
+                        "mesh": [m for i in plan for m in i.get("mesh", [])],
+                        "round": rnd + 1})
+
+    used[:] = [{**s, "n": i + 1} for i, s in enumerate(order(used)[:MAX_USED])]
 
 
 async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
@@ -592,24 +659,11 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     msgs = db.get_messages(chat["id"], chat["username"])
     question = msgs[-1]["content"]
     cfg = profiles.config(db, chat["username"], chat["profile"])
-    # TODO (task F15), SPEC §15.5: run the research: out = {}; yield every chunk of
-    #   investigate(question, cfg, settings, complete, t, stop, out); then sources, trail = out["used"], out["trail"].
-    #   Tests: test_step_research.py (run_evidence), test_step_clear.py::test_run_evidence_sites_first_and_ordered
-    plan_text = await complete(settings, plan_messages(question, cfg))
-    plan = parse_plan(plan_text, cfg, question) if plan_text else []
-    sources: list[dict] = []
-    trail: list[dict] = []
-    ordered = _site_first(plan)
-    async with httpx.AsyncClient() as client:
-        for item in ordered:
-            got, steps = await gather([item], cfg, client, settings.SEARXNG_URL, t)
-            trail.extend(steps)
-            for s in got:
-                if s.get("url") not in {src.get("url") for src in sources} and len(sources) < MAX_SOURCES:
-                    sources.append(s)
-            if stop and stop.is_set():
-                break
-    sources = order(sources)
+    out: dict = {}
+    async for ev in investigate(question, cfg, settings, complete, t, stop, out):
+        yield ev
+    sources = out.get("used", [])
+    trail = out.get("trail", [])
 
     lang = "nl" if looks_dutch(question) else "en"
 

@@ -465,7 +465,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     def _source_json(s: dict) -> dict:
         out = {k: s[k] for k in ("id", "kind", "title", "domain", "note", "filters", "enabled", "created")}
         out["tokens"] = profiles.tokens(s.get("content", "") or "") if s.get("kind") == "file" else 0
-        # TODO (task F17): out["group"], out["label"] = profiles.group_of(s), profiles.label_of(s)   (SPEC §15.6)
+        out["group"], out["label"] = profiles.group_of(s), profiles.label_of(s)   # SPEC §15.6
         return out
 
     @app.post("/api/profiles/{profile}/sources", status_code=201)

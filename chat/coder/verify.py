@@ -133,7 +133,7 @@ SUMMARY_HEADINGS = re.compile(r"short answer|kort antwoord|summary|samenvatting|
 
 
 def summary_sentences(answer: str) -> list[str]:
-    r"""TODO (task F16). The sentences that summarise the quotes and need no [n] (SPEC §15.5), in order.
+    r"""The sentences that summarise the quotes and need no [n] (SPEC §15.5), in order.
       no line of the answer starts with "#" (re.search(r"^\s*#", answer, re.M) is None) -> []
       Split the answer into sections at heading lines (a line whose lstrip() starts with "#", outside ``` code blocks; a line
       starting with ``` toggles code). The text before the first heading is a section with the name "". A section's name is
@@ -141,7 +141,35 @@ def summary_sentences(answer: str) -> list[str]:
       For each section whose name is "" or matches SUMMARY_HEADINGS: add [x["text"] for x in sentences(the section's lines joined by "\n")].
     Tests: test_step_flow.py::test_summary_sentences
     """
-    raise NotImplementedError
+    if re.search(r"^\s*#", answer, re.M) is None:
+        return []
+    sections: list[tuple[str, list[str]]] = []
+    current_name = ""
+    current_lines: list[str] = []
+    in_code = False
+    for line in answer.split("\n"):
+        if line.startswith("```"):
+            in_code = not in_code
+            current_lines.append(line)
+            continue
+        if in_code:
+            current_lines.append(line)
+            continue
+        heading_m = re.match(r"^(#+)\s*(.*)", line)
+        if heading_m:
+            sections.append((current_name, current_lines))
+            current_name = heading_m.group(1).rstrip() + " " + heading_m.group(2).strip()
+            current_lines = []
+        else:
+            current_lines.append(line)
+    sections.append((current_name, current_lines))
+    result: list[str] = []
+    for name, lines in sections:
+        if name == "" or SUMMARY_HEADINGS.search(name):
+            section_text = "\n".join(l for l in lines if not l.startswith("```"))
+            for x in sentences(section_text):
+                result.append(x["text"])
+    return result
 
 
 def check(answer: str, sources: list[dict]) -> dict:
@@ -168,11 +196,12 @@ def check(answer: str, sources: list[dict]) -> dict:
             why = "" if ok else "not in source " + ", ".join(str(c) for c in cited)
             quoted.append({**q, "ok": ok, "why": why})
     sents = sentences(answer)
-    # TODO (task F16), SPEC §15.5: summary = set(summary_sentences(answer)); a sentence in it is never listed as uncited.
-    #   Tests: test_step_flow.py::test_summary_sentences
+    summary = set(summary_sentences(answer))
     uncited: list[str] = []
     for idx, s in enumerate(sents):
         cited_nums.update(s["cites"])
+        if s["text"] in summary:
+            continue
         if not s["cites"] and len(re.findall(r"\w+", s["text"])) >= 8:
             if idx == len(sents) - 1 and any(w in normalize(s["text"]) for w in STRENGTH_WORDS):
                 continue
