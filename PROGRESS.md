@@ -30,3 +30,8 @@
 - **File** `chat/coder/profiles.py:130` — filled in `missing_defaults`: returns seed cards not yet present — pubmed if no source has kind "pubmed", website cards whose domain isn't in any source.
 - **File** `chat/coder/app.py:499` — added `POST /api/profiles/{profile}/defaults` route: calls `missing_defaults`, adds each card via `db.add_source`, returns `{"added": N, "sources": [...]}`.
 - `make chat-test K="missing_defaults or add_defaults"` passes (2/2). `make check` passes (36/36).
+
+## Task F09 - `#add-defaults` button wiring
+- **File**: `chat/static/js/profiles.js:329` — filled in the `TODO (task F09)` block.
+- **Change**: Added click listener for `#add-defaults` that POSTs to `/api/profiles/${state.profile}/defaults`, shows "Added N source(s)." or "You already have all the default sources." based on response, errors shown via `say(String(e), true)`, then refreshes.
+- `node --check chat/static/js/profiles.js` passes. `make chat-test K="add_defaults"` passes (1/1). `make check` passes (36/36).

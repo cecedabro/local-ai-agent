@@ -33,7 +33,7 @@ Rules for every task:
   accept: make chat-test K="test_step_clear and order"
 - [x] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
   accept: make chat-test K="missing_defaults or add_defaults"
-- [ ] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
+- [x] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
   accept: node --check chat/static/js/profiles.js && make chat-test K="add_defaults"
 - [ ] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
   accept: make chat-test K="test_step_flow and pmc"
