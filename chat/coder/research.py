@@ -40,23 +40,38 @@ RULES = (
 
 
 def looks_dutch(text: str) -> bool:
-    r"""TODO (task E07). True when at least two of the question's words (re.findall(r"[a-zà-ÿ]+", lower case)) are in _DUTCH.
+    r"""True when at least two of the question's words (re.findall(r"[a-zà-ÿ]+", lower case)) are in _DUTCH.
     """
-    raise NotImplementedError
+    words = re.findall(r"[a-zà-ÿ]+", text.lower())
+    return sum(1 for w in words if w in _DUTCH) >= 2
 
 
 def enabled_sources(cfg: dict) -> list[str]:
-    r"""TODO (task E07). The plan sources this profile allows, in this order: "pubmed" (once, when an enabled pubmed card exists), then
+    r"""The plan sources this profile allows, in this order: "pubmed" (once, when an enabled pubmed card exists), then
     "site:<domain>" for each enabled website card, then "web" when cfg["web"].
     """
-    raise NotImplementedError
+    result = []
+    for s in cfg.get("sources", []):
+        if not s.get("enabled", True):
+            continue
+        if s["kind"] == "pubmed":
+            result.append("pubmed")
+        elif s["kind"] == "website":
+            result.append(f"site:{s['domain']}")
+    if cfg.get("web"):
+        result.append("web")
+    return result
 
 
 def plan_messages(question: str, cfg: dict) -> list[dict]:
-    r"""TODO (task E07). The planning call's messages: [{"role": "system", "content": PLAN_PROMPT with "{sources}" replaced by
+    r"""The planning call's messages: [{"role": "system", "content": PLAN_PROMPT with "{sources}" replaced by
     ", ".join(enabled_sources(cfg)) (or "none")}, {"role": "user", "content": question}].
     """
-    raise NotImplementedError
+    src = ", ".join(enabled_sources(cfg)) if enabled_sources(cfg) else "none"
+    return [
+        {"role": "system", "content": PLAN_PROMPT.replace("{sources}", src)},
+        {"role": "user", "content": question},
+    ]
 
 
 def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
@@ -73,11 +88,18 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
 
 
 def label(step: dict) -> str:
-    r"""TODO (task E07). The phase label for one planned search: 'Searching PubMed for "<query[:80]>"…' for pubmed, 'Searching the web for …'
+    r"""The phase label for one planned search: 'Searching PubMed for "<query[:80]>"…' for pubmed, 'Searching the web for …'
     for web, 'Searching <domain> for …' for "site:<domain>".
     Tests (E07): test_step_research.py::test_helpers
     """
-    raise NotImplementedError
+    q = step["query"][:80]
+    if step["source"] == "pubmed":
+        return f'Searching PubMed for "{q}"…'
+    elif step["source"] == "web":
+        return f'Searching the web for "{q}"…'
+    else:
+        domain = step["source"].removeprefix("site:")
+        return f'Searching {domain} for "{q}"…'
 
 
 async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: Any = tools,

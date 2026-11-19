@@ -27,7 +27,7 @@ Rules for every task:
   accept: make chat-test K="test_step_research and db_fields or test_step_profiles or test_step_round2"
 - [x] E06: In chat/coder/tools.py fill in `trail_step` as its docstring says
   accept: make chat-test K="test_step_research and trail_step"
-- [ ] E07: In chat/coder/research.py fill in `looks_dutch`, `enabled_sources`, `plan_messages` and `label` as their docstrings say
+- [x] E07: In chat/coder/research.py fill in `looks_dutch`, `enabled_sources`, `plan_messages` and `label` as their docstrings say
   accept: make chat-test K="test_step_research and helpers"
 - [ ] E08: In chat/coder/research.py fill in `parse_plan` as its docstring says
   accept: make chat-test K="test_step_research and parse_plan"
