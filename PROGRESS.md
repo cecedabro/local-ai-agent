@@ -94,3 +94,7 @@
 - Fix: replaced `target.dataset.source` with `target.closest("[data-source]").dataset.source` (same pattern already used for filter controls).
 - All acceptance commands pass: `make chat-test` (102 tests), `make chat-browser-test` (all 9 rounds), `make check` (36 tests), `node --test chat/tests/js/stream.test.mjs` (11 tests).
 - All acceptance commands pass: `node --check chat/static/js/profiles.js`, `make chat-test` (102 tests), and `make check` (36 tests).
+
+## Task B19 - "Profiles and sources" section in chat/README.md
+- Added a `## Profiles and sources` section to `chat/README.md` (7 lines) covering the profiles page, instructions, web toggle, source cards (PubMed with filters, websites, documents up to 5 MB), source notes, context bar budget, numbered source cards under answers, and the `SEARXNG_URL` setting requirement.
+- All acceptance commands pass: `make chat-test` (102 tests) and `make check` (36 tests).

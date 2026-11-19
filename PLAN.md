@@ -51,7 +51,7 @@ Rules for every task:
   accept: node --check chat/static/js/profiles.js && make chat-test
 - [x] B18: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js or chat/static/js/profiles.js (see "B18 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [ ] B19: Add a "## Profiles and sources" section to chat/README.md (see "B19 details")
+- [x] B19: Add a "## Profiles and sources" section to chat/README.md (see "B19 details")
   accept: grep -q "## Profiles and sources" chat/README.md && grep -q "SEARXNG_URL" chat/README.md && make chat-test
 
 ## B18 details
