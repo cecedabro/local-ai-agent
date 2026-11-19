@@ -210,7 +210,16 @@ def study_type(pub_types: list[str] | None) -> str | None:
       none -> None
     Tests: test_step_clear.py::test_study_type
     """
-    raise NotImplementedError
+    if pub_types is None:
+        return None
+    types = [t.strip() for t in pub_types]
+    for label, names in STUDY_TYPES:
+        for t in types:
+            if t in names:
+                return label
+            if label == "Clinical trial" and t.startswith("Clinical Trial"):
+                return "Clinical trial"
+    return None
 
 
 async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list[str]:

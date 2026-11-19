@@ -15,7 +15,7 @@ Rules for every task:
   `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, the constants `PLAN_PROMPT`, `RULES`, `RANKS`,
   `STUDY_TYPES` and `SEED`, and in `chat/coder/tools.py` the functions `html_text`, `is_public` and `fetch_page`.
 
-- [ ] F01: In chat/coder/tools.py fill in `study_type` as its docstring says
+- [x] F01: In chat/coder/tools.py fill in `study_type` as its docstring says
   accept: make chat-test K="test_step_clear and study_type"
 - [ ] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
   accept: make chat-test K="test_step_clear and (pubmed_term_mesh or pubmed_search_mesh) or test_step_tools"
