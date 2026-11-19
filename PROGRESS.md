@@ -25,3 +25,8 @@
 - **Change** (`public_sources`): Added "type" and "site" keys (using `.get()` with None default), completing the F13 TODO for source metadata in the sources page output.
 - **Change** (`run_evidence`): Replaced TODO stub with research loop — parses the plan, applies `_site_first` ordering, iterates with `gather` inside an `httpx.AsyncClient()` context, deduplicates by URL, respects `MAX_SOURCES` and stop signals, then calls `order`.
 - `make chat-test K="test_step_clear and order"` passes (2/2). `make check` passes (36/36).
+
+## Task F08 - `missing_defaults` and `/api/profiles/{profile}/defaults` route
+- **File** `chat/coder/profiles.py:130` — filled in `missing_defaults`: returns seed cards not yet present — pubmed if no source has kind "pubmed", website cards whose domain isn't in any source.
+- **File** `chat/coder/app.py:499` — added `POST /api/profiles/{profile}/defaults` route: calls `missing_defaults`, adds each card via `db.add_source`, returns `{"added": N, "sources": [...]}`.
+- `make chat-test K="missing_defaults or add_defaults"` passes (2/2). `make check` passes (36/36).

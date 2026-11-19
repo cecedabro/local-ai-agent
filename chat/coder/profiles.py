@@ -128,11 +128,27 @@ def label_of(src: dict) -> str:
 
 
 def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
-    r"""TODO (task F08). The cards of SEED[profile] (SEED.get(profile, [])) this user does not have yet, in SEED's order
+    r"""The cards of SEED[profile] (SEED.get(profile, [])) this user does not have yet, in SEED's order
     (SPEC §14.3): the pubmed card when no source has kind "pubmed"; a website card when no source of kind "website"
     has its domain. Tests: test_step_clear.py::test_seed_and_missing_defaults
     """
-    raise NotImplementedError
+    seed = SEED.get(profile, [])
+    if not seed:
+        return []
+    has_pubmed = any(s.get("kind") == "pubmed" for s in sources)
+    website_domains = {s.get("domain") for s in sources if s.get("kind") == "website"}
+    result = []
+    for card in seed:
+        if card["kind"] == "pubmed":
+            if not has_pubmed:
+                result.append(card)
+        elif card["kind"] == "website":
+            domain = card.get("domain", "")
+            if domain and domain not in website_domains:
+                result.append(card)
+        else:
+            result.append(card)
+    return result
 
 
 def config(db: Any, username: str, profile: str) -> dict:

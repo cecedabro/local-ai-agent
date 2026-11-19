@@ -496,12 +496,21 @@ def create_app(settings: dict | None = None) -> FastAPI:
         else:
             return JSONResponse({"error": "Invalid kind"}, status_code=400)
 
-    # TODO (task F08): POST /api/profiles/{profile}/defaults (SPEC §14.3). Tests: test_accept_clear.py::TestClearSource
-    #   r = _profile_access(request, profile) (a Response -> return it); cfg = profiles.config(app.state.db, username, profile);
-    #   cards = profiles.missing_defaults(profile, cfg["sources"]); per card: app.state.db.add_source(username, profile,
-    #   card["kind"], card["title"], domain=card.get("domain", ""), note=card["note"], filters=card.get("filters"));
-    #   return JSONResponse({"added": len(cards), "sources": [_source_json(s) for s in app.state.db.list_sources(username, profile)]})
-    #   (the X-Coder check is already done for every POST by the middleware)
+    @app.post("/api/profiles/{profile}/defaults")
+    async def api_add_defaults(profile: str, request: Request) -> Response:
+        r = _profile_access(request, profile)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        cfg = profiles.config(app.state.db, username, profile)
+        cards = profiles.missing_defaults(profile, cfg["sources"])
+        added = []
+        for card in cards:
+            s = app.state.db.add_source(username, profile, card["kind"], card["title"],
+                                        domain=card.get("domain", ""), note=card["note"],
+                                        filters=card.get("filters"))
+            added.append(s)
+        return JSONResponse({"added": len(cards), "sources": [_source_json(s) for s in app.state.db.list_sources(username, profile)]})
 
     @app.patch("/api/profiles/{profile}/sources/{source_id}")
     async def api_update_source(profile: str, source_id: int, request: Request) -> Response:
