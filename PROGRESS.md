@@ -49,3 +49,13 @@ Implemented EvidenceHunt's pipeline integration and per-profile thinking/trail t
 - The `done` event now includes `"trail": trail`.
 
 All `test_step_answer`, `test_step_round2`, `test_step_profiles`, `TestStream`, and `TestEvidenceV2` tests pass (29/29). `make check` passes (36/36).
+
+## Task E14 - App icon in /api/me and routes /manifest.json, /apple-touch-icon.png (2026-11-19)
+
+Added `ICONS = ("aero", "blossom")` at module level in `chat/coder/app.py`.
+Added `_me(username, db)` helper returning `{"username", "rights", "theme", "icon"}` with icon defaulting to "blossom" for blossom-theme users, else "aero".
+Updated `GET /api/me` to include `icon` field via `_me()`.
+Updated `PATCH /api/me` to handle `icon` key (validates against ICONS, calls `update_user_icon`), while preserving existing theme validation and the "nothing to change" error for empty/non-dict bodies.
+Added `GET /manifest.json` route returning PWA manifest with icons sized 192/512 using the session icon (or "aero" when no session), content-type `application/manifest+json`.
+Added `GET /apple-touch-icon.png` route serving `{icon}-180.png` bytes from the static icons directory with `Cache-Control: no-cache`.
+All 128 chat tests pass. `make check` passes (36/36).

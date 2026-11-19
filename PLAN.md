@@ -41,7 +41,7 @@ Rules for every task:
   accept: make chat-test K="test_step_answer or test_step_round2 or test_step_profiles or TestStream or TestEvidenceV2"
 - [x] E13: In chat/coder/profiles.py add PubMed strictness and in chat/coder/app.py clean the filters of a source PATCH (`TODO (task E13)`)
   accept: make chat-test K="test_presets or TestProfileApi"
-- [ ] E14: In chat/coder/app.py add the app icon to /api/me and the routes /manifest.json and /apple-touch-icon.png (`TODO (task E14)`)
+- [x] E14: In chat/coder/app.py add the app icon to /api/me and the routes /manifest.json and /apple-touch-icon.png (`TODO (task E14)`)
   accept: make chat-test
 - [ ] E15: In chat/static/js/icons.js fill in `start` as its comment says
   accept: node --check chat/static/js/icons.js && make chat-test
