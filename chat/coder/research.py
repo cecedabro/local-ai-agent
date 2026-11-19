@@ -409,20 +409,22 @@ RANKS = {"Guideline": 1, "Meta-analysis": 2, "Systematic review": 2, "RCT": 3}
 
 
 def rank(src: dict) -> int:
-    r"""TODO (task F06). A source's group for `order` (SPEC §14.2), lower comes first:
+    r"""A source's group for `order` (SPEC §14.2), lower comes first:
       kind "page" -> 0 when src.get("site") (a page of a guideline website card), else 5 (a web page)
       anything else (PubMed) -> RANKS.get(src.get("type") or "", 4)
     Tests: test_step_clear.py::test_order
     """
-    raise NotImplementedError
+    if src.get("kind") == "page":
+        return 0 if src.get("site") else 5
+    return RANKS.get(src.get("type") or "", 4)
 
 
 def order(sources: list[dict]) -> list[dict]:
-    r"""TODO (task F06). The sources sorted by rank (a stable sort: the same rank keeps its order), as new dicts
+    r"""The sources sorted by rank (a stable sort: the same rank keeps its order), as new dicts
     ({**s, "n": i + 1}) numbered from 1; the input list and its dicts stay unchanged.
     Tests: test_step_clear.py::test_order
     """
-    raise NotImplementedError
+    return [{**s, "n": i + 1} for i, s in enumerate(sorted(sources, key=rank))]
 
 
 def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dict]:
@@ -448,11 +450,10 @@ def public_sources(sources: list[dict]) -> list[dict]:
     """
     result = []
     for s in sources:
-        # TODO (task F13): also "type" and "site" (s.get: None when missing), SPEC §14.2/§15.6, and the quote is
-        #   tools._cut(the first passage) when the source has "passages". Tests: test_step_clear.py::test_public_sources_type,
-        #   test_step_flow.py::test_followup_and_passages
         out = {k: s[k] for k in ("n", "title", "url", "kind", "meta")}
         out["quote"] = tools._cut(s.get("text", ""))
+        out["type"] = s.get("type")
+        out["site"] = s.get("site")
         result.append(out)
     return result
 
@@ -530,8 +531,21 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     # TODO (task F15), SPEC §15.5: run the research: out = {}; yield every chunk of
     #   investigate(question, cfg, settings, complete, t, stop, out); then sources, trail = out["used"], out["trail"].
     #   Tests: test_step_research.py (run_evidence), test_step_clear.py::test_run_evidence_sites_first_and_ordered
+    plan_text = await complete(settings, plan_messages(question, cfg))
+    plan = parse_plan(plan_text, cfg, question) if plan_text else []
     sources: list[dict] = []
     trail: list[dict] = []
+    ordered = _site_first(plan)
+    async with httpx.AsyncClient() as client:
+        for item in ordered:
+            got, steps = await gather([item], cfg, client, settings.SEARXNG_URL, t)
+            trail.extend(steps)
+            for s in got:
+                if s.get("url") not in {src.get("url") for src in sources} and len(sources) < MAX_SOURCES:
+                    sources.append(s)
+            if stop and stop.is_set():
+                break
+    sources = order(sources)
 
     lang = "nl" if looks_dutch(question) else "en"
 

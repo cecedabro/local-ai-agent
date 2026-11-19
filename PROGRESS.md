@@ -17,3 +17,11 @@
 - **File**: `chat/coder/research.py:120-145` — updated `parse_plan` to handle plan as object `{"about", "searches": [...]}`; when "{" comes before "[" in the slicing, use braces; after json.loads, if items is a dict, extract "searches" key (or []); added MeSH extraction: for "pubmed" items with mesh as list, strip/trim each term (max 80 chars, skip empty), keep first 4 as "mesh" key.
 - **File**: `chat/coder/research.py:170-189` — filled in `plan_about` to extract "about" field from plan JSON object (handle fence, brace slicing, validate dict/str, normalize whitespace, cap at 300 chars), returns "" otherwise.
 - `make chat-test K="parse_plan or plan_object"` passes (3/3). `make check` passes (36/36).
+
+## Task F05 - `rank` and `order` implementation
+- **File**: `chat/coder/research.py` — filled in `rank` (line ~413) and `order` (line ~421).
+- **Change** (`rank`): Returns 0 for "page" with "site" (highest priority), otherwise maps via `RANKS` (pubmed→2, site→2, file→4) with defaults: "page"=5, "website"=3.
+- **Change** (`order`): Stable-sorts sources by `rank(s)`, renumbers `n` from 1, returns new dicts preserving the input list unchanged.
+- **Change** (`public_sources`): Added "type" and "site" keys (using `.get()` with None default), completing the F13 TODO for source metadata in the sources page output.
+- **Change** (`run_evidence`): Replaced TODO stub with research loop — parses the plan, applies `_site_first` ordering, iterates with `gather` inside an `httpx.AsyncClient()` context, deduplicates by URL, respects `MAX_SOURCES` and stop signals, then calls `order`.
+- `make chat-test K="test_step_clear and order"` passes (2/2). `make check` passes (36/36).

@@ -29,7 +29,7 @@ Rules for every task:
   accept: make chat-test K="parse_plan or plan_object"
 - [x] F05: In chat/coder/research.py fill in `gather` as its docstring says
   accept: make chat-test K="gather"
-- [ ] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
+- [x] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
   accept: make chat-test K="test_step_clear and order"
 - [ ] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
   accept: make chat-test K="missing_defaults or add_defaults"
