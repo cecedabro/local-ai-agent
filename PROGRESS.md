@@ -69,3 +69,7 @@
 - **File**: `chat/coder/app.py:468` — wired `group_of`/`label_of` into `_source_json`.
 - `make chat-test K="groups_and_labels"` passes (1/1). `make chat-test K="seeds_evidence or dutch_guidelines"` passes (2/2). `make check` passes (36/36).
 - **Task F16 re-verified**: `summary_sentences` (verify.py:135) and `check` integration (verify.py:199) were already implemented. `make chat-test K="test_step_verify or summary_sentences"` passes (9/9). `make check` passes (36/36). No changes needed.
+
+## Task F17 - verified complete
+- `group_of` (profiles.py:114) and `label_of` (profiles.py:132) implemented and wired into `public` (profiles.py:283) and `_source_json` (app.py:468).
+- No TODO comments remain for F17. Both `make check` (36/36) and `make chat-test` (153 passed) pass.
