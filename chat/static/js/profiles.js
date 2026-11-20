@@ -157,6 +157,7 @@ function draw() {
   const tab = document.querySelector(`.pf-tab[data-profile="${state.profile}"]`);
   if ($("#pf-name") && tab) { $("#pf-name").textContent = tab.textContent; $("#pf-desc").textContent = tab.dataset.desc || ""; }
   document.querySelector(".pf-about .orb")?.classList.toggle("eh", state.profile === "evidence");
+  if ($("#pf-how")) $("#pf-how").hidden = state.profile !== "evidence";
   const add = $("#add-defaults");
   if (add) add.hidden = state.profile !== "evidence";
   if ($("#pf-web-hint")) $("#pf-web-hint").textContent = state.profile === "evidence"

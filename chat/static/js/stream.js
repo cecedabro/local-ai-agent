@@ -308,7 +308,9 @@ export function sourcesHtml(sources) {
 
 const SITE_KINDS = { "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Guideline", "thuisarts.nl": "Patient information",
   "farmacotherapeutischkompas.nl": "Drug information", "kinderformularium.nl": "Drug information", "ge-bu.nl": "Drug review",
-  "lareb.nl": "Side effects" };
+  "lareb.nl": "Side effects", "jgzrichtlijnen.nl": "Guideline", "palliaweb.nl": "Guideline", "nvog.nl": "Guideline",
+  "nice.org.uk": "Guideline", "who.int": "Guideline", "cdc.gov": "Guideline", "apotheek.nl": "Drug information",
+  "ema.europa.eu": "Drug information" };
 
 /** A source's kind for the list under an answer: [css key, label] or null. */
 export function sourceKind(s) {

@@ -1,5 +1,7 @@
 # How Clear Source works
 
+A visual version of this page, in the app's style: `chat/static/clear-source.html` (open `/static/clear-source.html`).
+
 Clear Source is Dewdrop's research profile (internal id `evidence`; it was called EvidenceHunt until 2026-11-19). It
 answers medical questions **only from sources it found and read**, and checks every quote word for word. The rules
 are in `chat/SPEC.md` §13–§15 (and §16.2 for attached files); the code is `chat/coder/research.py` (the flow),
@@ -53,7 +55,8 @@ question ──► 1 Understand ──► 2 Search ──► 3 Read one by one �
 
 Default sources (`profiles.SEED`, restorable with "↺ Restore Dutch defaults" on the sources page): PubMed,
 Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb, Geneesmiddelenbulletin,
-JGZ-richtlijnen (youth health care), Palliaweb (palliative care) and Thuisarts. This follows what EvidenceHunt
+JGZ-richtlijnen (youth health care), Palliaweb (palliative care), NVOG (pregnancy and gynaecology), NICE, WHO and CDC
+(international, in English), Apotheek.nl and EMA (medicines) and Thuisarts. This follows what EvidenceHunt
 searches (FMS guidelines, NHG, the Kompas, NICE, PubMed) as far as the sites can be read: NHG's standards sit behind
 a bot check (we don't get around that) and NICE and GGZ-standaarden load their text with JavaScript, so those three
 are not included. Thuisarts is the readable route to NHG advice. General web search starts **off** for Clear Source (the restore button

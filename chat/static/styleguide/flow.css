@@ -1,0 +1,79 @@
+/* "How Clear Source works" (clear-source.html). Built on the app's tokens and components; fl-* is this page only. */
+.flow .sg-top .fl-back{display:inline-flex;align-items:center;gap:4px;padding:7px 14px 7px 9px;border-radius:999px;font-size:14px;
+  font-weight:650;color:var(--ink);text-decoration:none;background:var(--glass);border:1px solid var(--stroke);
+  box-shadow:inset 0 1px 0 var(--hi),0 2px 10px rgba(0,30,60,.06)}
+.flow .sg-top .fl-back svg{width:17px;height:17px;color:var(--link)}
+.flow .sg-top h1{margin:0 auto;font-size:17px}
+.fl-main{display:grid;grid-template-columns:minmax(0,1fr);gap:26px;max-width:960px;margin:0 auto;padding:28px 16px 90px}
+
+.fl-hero{text-align:center;display:grid;gap:12px;justify-items:center;padding:10px 0 6px}
+.fl-kicker{margin:0;font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--eh,var(--accent))}
+.fl-title{margin:0;max-width:24ch;font-size:clamp(24px,4.2vw,36px);line-height:1.15;letter-spacing:-.02em;text-transform:none;
+  font-weight:780;background:linear-gradient(90deg,var(--title-a),var(--title-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.fl-title::before{content:none}
+.fl-lead{margin:0;max-width:64ch;font-size:16px;line-height:1.6;color:var(--ink)}
+.fl-ribbon{list-style:none;margin:14px 0 0;padding:16px 18px;display:flex;flex-wrap:wrap;justify-content:center;gap:6px 0;
+  border-radius:26px;background:var(--glass);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi),0 10px 30px rgba(0,30,60,.06)}
+.fl-ribbon li{display:grid;justify-items:center;gap:6px;width:112px;position:relative}
+.fl-ribbon li+li::before{content:"";position:absolute;top:22px;right:calc(50% + 30px);width:52px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.fl-ribbon .orb{--s:44px}
+.fl-ribbon b{font-size:13.5px}
+.fl-ribbon small{font-size:11.5px;color:var(--muted);margin-top:-4px}
+.fl-example{margin:6px 0 0;font-size:15px;color:var(--ink)}
+.fl-example span{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+
+.fl-steps{list-style:none;margin:0;padding:0;display:grid;gap:18px;position:relative}
+.fl-steps::before{content:"";position:absolute;left:25px;top:30px;bottom:30px;width:2px;border-radius:2px;
+  background:linear-gradient(180deg,transparent,var(--line) 6%,var(--line) 94%,transparent)}
+.fl-step{display:grid;grid-template-columns:52px minmax(0,1fr);gap:14px;align-items:start;scroll-margin-top:80px}
+.fl-step>.orb{--s:52px;position:relative;z-index:1;margin-top:10px;transition:transform .4s cubic-bezier(.3,1.5,.5,1)}
+.fl-step.on>.orb{transform:scale(1.12)}
+.fl-step.on .fl-card{box-shadow:inset 0 1px 0 var(--hi),0 12px 34px var(--glow)}
+.fl-card{padding:18px 20px;transition:box-shadow .4s}
+.fl-card p{margin:0 0 10px;line-height:1.6}
+.fl-card h3{margin:0;font-size:17px;letter-spacing:-.01em}
+.fl-wide h3{margin-bottom:8px}
+.fl-h{position:static;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:0;background:none;border:0;
+  box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.fl-n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:800;color:#fff;
+  background:var(--primary);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 2px 8px var(--glow)}
+.fl-who{margin-left:auto;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;
+  border:1px solid var(--stroke-soft)}
+.fl-who.app{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.fl-who.model{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.fl-io{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0}
+.fl-io>div{min-width:0;padding:12px 14px;border-radius:16px;background:var(--chip);border:1px solid var(--stroke-soft)}
+.fl-io h4{margin:0 0 6px;font-size:12px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fl-io p{margin:0 0 6px;font-size:14px}
+.fl-code{margin:6px 0;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.5;overflow-x:auto;color:#d8ecff;background:#0d1b2a;
+  white-space:pre}
+.fl-wrap{white-space:pre-wrap;word-break:break-word}
+.fl-list{margin:4px 0 10px;padding-left:20px;line-height:1.6}
+.fl-list li{margin:3px 0}
+.fl-mini{margin:4px 0;padding-left:20px;font-size:14px;line-height:1.55}
+.fl-prompt{margin:8px 0 12px;padding:10px 14px;border-left:3px solid var(--accent);border-radius:0 12px 12px 0;font-style:italic;
+  background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.fl-round{margin:6px 0 10px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.55;
+  background:linear-gradient(90deg,var(--hi-soft),transparent);border:1px dashed var(--line)}
+.fl-see{font-size:13.5px;color:var(--muted)}
+.fl-see b{color:var(--ink)}
+.fl-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:650;color:var(--muted);
+  background:var(--chip);border:1px solid var(--stroke-soft);white-space:nowrap}
+.fl-pill.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.fl-pill.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.fl-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:8px 0 12px}
+.fl-checks>div{padding:10px 12px;border-radius:14px;background:var(--chip);border:1px solid var(--stroke-soft)}
+.fl-checks p{margin:6px 0 0;font-size:13.5px}
+.fl-events{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px;counter-reset:ev}
+.fl-events li{display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px;align-items:baseline;padding:8px 12px;border-radius:12px;
+  background:var(--chip);border:1px solid var(--stroke-soft);font-size:14px}
+.fl-events code{font-weight:700;color:var(--link);background:none;padding:0}
+@media (max-width:640px){
+  .fl-steps::before{left:19px}
+  .fl-step{grid-template-columns:40px minmax(0,1fr);gap:10px}
+  .fl-step>.orb{--s:40px}
+  .fl-card{padding:14px}
+  .fl-ribbon li{width:96px}
+  .flow .sg-top h1{font-size:15px}
+}

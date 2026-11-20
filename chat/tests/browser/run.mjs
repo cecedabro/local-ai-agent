@@ -241,6 +241,15 @@ async function main() {
     await ev(`(()=>{const i=document.getElementById('input');i.value='';i.dispatchEvent(new Event('input'))})()`);
   });
 
+  await check("round 14: the style guide and the Clear Source explainer draw with the app's own code", async () => {
+    await go("/static/styleguide.html");
+    await waitFor(() => ev(`document.querySelectorAll('#sg-cs details.src').length===5 && !!document.querySelector('#sg-cs .q-link') && document.querySelectorAll('#sg-drops .orb').length===7`), 5000, "the guide's samples");
+    await go("/static/clear-source.html");
+    await waitFor(() => ev(`document.querySelectorAll('.fl-ribbon .orb.live').length===6 && document.querySelectorAll('.fl-step').length===6`), 5000, "the explainer's steps");
+    await go("/");
+    await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "back to the chat");
+  });
+
   await check("round 5: Clear Source: MeSH headings in the trail, study types on the sources", async () => {
     const chips = await ev(`[...(${last(".trail")}?.querySelectorAll('.mesh i')||[])].map(i=>i.textContent)`);
     if (JSON.stringify(chips) !== '["Renal Insufficiency, Chronic"]') throw new Error("MeSH chips: " + JSON.stringify(chips));
