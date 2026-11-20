@@ -146,3 +146,8 @@
 ## Task D12 - browser tests verification
 - **Status**: All browser tests already pass — no code changes needed.
 - `make chat-test` — 182/182 passed. `make chat-browser-test` — 14/14 passed. `node --test chat/tests/js/stream.test.mjs` — 15/15 passed. `make check` — 36/36 passed.
+
+## Task D13 - "## Files in and out" section
+- **File**: `chat/README.md` — added "## Files in and out" section after "Clear Source, rounds 2 and 3".
+- **Change**: Documented the file upload/download flow — `read_upload` for parsing PDF/DOCX/XLSX/HTML/text, `make_file` tool for model-created files, `render` for format rendering, export via `GET /api/messages/<id>/export`, and UI behavior (upload chips, file cards, download button with export links).
+- Both `grep` checks pass, `make chat-test` — 182/182 passed. `make check` — 36/36 passed.

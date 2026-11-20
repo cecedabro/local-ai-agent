@@ -120,3 +120,14 @@ calls `read_one` on each candidate to extract verified, word-for-word quotes via
 and `verify.find_quote`. If fewer than MIN_USED sources survive, a follow-up round tries new
 queries. The answer is written from passages only, checked against full texts by `verify.check`,
 and sources are ordered by study strength.
+
+## Files in and out
+
+Files go both ways: you attach PDF, Word, Excel, HTML or text files to a message, and the
+model can make a file for you (Markdown, text, CSV, HTML, Word, Excel or PDF). Uploads are
+handled by `chat/coder/files.py` — `read_upload` parses PDFs (pypdf), DOCX (zip + xml.etree),
+XLSX (openpyxl), HTML and text; the model creates files via the `make_file` tool which calls
+`render` to produce the right format. Every answer can also be exported as a downloadable file
+through `GET /api/messages/<id>/export`. On the page, uploaded files appear as chips in the
+composer, files the model makes appear as download cards, and every answer has a Download
+button with export links for Markdown, Word, PDF and HTML.

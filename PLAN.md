@@ -42,7 +42,7 @@ Rules for every task:
   accept: node --check chat/static/js/app.js && make chat-test
 - [x] D12: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js (see "D12 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [ ] D13: Add a "## Files in and out" section to chat/README.md (see "D13 details")
+- [x] D13: Add a "## Files in and out" section to chat/README.md (see "D13 details")
   accept: grep -q "## Files in and out" chat/README.md && grep -q "make_file" chat/README.md && make chat-test
 
 ## D12 details
