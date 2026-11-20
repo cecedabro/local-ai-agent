@@ -5,6 +5,9 @@ A snapshot of the project, updated by hand. Last update: 2026-11-20. For how the
 
 ## Live
 
+Version `chat-v0.1.11` (2026-11-20) includes the Clear Source fixes from the real-model tests: PubMed rate limit,
+the second search round, long pages read where it matters, fewer checker false alarms, `[1; 2]` citations.
+
 | Part | State |
 |---|---|
 | Model | Qwen3.6-35B-A3B (4-bit, MTP) on the PC's RTX 3080 Ti as `coder`; the PC sleeps between jobs and wakes on demand |
@@ -17,10 +20,13 @@ A snapshot of the project, updated by hand. Last update: 2026-11-20. For how the
 
 | What | Where | Next step |
 |---|---|---|
-| Clear Source fixes from the real-model tests: PubMed rate limit (429), follow-up round, checker false alarms, long pages read where it matters, `[1; 2]` citations, trail on phones, these docs | branch `clear-source-fixes` (PR) | Review and merge; then a re-test in the live chat |
 | Loop D: files in and out (SPEC §16): attach PDF / Word / Excel / HTML / text, the model makes files (`make_file`), "Download as" for any answer | branch `agent/files-in-and-out`, agent job #15 | When the job ends: review, browser check, merge after the fixes PR |
 
 ## Known issues
+
+- **Model at half speed after the PC woke (2026-11-20 night)**: ~20 instead of ~40 tok/s since llama-server
+  restarted on wake. Diagnosed and restarted at 02:23 UTC; see the result in the session notes. If it recurs, a
+  speed check after wake that restarts llama-server is planned.
 
 - **Clear Source is slow while an agent loop runs.** Every one of its ~10 model calls queues behind the agent's
   current request (one GPU, one request at a time). Idea: read several sources in one call, or pause the agent

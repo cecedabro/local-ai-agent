@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dewdrop Setup</title>
+<meta name="description" content="Dewdrop, a private chat app on a home GPU: from the hardware and the model through the cluster, the app and Clear Source up to the prompt. November 2026.">
+<style>
+:root{
+  --bg:#0a0c11; --bg2:#10141c; --panel:#141924; --panel2:#1a2130; --line:#263045;
+  --text:#e8ecf3; --muted:#9aa6bb; --faint:#5d6a82;
+  --amber:#ffb547; --teal:#3ad6c4; --violet:#9b8cff; --rose:#ff6b8b; --green:#5fd38d; --blue:#5aa8ff;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1200px 700px at 80% -10%,#16203a 0%,transparent 60%),radial-gradient(900px 600px at -10% 110%,#1b1630 0%,transparent 55%),var(--bg)}
+
+/* stage: fixed 1280x720 canvas scaled to fit */
+#viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:1280px;height:720px;transform-origin:center center;flex:none}
+.slide{position:absolute;inset:0;padding:64px 80px 70px;display:flex;flex-direction:column;opacity:0;visibility:hidden;transform:translateX(40px);transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1),visibility 0s .55s}
+.slide.active{opacity:1;visibility:visible;transform:none;transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.slide.before{transform:translateX(-40px)}
+
+/* typography */
+.kicker{font:600 13px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.kicker::before{content:"";width:28px;height:2px;background:currentColor;border-radius:2px}
+h1{font-size:64px;line-height:1.02;letter-spacing:-.025em;font-weight:750}
+h2{font-size:40px;line-height:1.1;letter-spacing:-.02em;font-weight:700;margin-bottom:26px}
+h3{font-size:19px;font-weight:650;margin-bottom:8px;letter-spacing:-.005em}
+p,li{font-size:19px;line-height:1.5;color:#cfd6e3}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.small{font-size:15px} .tiny{font-size:13px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:#1d2535;border:1px solid #2a3550;padding:1px 6px;border-radius:6px;color:#e6edf8}
+.hl{color:var(--amber)} .tl{color:var(--teal)} .vl{color:var(--violet)} .rs{color:var(--rose)} .gr{color:var(--green)} .bl{color:var(--blue)}
+ul.clean{list-style:none} ul.clean li{position:relative;padding-left:22px;margin:7px 0}
+ul.clean li::before{content:"";position:absolute;left:2px;top:.62em;width:8px;height:8px;border-radius:2px;background:var(--teal);transform:rotate(45deg)}
+.grad{background:linear-gradient(90deg,var(--amber),var(--rose) 50%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* layout helpers */
+.row{display:flex;gap:28px} .col{display:flex;flex-direction:column;gap:14px}
+.grow{flex:1} .center{align-items:center} .between{justify-content:space-between}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden}
+.card p{font-size:16px;line-height:1.45}
+.card .big{font-size:38px;font-weight:750;letter-spacing:-.02em;line-height:1.05}
+.card .lbl{font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.pill{display:inline-block;font:600 12px/1 var(--mono);padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#121826}
+.note{position:absolute;left:80px;right:260px;bottom:26px;font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+
+/* fragments */
+.f{opacity:0;transform:translateY(14px);transition:opacity .45s ease,transform .45s cubic-bezier(.2,.8,.2,1)}
+.f.on{opacity:1;transform:none}
+
+/* entrance animation for children of active slide */
+.slide.active .rise{animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+.slide.active .rise.d1{animation-delay:.08s}.slide.active .rise.d2{animation-delay:.16s}.slide.active .rise.d3{animation-delay:.24s}.slide.active .rise.d4{animation-delay:.32s}.slide.active .rise.d5{animation-delay:.4s}.slide.active .rise.d6{animation-delay:.48s}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+/* chrome */
+#progress{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--rose),var(--violet));transition:width .5s cubic-bezier(.2,.8,.2,1);z-index:10}
+#hud{position:fixed;right:18px;bottom:14px;display:flex;gap:8px;align-items:center;z-index:10;font:600 12px/1 var(--mono);color:var(--faint)}
+#hud button{background:#141a26cc;border:1px solid var(--line);color:var(--muted);width:34px;height:34px;border-radius:10px;cursor:pointer;font:600 15px/1 var(--mono);backdrop-filter:blur(6px)}
+#hud button:hover{color:var(--text);border-color:#3a4864}
+#hint{position:fixed;left:18px;bottom:16px;font:500 12px/1 var(--mono);color:var(--faint);z-index:10;transition:opacity 1s}
+
+/* --- title slide --- */
+.title-wrap{margin:auto 0}
+.title-wrap h1{font-size:76px}
+.orbs{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(2px);opacity:.75}
+.slide.active .orb{animation:float 9s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(-18px,14px)}}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}
+
+/* --- svg shared --- */
+svg text{font-family:var(--sans)}
+.flow{stroke-dasharray:6 8;animation:dash 1.2s linear infinite}
+.flow.slow{animation-duration:2.4s}
+@keyframes dash{to{stroke-dashoffset:-28}}
+.node rect{fill:var(--panel2);stroke:var(--line);stroke-width:1.5}
+.node .t{fill:var(--text);font-size:15px;font-weight:650}
+.node .s{fill:var(--muted);font-size:12px;font-family:var(--mono)}
+
+/* --- MoE --- */
+.experts{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}
+.ex{aspect-ratio:1;border-radius:7px;background:#182033;border:1px solid #243049;transition:background .25s,box-shadow .25s,border-color .25s}
+.ex.lit{background:var(--teal);border-color:var(--teal);box-shadow:0 0 18px #3ad6c488}
+.ex.shared{background:#2a2350;border-color:var(--violet)}
+.tok{display:inline-block;font:600 15px/1 var(--mono);padding:9px 12px;border-radius:10px;background:#1b2334;border:1px solid var(--line);margin:3px;transition:all .25s}
+.tok.cur{background:var(--amber);color:#1a1205;border-color:var(--amber);box-shadow:0 0 20px #ffb54766}
+
+/* --- bars --- */
+.bars{display:flex;flex-direction:column;gap:11px}
+.bar{display:grid;grid-template-columns:230px 1fr 120px;align-items:center;gap:14px}
+.bar .name{font-size:15px;color:#cfd6e3}
+.bar .track{height:22px;border-radius:7px;background:#151b28;border:1px solid #20293b;overflow:hidden}
+.bar .fill{height:100%;width:0;border-radius:6px;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.slide.active .bar .fill{width:var(--w)}
+.bar .val{font:600 14px/1 var(--mono);color:var(--muted);text-align:right}
+
+/* --- formula --- */
+.formula{font-size:30px;font-weight:650;letter-spacing:-.01em;padding:22px 26px;border-radius:16px;background:#121826;border:1px solid var(--line);display:inline-flex;gap:14px;align-items:center}
+.formula .frac{display:inline-flex;flex-direction:column;align-items:center;font-size:24px}
+.formula .frac span:first-child{border-bottom:2px solid var(--muted);padding:0 8px 4px}
+.formula .frac span:last-child{padding-top:4px}
+
+/* --- table --- */
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:16px}
+th{font:600 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+td{padding:10px 12px;border-bottom:1px solid #1c2435;color:#d5dcea;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);white-space:nowrap}
+.tbl{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+tr.me td{background:#ffb54714}
+
+/* --- loop --- */
+.loopwrap{position:relative;width:440px;height:440px;flex:none}
+.loopstep{position:absolute;width:150px;margin-left:-75px;margin-top:-34px;text-align:center;padding:10px 8px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-size:14px;font-weight:600;transition:all .3s}
+.loopstep small{display:block;font:500 11px/1.3 var(--mono);color:var(--muted);margin-top:4px}
+.loopstep.act{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber),0 0 26px #ffb54744;transform:scale(1.06)}
+.loopcenter{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
+
+/* --- kv cache --- */
+.kv{height:46px;border-radius:12px;background:#121826;border:1px solid var(--line);position:relative;overflow:hidden}
+.kv .seg{position:absolute;top:0;bottom:0;left:0;width:62%}
+.slide.active .kv .seg.a{animation:fillkv 6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes fillkv{0%{width:4%}70%{width:92%}78%{width:92%}86%{width:22%}100%{width:22%}}
+.kv .limit{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--rose)}
+
+/* --- quant --- */
+.qbtn{font:600 13px/1 var(--mono);padding:9px 12px;border-radius:10px;background:#141a26;border:1px solid var(--line);color:var(--muted);cursor:pointer}
+.qbtn.on{background:var(--amber);color:#1a1205;border-color:var(--amber)}
+
+/* --- timeline (wake) --- */
+.tl-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;position:relative}
+.tl-row::before{content:"";position:absolute;left:4%;right:4%;top:23px;height:2px;background:var(--line)}
+.tl-row .pulse{position:absolute;top:18px;left:4%;width:12px;height:12px;border-radius:50%;background:var(--amber);box-shadow:0 0 16px var(--amber)}
+.slide.active .tl-row .pulse{animation:travel 5s ease-in-out infinite}
+@keyframes travel{0%{left:4%}90%,100%{left:95%}}
+.tl-step{position:relative;text-align:center}
+.tl-step .dot{width:48px;height:48px;border-radius:50%;margin:0 auto 12px;background:var(--panel2);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font:700 16px/1 var(--mono);color:var(--amber);position:relative;z-index:1}
+.tl-step h3{font-size:16px}.tl-step p{font-size:14px;line-height:1.4}
+
+/* counters */
+.count{font-variant-numeric:tabular-nums}
+
+/* print: one slide per page, everything visible */
+@media print{
+  @page{size:1280px 720px;margin:0}
+  html,body{overflow:visible;height:auto;background:var(--bg)}
+  #viewport{position:static;display:block}
+  #stage{transform:none!important;width:1280px;height:auto}
+  .slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;height:720px;page-break-after:always;break-after:page}
+  .f{opacity:1;transform:none}
+  #hud,#hint,#progress{display:none}
+  .bar .fill{width:var(--w)!important}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Dewdrop talk additions */
+:root{--aqua:#5fd0ff;--drop1:#bfeaff;--drop2:#2aa4f2}
+.kicker{color:var(--aqua)}
+.dgrad{background:linear-gradient(90deg,#9be7ff,#5fd0ff 45%,#6ee7d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.drop{width:150px;height:150px;border-radius:50%;margin-bottom:30px;
+  background:radial-gradient(circle at 34% 28%,#fff 0 7%,rgba(255,255,255,.55) 12%,transparent 30%),
+  radial-gradient(circle at 60% 72%,rgba(110,231,208,.55),transparent 55%),
+  radial-gradient(circle at 50% 50%,#7fd3ff,#1e7fd0 70%,#0b4f8f);
+  box-shadow:0 0 0 1px rgba(255,255,255,.25) inset,0 18px 60px rgba(42,164,242,.35),0 0 0 14px rgba(95,208,255,.06)}
+.steps{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.step2{display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.step2 .no{font:700 20px/1 var(--mono);color:var(--aqua);padding-top:4px}
+.step2 b{display:block;font-size:18px;margin-bottom:2px}
+.step2 span{color:var(--muted);font-size:15.5px;line-height:1.45}
+pre.prompt{background:#0d121b;border:1px solid var(--line);border-radius:12px;padding:14px 16px;font:13px/1.5 var(--mono);color:#cfe3f5;white-space:pre-wrap;margin:0}
+pre.prompt .k{color:var(--aqua)} pre.prompt .c{color:var(--faint)}
+.lane{display:flex;gap:8px;align-items:center;font:600 13px/1 var(--mono)}
+.big2{font:800 44px/1 var(--sans)}
+.ok{color:var(--green)} .warn{color:var(--amber)}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="viewport"><div id="stage">
+
+<section class="slide" data-title="Title">
+  <div class="title-wrap">
+    <div class="drop rise"></div>
+    <div class="kicker">November 2026 · a private AI at home</div>
+    <h1 class="rise d1">Dewdrop, <span class="dgrad">from hardware to prompt</span></h1>
+    <p class="muted rise d1" style="font-size:22px;margin-top:18px;max-width:900px">How a gaming PC, a small Kubernetes homelab and a local language model become a chat app for family and friends, with a research mode that only answers from checked sources.</p>
+    <div class="chips rise d1"><span class="pill">RTX 3080 Ti</span><span class="pill">Qwen3.6-35B-A3B</span><span class="pill">llama.cpp</span><span class="pill">k3s + Flux</span><span class="pill">FastAPI</span><span class="pill">Clear Source</span></div>
+  </div>
+</section>
+
+<section class="slide" data-title="What">
+  <div class="kicker">What it is</div>
+  <h2>A chat app that never leaves the house</h2>
+  <div class="grid3" style="margin-top:28px">
+    <div class="card rise"><h3>Private</h3><p>Every question is answered by a model on our own GPU. No cloud AI, no tracking. Invite-only accounts with passwords and passkeys.</p></div>
+    <div class="card rise d1"><h3>Useful</h3><p>General chat with web search (our own SearXNG), code with highlighting and download, folders, files in and out, installable on a phone.</p></div>
+    <div class="card rise d1"><h3>Careful</h3><p><b class="tl">Clear Source</b> answers medical questions only from Dutch guidelines and PubMed, and checks every quote word for word.</p></div>
+  </div>
+  <p class="muted" style="margin-top:30px;font-size:19px">Built mostly by a coding agent running on the same GPU, overnight, from small test-judged tasks.</p>
+</section>
+
+<section class="slide" data-title="Hardware">
+  <div class="kicker">Layer 1 · hardware</div>
+  <h2>Two homes for the work</h2>
+  <div class="grid2" style="margin-top:26px">
+    <div class="card rise"><h3 class="hl">The gaming PC (sleeps)</h3><ul class="clean">
+      <li>RTX 3080 Ti, 12 GB video memory</li><li>32 GB DDR4 system memory</li><li>Windows 10 + WSL2 Ubuntu</li><li>Only job: serve the model</li><li>Sleeps between jobs, woken over the network</li></ul></div>
+    <div class="card rise d1"><h3 class="tl">The homelab (always on)</h3><ul class="clean">
+      <li>Small k3s cluster, GitOps with Flux</li><li>Secrets in OpenBao</li><li>Runs Dewdrop, the status service, the agent's devbox, SearXNG, the waker</li><li>Public door: Cloudflare Tunnel</li><li>Private door: Tailscale</li></ul></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Model">
+  <div class="kicker">Layer 2 · the model</div>
+  <h2>A 35B model that behaves like a 3B one</h2>
+  <div class="grid3" style="margin-top:24px">
+    <div class="card rise"><div class="lbl muted">Model</div><div class="big2">35B</div><p>Qwen3.6-35B-A3B, a <b>mixture of experts</b>: per token a router picks a few experts, so only ~3B parameters do work.</p></div>
+    <div class="card rise d1"><div class="lbl muted">Size on disk</div><div class="big2">4-bit</div><p>UD-Q4_K_XL GGUF, ~23 GB. Too big for 12 GB, so the <b>experts of 26 layers live in RAM</b> (<code>--n-cpu-moe 26</code>); the rest on the GPU.</p></div>
+    <div class="card rise d1"><div class="lbl muted">Speed-up</div><div class="big2">MTP</div><p>The model drafts 2 tokens ahead and checks them in one pass; ~79 % are accepted.</p></div>
+  </div>
+  <p class="muted" style="margin-top:22px">Clients never see the real name: it is served as <code>coder</code>, so it can be swapped without touching anything else.</p>
+</section>
+
+<section class="slide" data-title="Serving">
+  <div class="kicker">Layer 3 · serving</div>
+  <h2>llama-server, tuned to the last gigabyte</h2>
+  <div class="grid2" style="margin-top:20px">
+    <pre class="prompt rise"><span class="c"># /etc/llama/llama-server.env (systemd in WSL2)</span>
+llama-server -m Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf
+  --alias coder --jinja -ngl 99 <span class="k">--n-cpu-moe 26</span>
+  <span class="k">-c 49152 -np 1</span> -fa on <span class="k">-ctk q8_0 -ctv q8_0</span>
+  --spec-type draft-mtp --spec-draft-n-max 2
+  -ub 2048 --metrics --api-key-file …</pre>
+    <div class="steps rise d1">
+      <div class="step2"><div class="no">48k</div><div><b>context, one slot</b><span>11.9 of 12.3 GB used. One more slot would spill into shared memory: ~10× slower.</span></div></div>
+      <div class="step2"><div class="no">~40</div><div><b>tokens / s writing</b><span>~790 tokens / s reading prompts (bigger batches per copy to the GPU).</span></div></div>
+      <div class="step2"><div class="no">q8</div><div><b>KV cache</b><span>Half the memory of f16, no visible loss.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-title="Power">
+  <div class="kicker">Layer 4 · power</div>
+  <h2>Asleep until someone needs it</h2>
+  <div class="steps" style="margin-top:20px">
+    <div class="step2 rise"><div class="no">1</div><div><b>Work arrives</b><span>A chat message or an agent job needs the model; the PC is asleep (S3).</span></div></div>
+    <div class="step2 rise d1"><div class="no">2</div><div><b>Wake-on-LAN</b><span>A small pod on the host network sends the magic packet; Windows wakes, WSL starts llama-server (~2 min to load).</span></div></div>
+    <div class="step2 f"><div class="no">3</div><div><b>Keep awake</b><span>While an agent runs it refreshes a <code>/run/ai/busy</code> flag over SSH; a Windows task keeps the PC up while the flag is fresh.</span></div></div>
+    <div class="step2 f"><div class="no">4</div><div><b>Back to sleep</b><span>No flag, no activity: Windows sleeps again. <code>ai pause</code> on the Mac frees the GPU for gaming.</span></div></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Cluster">
+  <div class="kicker">Layer 5 · the cluster</div>
+  <h2>Everything else runs on k3s</h2>
+  <div class="tbl rise" style="margin-top:20px"><table>
+    <tr><th>Piece</th><th>What it does</th><th>Reach</th></tr>
+    <tr><td><b>Dewdrop</b></td><td>The chat app (FastAPI + SQLite)</td><td>Public, Cloudflare Tunnel</td></tr>
+    <tr><td><b>agent-status</b></td><td>Status page, job queue, model gateway <code>/v1</code>, GPU lease</td><td>Tailscale only</td></tr>
+    <tr><td><b>devbox-0</b></td><td>The coding agent's workplace (OpenCode, toolchains, Chromium)</td><td>Tailscale SSH</td></tr>
+    <tr><td><b>SearXNG</b></td><td>Private web search for the model</td><td>In-cluster</td></tr>
+    <tr><td><b>waker</b></td><td>Sends the magic packet</td><td>Host network</td></tr>
+  </table></div>
+  <p class="muted" style="margin-top:18px">Deployed by Flux from the homelab repo; a passing merge builds a new image and Flux rolls it out in minutes. Secrets come from OpenBao through External Secrets.</p>
+</section>
+
+<section class="slide" data-title="Gateway">
+  <div class="kicker">Layer 6 · the gateway</div>
+  <h2>One GPU, many askers</h2>
+  <div class="grid2" style="margin-top:20px">
+    <div class="card rise"><h3>Lanes</h3><p>Every client has a key and a lane. <b class="tl">Interactive</b> (Dewdrop, the quick chat) goes before <b class="hl">batch</b> (the agents). Prompts are never stored; timings and token counts are.</p>
+      <div class="lane" style="margin-top:14px"><span class="pill" style="color:var(--teal)">chat</span>→<span class="pill">queue</span>→<span class="pill">llama-server</span></div></div>
+    <div class="card rise d1"><h3>The catch</h3><p>llama-server handles <b>one request at a time</b>. A chat request can skip the queue, but it can't interrupt a request that is already running. While the agent works, every chat call waits for the agent's current one: a Clear Source answer (~10 calls) can take minutes.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Architecture">
+  <div class="kicker">The whole path</div>
+  <h2>From your phone to the GPU and back</h2>
+  <svg viewBox="0 0 1120 400" width="1120" height="400" class="rise d1" font-family="ui-sans-serif,system-ui">
+    <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6a82"/></marker></defs>
+    <g fill="#141924" stroke="#263045">
+      <rect x="10" y="150" width="150" height="90" rx="14"/><rect x="215" y="150" width="160" height="90" rx="14"/>
+      <rect x="430" y="120" width="230" height="150" rx="14" stroke="#5fd0ff"/><rect x="715" y="150" width="170" height="90" rx="14"/>
+      <rect x="940" y="150" width="170" height="90" rx="14" stroke="#ffb547"/>
+      <rect x="430" y="10" width="230" height="70" rx="12"/><rect x="430" y="310" width="230" height="70" rx="12"/>
+    </g>
+    <g fill="#e8ecf3" font-size="17" font-weight="700">
+      <text x="30" y="190">Phone / laptop</text><text x="235" y="190">Cloudflare</text><text x="450" y="155">Dewdrop pod</text>
+      <text x="735" y="190">Gateway /v1</text><text x="960" y="190">llama-server</text>
+      <text x="450" y="40">SearXNG</text><text x="450" y="340">PubMed · guideline sites</text>
+    </g>
+    <g fill="#9aa6bb" font-size="13">
+      <text x="30" y="214">browser, PWA</text><text x="235" y="214">Tunnel, TLS</text>
+      <text x="450" y="182">pages, accounts, SQLite</text><text x="450" y="204">answer · research · checker</text><text x="450" y="226">tools: search, open page</text>
+      <text x="735" y="214">lanes, lease, keys</text><text x="960" y="214">PC, RTX 3080 Ti</text>
+      <text x="450" y="62">private web search</text><text x="450" y="362">public addresses only</text>
+    </g>
+    <g stroke="#5d6a82" stroke-width="2" fill="none" marker-end="url(#a2)">
+      <path d="M160 195 H212"/><path d="M375 195 H427"/><path d="M660 195 H712"/><path d="M885 195 H937"/>
+      <path d="M545 120 V83"/><path d="M545 270 V307"/>
+    </g>
+    <text x="10" y="290" fill="#5d6a82" font-size="13" font-family="ui-monospace,monospace">answers stream back as server-sent events</text>
+  </svg>
+</section>
+
+<section class="slide" data-title="App">
+  <div class="kicker">Layer 7 · the app</div>
+  <h2>Dewdrop on the server</h2>
+  <div class="grid3" style="margin-top:22px">
+    <div class="card rise"><h3>Stack</h3><p>Python 3.11, FastAPI, Jinja2 pages, httpx to the gateway, SQLite with one owner check per query. No frontend framework, no build step.</p></div>
+    <div class="card rise d1"><h3>Modules</h3><p><code>answer</code> (one answer), <code>gateway</code> (streaming, tool calls), <code>context</code> (window, summaries), <code>profiles</code>, <code>tools</code>, <code>research</code>, <code>verify</code>, <code>files</code>.</p></div>
+    <div class="card rise d1"><h3>Safety</h3><p>argon2 + passkeys, rate-limited login, HttpOnly cookies, CSRF header on every write, strict CSP, escaped Markdown, SSRF-safe page fetching.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="A message">
+  <div class="kicker">A message, step by step</div>
+  <h2>What happens when you press send</h2>
+  <div class="steps" style="margin-top:14px">
+    <div class="step2 rise"><div class="no">1</div><div><b>Stored first</b><span>Your message (and the text of attached files) is saved; the page shows it flying in from the send button.</span></div></div>
+    <div class="step2 rise d1"><div class="no">2</div><div><b>Context</b><span>Past 75 % of the 48k window, older messages are summarised first ("compressing").</span></div></div>
+    <div class="step2 f"><div class="no">3</div><div><b>The prompt is built</b><span>System prompt for the profile + your instructions + the sources you enabled + the chat.</span></div></div>
+    <div class="step2 f"><div class="no">4</div><div><b>Tools, up to 4 rounds</b><span>The model may search the web, a trusted site or PubMed, or open a page; results become numbered sources [n].</span></div></div>
+    <div class="step2 f"><div class="no">5</div><div><b>Streamed back</b><span>Events: phase · thinking · trail · delta · done. Stored with sources and speed, so a reload looks the same.</span></div></div>
+  </div>
+</section>
+
+<section class="slide" data-title="The prompt">
+  <div class="kicker">Layer 8 · the prompt</div>
+  <h2>What the model actually sees</h2>
+  <pre class="prompt rise" style="margin-top:16px"><span class="c">system</span>   <span class="k">[profile prompt]</span> You are Dewdrop, a helpful assistant running on a home GPU…
+         <span class="k">[your instructions]</span> Extra instructions from the user: answer in Dutch, keep it short
+         <span class="k">[sources]</span> Sources you can use:
+           - the web (tools web_search and open_page)
+           - the website thuisarts.nl (tool search_site): patient advice
+           - PubMed (tool search_pubmed). Cite as [n].
+         <span class="k">[documents]</span> Document huisregels.pdf: ``` … ```
+<span class="c">user</span>     <span class="c">[summary of older messages, when compressed]</span>
+<span class="c">…</span>        the chat so far
+<span class="c">user</span>     Mag ik ibuprofen en paracetamol tegelijk gebruiken?
+<span class="c">tools</span>    web_search · search_site · search_pubmed · open_page · make_file</pre>
+  <p class="muted" style="margin-top:14px">Quick or Think: Think lets the model reason first (shown folded as "Thought for 12 s").</p>
+</section>
+
+<section class="slide" data-title="Clear Source">
+  <div class="kicker">Clear Source · the research profile</div>
+  <h2>Strict by construction, not by asking nicely</h2>
+  <div class="grid2" style="margin-top:20px">
+    <div class="steps rise">
+      <div class="step2"><div class="no">1</div><div><b>Understand</b><span>One call plans searches: PubMed in English with MeSH headings, Dutch guideline sites in Dutch.</span></div></div>
+      <div class="step2"><div class="no">2</div><div><b>Search</b><span>The <b>app</b> searches: MeSH checked, filters, broader on too few hits, long pages focused on the relevant part.</span></div></div>
+      <div class="step2"><div class="no">3</div><div><b>Read one by one</b><span>"Copy passages that help." Kept only if they appear <b>word for word</b>. Too little? A second round with other words.</span></div></div>
+      <div class="step2"><div class="no">4</div><div><b>Write and check</b><span>The answer is written only from the passages; every quote gets ✓ or ⚠.</span></div></div>
+    </div>
+    <div class="card rise d1"><h3>Default sources</h3><p>Richtlijnendatabase · Farmacotherapeutisch Kompas · Kinderformularium · RIVM · Lareb · Geneesmiddelenbulletin · Thuisarts · PubMed</p>
+      <p class="muted" style="margin-top:12px">Nothing found? The app answers "no reliable evidence" itself; the model never fills the gap from memory.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Prompts">
+  <div class="kicker">Clear Source · the prompts</div>
+  <h2>Three small jobs instead of one big one</h2>
+  <div class="grid3" style="margin-top:18px">
+    <pre class="prompt rise"><span class="k">PLAN</span>
+You plan literature searches for a
+medical question. Answer with JSON:
+{"about": "...", "searches": [
+ {"source": "pubmed",
+  "query": "apixaban ckd",
+  "mesh": ["Renal Insufficiency,
+           Chronic"]},
+ {"source": "site:farmaco…nl",
+  "query": "apixaban nierfunctie"}]}</pre>
+    <pre class="prompt rise d1"><span class="k">EXTRACT</span> (per source)
+You read one source for a medical
+question. Copy, word for word, up
+to 4 passages that help answer it,
+in the source's own language;
+change nothing.
+{"quotes": ["...", "..."]}
+
+<span class="c">→ kept only if find_quote()
+  finds it in the source</span></pre>
+    <pre class="prompt rise d1"><span class="k">WRITE</span>
+Answer ONLY from the passages of
+the numbered sources. Long and
+detailed, under these headings:
+Kort antwoord · Nederlandse
+richtlijnen · Onderzoek · Dosering
+en bijzondere groepen · Sterkte
+van het bewijs.
+> "exact words" [2]
+then your explanation below it.</pre>
+  </div>
+</section>
+
+<section class="slide" data-title="Checker">
+  <div class="kicker">The checker</div>
+  <h2>Every quote compared with its source</h2>
+  <div class="grid2" style="margin-top:20px">
+    <div class="card rise"><h3>How</h3><ul class="clean">
+      <li>Normalise: case, quotes, dashes, spaces</li><li>A quote must appear in the source it cites → <span class="ok">✓</span>, else <span class="warn">⚠</span></li>
+      <li>A claim of 8+ words without [n] → listed as uncited</li><li>The short answer, lead-ins ending in ":" and "the sources don't say…" are not claims</li></ul></div>
+    <div class="card rise d1"><h3>Example (real model)</h3>
+      <p>Is ibuprofen safe during pregnancy?</p>
+      <p style="margin-top:10px"><i>"Tijdens de eerste helft van de zwangerschap alleen op strikte indicatie toepassen… Gebruik is gecontra-indiceerd tijdens het 3e trimester."</i> [1] <span class="ok">✓</span></p>
+      <p class="muted" style="margin-top:10px">[1] Farmacotherapeutisch Kompas, ibuprofen (systemisch), found 23 000 characters down the page.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Frontend">
+  <div class="kicker">Layer 9 · the page</div>
+  <h2>The dewdrop tells you what it's doing</h2>
+  <div class="tbl rise" style="margin-top:18px"><table>
+    <tr><th>Phase</th><th>The drop shows</th></tr>
+    <tr><td>waiting</td><td>grey, softly fading: the GPU is busy or waking</td></tr>
+    <tr><td>thinking</td><td>clouds drifting inside the drop</td></tr>
+    <tr><td>searching</td><td>a radar sweep, a dot per source found</td></tr>
+    <tr><td>reading</td><td>lines drifting up past a beam</td></tr>
+    <tr><td>writing</td><td>water filling the drop, waves following the writing speed</td></tr>
+  </table></div>
+  <p class="muted" style="margin-top:14px">Aero / Liquid Glass look, light · dark · Blossom; text written at a steady pace with a soft fade; only transform and opacity animate, so it stays smooth on phones.</p>
+</section>
+
+<section class="slide" data-title="Built by an agent">
+  <div class="kicker">How it was built</div>
+  <h2>Mostly written by the model it runs on</h2>
+  <div class="grid2" style="margin-top:20px">
+    <div class="steps rise">
+      <div class="step2"><div class="no">1</div><div><b>Claude prepares</b><span>Spec, judge tests, a private reference solution, stubs with the steps in their docstrings, a PLAN.md of small tasks.</span></div></div>
+      <div class="step2"><div class="no">2</div><div><b>The local agent builds</b><span>One fresh session per task; the harness runs the task's test; pass = commit, fail = retry (max 3). Tests and the look are protected.</span></div></div>
+      <div class="step2"><div class="no">3</div><div><b>Review and polish</b><span>All tests, a browser run, the real model; fixes for what tests can't see.</span></div></div>
+    </div>
+    <div class="card rise d1"><h3>Loops so far</h3><p>Chat foundation 23/23 · passkeys · round 2 · profiles 19/19 · Clear Source v2 19/19 · Clear Source v3 17/17 · files in and out (running)</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Lessons">
+  <div class="kicker">Lessons from testing with the real model</div>
+  <h2>Tests pass; the real world still surprises</h2>
+  <div class="grid2" style="margin-top:18px">
+    <div class="card rise"><h3>PubMed said "429"</h3><p>Too many requests per second. Fix: one throttled path for every NCBI call, retries, optional API key.</p></div>
+    <div class="card rise d1"><h3>The model wrote searches as text</h3><p>The second round silently did nothing. Fix: accept both forms, show the format in the prompt.</p></div>
+    <div class="card f"><h3>Pages were cut at 8 000 characters</h3><p>The Kompas pregnancy section starts at 23 000. Fix: read the whole page, keep the paragraphs that match (rare words weigh more).</p></div>
+    <div class="card f"><h3>One GPU, one request</h3><p>Chat waits behind the agent; and after a sleep the PC once ran at half speed. Measure, then restart the server, not the PC.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-title="Next">
+  <div class="kicker">Next</div>
+  <h2>Where Dewdrop goes from here</h2>
+  <ul class="clean rise" style="margin-top:20px;font-size:21px;line-height:1.9">
+    <li>Files in and out: PDF, Word, Excel; the model makes documents; download any answer</li>
+    <li>The whole app in Dutch or English, per user</li>
+    <li>Faster Clear Source under load: read several sources in one call</li>
+    <li>A clear "waiting for the GPU" state and a smoother wake-up</li>
+    <li>More GPU memory one day: a dense 27B model, two slots, no waiting</li>
+  </ul>
+  <p class="muted" style="margin-top:26px">Docs: <code>docs/README.md</code> · Specs: <code>chat/SPEC.md</code> · This talk: <code>docs/dewdrop-talk.html</code></p>
+</section>
+
+</div></div>
+<div id="hud"><span id="counter"></span><button id="prev" aria-label="Previous">‹</button><button id="next" aria-label="Next">›</button><button id="fs" aria-label="Fullscreen">⤢</button></div>
+<script>
+(function(){
+  const stage=document.getElementById('stage'), slides=[...document.querySelectorAll('.slide')];
+  const prog=document.getElementById('progress'), counter=document.getElementById('counter');
+  let idx=0;
+  function fit(){stage.style.transform='scale('+Math.min(innerWidth/1280,innerHeight/720)+')';}
+  addEventListener('resize',fit);fit();
+  const frags=s=>[...s.querySelectorAll('.f')];
+  function show(n,fromBack){
+    n=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,i)=>{s.classList.toggle('before',i<n);if(i!==n)s.classList.remove('active');});
+    const s=slides[n]; s.classList.remove('active'); void s.offsetWidth; s.classList.add('active');
+    frags(s).forEach(f=>f.classList.toggle('on',!!fromBack));
+    idx=n; prog.style.width=((n+1)/slides.length*100)+'%'; counter.textContent=(n+1)+' / '+slides.length;
+    try{history.replaceState(null,'','#'+(n+1));}catch(e){}
+  }
+  function next(){const h=frags(slides[idx]).filter(f=>!f.classList.contains('on'));if(h.length){h[0].classList.add('on');return;}if(idx<slides.length-1)show(idx+1);}
+  function prev(){const o=frags(slides[idx]).filter(f=>f.classList.contains('on'));if(o.length){o[o.length-1].classList.remove('on');return;}if(idx>0)show(idx-1,true);}
+  function toggleFs(){if(!document.fullscreenElement)document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>{});else document.exitFullscreen&&document.exitFullscreen();}
+  addEventListener('keydown',e=>{
+    if(e.metaKey||e.ctrlKey||e.altKey)return;
+    if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();next();}
+    else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();prev();}
+    else if(e.key==='Home')show(0); else if(e.key==='End')show(slides.length-1,true);
+    else if(e.key==='f'||e.key==='F')toggleFs(); else if(e.key==='p'||e.key==='P')window.print();
+  });
+  document.getElementById('next').onclick=next; document.getElementById('prev').onclick=prev; document.getElementById('fs').onclick=toggleFs;
+  let tx=null; addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+  addEventListener('touchend',e=>{if(tx===null)return;const dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>40)(dx<0?next:prev)();tx=null;});
+  const start=parseInt((location.hash||'').slice(1),10); show(isNaN(start)?0:start-1);
+})();
+</script>
+</body>
+</html>

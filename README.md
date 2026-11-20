@@ -1,25 +1,24 @@
 # local-ai-agent
 
-Infrastructure and harness for running a local LLM as an autonomous coding agent:
-the model runs on a Windows PC (WSL2 + llama.cpp), the agent runs in an always-on
-devbox pod on the k3s homelab, wakes the PC over Wake-on-LAN when there is work,
-and lets it sleep again afterwards.
+A local LLM on a gaming PC, put to work two ways:
 
-**Status (2026-11-01): running.** The model serves at ~43 tok/s (generation) and ~790 tok/s (prompt
-reading), the devbox runs the loop, and the loop has already built a real project (the weather
-station website: 13 of 15 tasks passed unattended in 4.9 h). Open items are at the end of this file.
+- **an autonomous coding agent**: the model runs on a Windows PC (WSL2 + llama.cpp); the agent runs in an always-on
+  devbox pod on the k3s homelab, wakes the PC over Wake-on-LAN when there is work and lets it sleep afterwards. It
+  builds features overnight from a plan of small, test-judged tasks;
+- **Dewdrop**, a private chat app for family and friends (dewdrop.cedricschippers.dev), with web search, files and
+  **Clear Source**, a research profile that answers medical questions only from Dutch guidelines and PubMed and
+  checks every quote word for word.
 
-How all the parts tie together (and where to look when something breaks): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-Every design round of the status page and the chat: [docs/design/](docs/design/README.md).
+**Status (2026-11-20):** everything runs. Model: Qwen3.6-35B-A3B at ~40 tok/s generation and ~790 tok/s prompt
+reading on an RTX 3080 Ti. Dewdrop is live with Clear Source v3; the agent is building file upload and download (loop
+D). Details and known issues: [docs/STATUS.md](docs/STATUS.md).
 
-Full plan with rationale and sources: [docs/PLAN.md](docs/PLAN.md) and the
-[plan doc](https://claude.ai/artifact/VtJfAgPfNyxZrbmQnLrLMp).
+**Documentation:** start at [docs/README.md](docs/README.md): architecture, decisions, Dewdrop, Clear Source,
+backend, frontend, the agent loop, the design history, and two presentations
+([Dewdrop from hardware to prompt](docs/dewdrop-talk.html), [the local agent setup](docs/local-ai-setup-talk.html):
+download and open in a browser; arrow keys, F for fullscreen, P to print).
 
 ![Architecture: the devbox pod on k3s sends prompts to llama-server on the PC, controls power over SSH and wakes the PC through the waker pod](docs/architecture.svg)
-
-A 20-slide explainer of the setup and the theory behind it (MoE, bandwidth, quantisation, KV cache,
-the loop) is in [docs/local-ai-setup-talk.html](docs/local-ai-setup-talk.html): download it and open
-it in a browser (arrow keys to move, F for fullscreen, P to print to PDF).
 
 ## Layout
 
@@ -32,8 +31,9 @@ it in a browser (arrow keys to move, F for fullscreen, P to print to PDF).
 | `mac/` | `ai pause\|resume\|status`: control the model from the Mac over `ssh pc` | Mac |
 | (homelab repo) `apps/ai-agent/` | Cluster side: namespaces, devbox StatefulSet, waker, NetworkPolicy, ExternalSecrets | k3s (via Flux) |
 | `harness/` | `loop.py` and its prompt; project templates | devbox pod |
-| `status/` | Status page, job queue and model lease (stdlib Python, `status/SPEC.md`) | k3s |
-| `docs/` | Plan, runbook notes | — |
+| `status/` | Status page, job queue, model lease and `/v1` gateway (stdlib Python, `status/SPEC.md`) | k3s |
+| `chat/` | Dewdrop, the chat app (FastAPI, `chat/SPEC.md`) with Clear Source | k3s (public via Cloudflare Tunnel) |
+| `docs/` | Architecture, decisions, how-tos, design history, presentations | — |
 
 ## Rollout
 
@@ -60,7 +60,7 @@ cluster objects such as the privileged waker namespace.
 | Run the loop | in the project repo on the devbox: `agent-loop` (stop after the current task: `touch .agent/STOP`; it stops starting new tasks after 24 h, change with `--max-hours N`). After the tasks it waits for CI and turns failures into fix tasks (`--no-ci` skips) |
 | See what the agent is doing | the status page (`status/`, reachable over Tailscale once deployed): model state, the running task, the job queue, all-time commits and lines, token speed, recent events |
 | Queue work for the agent | add a job on the status page (unlock it with the status token). `agent-queue` (tmux window `queue` on the devbox, started automatically) runs the jobs one by one, only for repos of `QUEUE_OWNERS`. Pause: `touch ~/.agent-queue-STOP` |
-| Chat with the model | the chat on the status page, or `/chat` for a full page. It goes before agent work in the gateway's queue |
+| Chat with the model | Dewdrop (dewdrop.cedricschippers.dev), or the quick chat on the status page. Chat goes before agent work in the gateway's queue |
 | Fix failures on main automatically | in a tmux window in the project repo: `agent-watch` (checks every 10 min, one fix PR per failing commit; stop with `touch .agent/WATCH-STOP`) |
 | Tell it what to do | edit `PLAN.md` / `SPEC.md` / `AGENTS.md` in the project repo; the agent cannot edit them |
 | Free the GPU for myself | on the Mac: `ai pause`; give it back with `ai resume`; `ai status` |
@@ -97,15 +97,17 @@ browser and no parallel heavy jobs.
 ## Checks
 
 ```
-make lint     # shellcheck, python compile, yaml parse
-make test     # harness self-test against a throwaway repo with a fake agent
+make lint                # shellcheck, python compile, yaml parse
+make test                # harness self-test against a throwaway repo with a fake agent
+make status-test         # the status service's contract tests
+make chat-test           # Dewdrop's tests (K="<pytest -k expr>" for a subset)
+make chat-browser-test   # Dewdrop in headless Chromium
 ```
 
 ## Open items
 
 - Sleep/wake test of the PC through the waker (sleep, wake from the devbox, back within ~90 s).
 - Occasional slow first request after idle (~13 tok/s prompt reading); unexplained, investigate if it recurs.
-- Open WebUI in the homelab still points at the removed Ollama; repoint it to llama-server (needs the key via OpenBao).
 - Router DHCP reservation for the PC.
 - Netdata in WSL for GPU/CPU graphs (planned, not installed).
 - Weather station: gateway, firmware and deploy tasks are not in its `PLAN.md` yet.
