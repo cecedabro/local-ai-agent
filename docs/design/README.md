@@ -1,5 +1,12 @@
 # Design history
 
+**The living style guide** is `chat/static/styleguide.html` (open `/static/styleguide.html` on the running app). It loads
+the app's real stylesheets and draws the components with the app's own code, in every theme, so it is always current.
+Change a component in `chat/static/css/` and it changes there too; add an example when you add a component.
+**How Clear Source works**, explained visually: `chat/static/clear-source.html` (`/static/clear-source.html`).
+
+The rounds below are the history: how each choice was made.
+
 Every design round, as it was shown, so the choices can be traced later. Each file is a single,
 self-contained HTML page: download it and open it in a browser (most have a light / dark / Blossom
 switch at the top right and animate live).

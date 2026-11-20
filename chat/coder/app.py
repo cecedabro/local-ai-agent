@@ -115,6 +115,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
             response.headers["content-security-policy"] = CSP
         response.headers["x-content-type-options"] = "nosniff"
         response.headers["referrer-policy"] = "same-origin"
+        if request.url.path.startswith("/static/") and "cache-control" not in response.headers:
+            # Ask the browser every time (a 304 when nothing changed): after a deploy every file is new at once, never
+            # a mix of new and 4-hour-old scripts (Cloudflare's default when the app says nothing).
+            response.headers["cache-control"] = "no-cache"
         return response
 
     @app.middleware("http")

@@ -6,6 +6,33 @@ import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Fo
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
+/** The model sometimes writes a quote inside a paragraph: `… text. > "quote" [1] More text.` Put it on its own line as a
+ * blockquote, and end the blockquote after its [n], so it renders (and is checked and clickable) like the others. */
+export function fixQuotes(text) {
+  return String(text).split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/).map((part, i) => (i % 2 ? part : part   // code stays as is
+    .replace(/([^\n])[ \t]+>[ \t]*(["“])/g, "$1\n\n> $2")
+    .replace(/(^|\n)(>[ \t]*["“][^\n]*?["”][ \t]*(?:\[\d+(?:\s*[,;]\s*\d+)*\][ \t]*)+)[ \t]+(?=\S)/g, "$1$2\n\n"))).join("");
+}
+const mdRender = md.render.bind(md);
+md.render = (src, env) => mdRender(fixQuotes(src), env);
+
+// A prompt you are typing stays with its chat: kept per chat in this browser, so switching chats, apps or tabs (or a
+// reload) doesn't lose it.
+const draftKey = () => "dewdrop-draft:" + (state.chatId || "new");
+function saveDraft() {
+  try {
+    const v = $("#input").value;
+    if (v.trim()) localStorage.setItem(draftKey(), v); else localStorage.removeItem(draftKey());
+  } catch { /* private mode */ }
+}
+function loadDraft() {
+  let v = "";
+  try { v = localStorage.getItem(draftKey()) || ""; } catch { /* private mode */ }
+  const input = $("#input");
+  if (input.value === v) return;
+  input.value = v;
+  input.dispatchEvent(new Event("input"));
+}
 // links in answers open in a new tab
 const defaultLink = md.renderer.rules.link_open || ((t, i, o, e, s) => s.renderToken(t, i, o));
 md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -114,7 +141,9 @@ function setProfile(p) {
 async function openChat(id) {
   const res = await api(`/api/chats/${encodeURIComponent(id)}`);
   const chat = await res.json();
+  const switched = state.chatId !== chat.id;
   state.chatId = chat.id;
+  if (switched) loadDraft();
   setProfile(chat.profile);
   $("#chat-title").textContent = chat.title;
   const $messages = $("#messages");
@@ -346,6 +375,7 @@ async function send() {
   const text = $("#input").value.trim();
   if (!text && !state.files.length) return;
   if (state.busy) return;
+  try { localStorage.removeItem(draftKey()); } catch { /* private mode */ }
 
   // 1. setBusy(true); everything below in try { ... } finally { setBusy(false) }.
   setBusy(true);
@@ -373,6 +403,7 @@ async function send() {
     // Clear #input, #file-chips and state.files (the ids go with the message)
     const fileIds = state.files.map((f) => f.id);
     $("#input").value = "";
+    saveDraft();
     $("#file-chips").innerHTML = "";
     state.files = [];
 
@@ -418,7 +449,7 @@ async function streamAnswer(chatId, open, retryText) {
     trailAnim.stop();
     pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live);
     trailAnim = live ? animateTrail(pre) : { stop() {} };
-    if (live) state.follow.stick();               // the page goes down with the research, like with the text
+    if (live) state.follow.glide();               // the page glides down with the research, like with the text
   };
 
   state.follow.bottom();
@@ -439,6 +470,7 @@ async function streamAnswer(chatId, open, retryText) {
     state.follow.stick();
   });
 
+  const drop = sendDrop();
   const ctrl = new AbortController();
   current = { chatId, ctrl };
   let res;
@@ -448,6 +480,7 @@ async function streamAnswer(chatId, open, retryText) {
     res = null;
   }
   if (!res || !res.ok) {
+    drop.done();
     orb.dataset.phase = "idle";
     liveOrb.stop();
     meta.innerHTML = "";
@@ -472,6 +505,7 @@ async function streamAnswer(chatId, open, retryText) {
   await readEvents(res, (event, data) => {
     if (event === "phase") {
       orb.dataset.phase = data.phase;
+      drop.phase(data.phase);
       phaseLabel = data.label || data.phase;
       phaseAt = performance.now();
       drawPhase();
@@ -507,6 +541,7 @@ async function streamAnswer(chatId, open, retryText) {
     // the connection broke (phone locked, app switched, network changed); the server keeps writing
   }
   clearInterval(ticker);
+  drop.done();
   if (current?.ctrl === ctrl) current = null;
 
   // 7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
@@ -550,6 +585,48 @@ async function streamAnswer(chatId, open, retryText) {
   }
 
   state.follow.stick();
+}
+
+const DROP_WORDS = { thinking: "Thinking", searching: "Searching", reading: "Reading", writing: "Writing",
+  waiting: "Waiting", compressing: "Compressing" };
+/**
+ * A dewdrop that blobs out of the send button while an answer is made and shows what it is doing (the same phase
+ * animations as the big drop: clouds while thinking, radar while searching, lines while reading, water while writing).
+ * Returns {phase(name), done()}; done() lets it sink back into the button.
+ */
+function sendDrop() {
+  const dock = document.querySelector(".dock"), btn = $("#send");
+  if (!dock || !btn) return { phase() {}, done() {} };
+  dock.querySelector(".send-drop")?.remove();
+  const el = document.createElement("div");
+  el.className = "send-drop";
+  el.innerHTML = `<span class="sd-label">Thinking</span>${orbHtml("", "thinking")}`;
+  const place = () => {
+    const d = dock.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    const top = ($("#composer") || btn).getBoundingClientRect().top;     // just above the composer, in line with the button
+    el.style.left = `${b.left - d.left + b.width / 2}px`;
+    el.style.bottom = `${d.bottom - top + 10}px`;
+  };
+  place();
+  dock.appendChild(el);
+  const o = el.querySelector(".orb");
+  const motion = startOrb(o);
+  window.addEventListener("resize", place);
+  let gone = false;
+  return {
+    phase(name) {
+      if (gone) return;
+      o.dataset.phase = name;
+      el.querySelector(".sd-label").textContent = DROP_WORDS[name] || name;
+    },
+    done() {
+      if (gone) return;
+      gone = true;
+      window.removeEventListener("resize", place);
+      el.classList.add("back");
+      setTimeout(() => { motion.stop(); el.remove(); }, 450);
+    },
+  };
 }
 
 /** Open the chat again (stored answer, or follow the running one) once the page is visible. */
@@ -916,6 +993,7 @@ async function start() {
   $("#new-chat").addEventListener("click", () => {
     if (state.busy) return;
     state.chatId = null;
+    loadDraft();
     $("#chat-title").textContent = "New chat";
     if (state.ctx) drawContext({ ...state.ctx, used: 0 });
     drawWelcome();
@@ -958,12 +1036,13 @@ async function start() {
     await api("/api/logout", { method: "POST" });
     location.href = "/login";
   });
+  $("#input").addEventListener("input", saveDraft);
   setupFiles();
   setupSidebar();
   setProfile(state.profile);
   await loadChats();
   if (state.chats.length > 0) await openChat(state.chats[0].id);
-  else drawWelcome();
+  else { loadDraft(); drawWelcome(); }
 }
 
 start();

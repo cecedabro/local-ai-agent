@@ -171,7 +171,7 @@ async function main() {
     await go("/profiles");
     await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "two profile tabs");
     await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
-    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===10`), 5000, "the seeded PubMed and 9 Dutch guideline cards");
+    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===16`), 5000, "the seeded PubMed and 15 guideline and medicine cards");
     if (!(await ev(`document.querySelector('.pf-tab[data-profile=evidence]').getAttribute('aria-selected')==='true'`))) throw new Error("the open tab is not aria-selected");
     if (!(await ev(`document.querySelectorAll('#budget-bar i').length>=1 && /tokens/.test(document.getElementById('budget-text').textContent)`))) throw new Error("no budget bar");
     await ev(`(()=>{const t=document.querySelector('.src-card[data-kind=pubmed] [data-note]');t.value='Alleen RCTs en reviews';t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
@@ -224,6 +224,30 @@ async function main() {
     if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
     if (!(await ev(`!!${last("blockquote.q-bad")}`))) throw new Error("the made-up quote is not flagged");
     if (!/no source/.test(await ev(`${last(".verify-note summary")}?.textContent||''`))) throw new Error("no note about sentences without a source");
+  });
+
+  await check("round 14: no Quick/Think in Clear Source, the quote opens its source, the send drop, a draft stays", async () => {
+    if (await ev(`getComputedStyle(document.querySelector('.composer .seg[aria-label="Answer mode"]')).display!=='none'`)) throw new Error("Quick/Think shows in Clear Source");
+    if (!(await ev(`!!${last("blockquote.q-ok.q-link[data-qn]")}`))) throw new Error("the checked quote is not a link to its source");
+    await ev(`${last("blockquote.q-ok.q-link")}.click()`);
+    await waitFor(() => ev(`!!${last("details.src[open]")}`), 3000, "the quote opens its source card");
+    await sendText("Helpt paracetamol bij hoofdpijn?");
+    await waitFor(() => ev(`!!document.querySelector('.dock .send-drop .orb')`), 5000, "a drop out of the send button");
+    await idle();
+    await waitFor(() => ev(`!document.querySelector('.dock .send-drop')`), 3000, "the drop goes back when the answer is done");
+    await ev(`(()=>{const i=document.getElementById('input');i.value='a draft for later';i.dispatchEvent(new Event('input'))})()`);
+    await go("/");
+    await waitFor(() => ev(`document.getElementById('input').value==='a draft for later'`), 5000, "the draft is back after a reload");
+    await ev(`(()=>{const i=document.getElementById('input');i.value='';i.dispatchEvent(new Event('input'))})()`);
+  });
+
+  await check("round 14: the style guide and the Clear Source explainer draw with the app's own code", async () => {
+    await go("/static/styleguide.html");
+    await waitFor(() => ev(`document.querySelectorAll('#sg-cs details.src').length===5 && !!document.querySelector('#sg-cs .q-link') && document.querySelectorAll('#sg-drops .orb').length===7`), 5000, "the guide's samples");
+    await go("/static/clear-source.html");
+    await waitFor(() => ev(`document.querySelectorAll('.fl-ribbon .orb.live').length===6 && document.querySelectorAll('.fl-step').length===6`), 5000, "the explainer's steps");
+    await go("/");
+    await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "back to the chat");
   });
 
   await check("round 5: Clear Source: MeSH headings in the trail, study types on the sources", async () => {

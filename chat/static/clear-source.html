@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Clear Source works</title>
+<script src="/static/js/theme.js"></script>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/chat.css">
+<link rel="stylesheet" href="/static/css/orb.css">
+<link rel="stylesheet" href="/static/styleguide/guide.css">
+<link rel="stylesheet" href="/static/styleguide/flow.css">
+</head>
+<body class="sg flow">
+
+<header class="sg-top">
+  <a class="fl-back" href="/" title="Back to the chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Chat</a>
+  <h1>How Clear Source works</h1>
+  <nav class="seg four icons theme" role="radiogroup" aria-label="Theme">
+    <input type="radio" name="sgtheme" id="sg-auto" value="auto"><label for="sg-auto" title="Auto">◐</label>
+    <input type="radio" name="sgtheme" id="sg-light" value="light"><label for="sg-light" title="Light">☀</label>
+    <input type="radio" name="sgtheme" id="sg-dark" value="dark"><label for="sg-dark" title="Dark">☾</label>
+    <input type="radio" name="sgtheme" id="sg-blossom" value="blossom"><label for="sg-blossom" title="Blossom">✿</label>
+    <span class="thumb"></span>
+  </nav>
+</header>
+
+<main class="fl-main">
+
+<section class="fl-hero">
+  <p class="fl-kicker">Clear Source · Dewdrop's medical research mode</p>
+  <h2 class="fl-title">Answers only from sources it found and read, and every quote checked word for word.</h2>
+  <p class="fl-lead">A language model on its own mixes what it read with what it remembers. Clear Source doesn't trust
+  the model to be strict: <b>the app</b> runs the searches, lets the model read one source at a time, keeps only
+  passages that really appear in the source, and checks the finished answer again. This page follows one question
+  through every step.</p>
+  <ol class="fl-ribbon" aria-label="The steps">
+    <li><span class="orb live" data-phase="idle" data-fl></span><b>Question</b></li>
+    <li><span class="orb live" data-phase="thinking" data-fl></span><b>Understand</b><small>1 model call</small></li>
+    <li><span class="orb live" data-phase="searching" data-fl></span><b>Search</b><small>the app</small></li>
+    <li><span class="orb live" data-phase="reading" data-fl></span><b>Read</b><small>1 call per source</small></li>
+    <li><span class="orb live" data-phase="writing" data-fl></span><b>Write</b><small>1 call, thinks first</small></li>
+    <li><span class="orb live" data-phase="idle" data-fl></span><b>Check</b><small>the app</small></li>
+  </ol>
+  <p class="fl-example"><span>Example question</span>“Wat is de eerste keus behandeling bij een blaasontsteking bij vrouwen?”</p>
+</section>
+
+<ol class="fl-steps">
+
+<li class="fl-step" id="question">
+  <span class="orb live" data-phase="idle" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">0</span><h3>Your question</h3><span class="fl-who app">the app</span></header>
+    <p>Your message is stored first, then the answer runs as a task on the server. If your phone locks or you switch
+    apps, it keeps going and the page picks it up again when you come back.</p>
+    <div class="fl-io">
+      <div><h4>Files you attached</h4><p>Read first and treated as sources, before anything is searched.</p></div>
+      <div><h4>Answer language</h4><p>Decided by the app from your words: Dutch words like <i>wat, bij, werkt</i> mean a Dutch
+      answer; otherwise English. The model is told so explicitly.</p></div>
+    </div>
+  </div>
+</li>
+
+<li class="fl-step" id="understand">
+  <span class="orb live" data-phase="thinking" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">1</span><h3>Understand: make a search plan</h3><span class="fl-who model">model call</span></header>
+    <p>One model call turns the question into a short summary and at most <b>7 searches</b>. The prompt
+    (<code>PLAN_PROMPT</code>) asks for:</p>
+    <ul class="fl-list">
+      <li><b>PubMed</b>: 2 to 4 searches in English, from specific to broad, each with up to 4 official
+        <abbr title="Medical Subject Headings, PubMed's own vocabulary">MeSH</abbr> headings.</li>
+      <li><b>Websites</b>: the 1 to 3 trusted sites that fit best. A medicine question always includes the Farmacotherapeutisch
+        Kompas; children's doses the Kinderformularium; pregnancy NVOG; when Dutch sites may be silent NICE, WHO or CDC.
+        Dutch sites are searched in Dutch, English sites in English.</li>
+    </ul>
+    <div class="fl-io">
+      <div><h4>In</h4><pre class="fl-code">Wat is de eerste keus behandeling bij een
+blaasontsteking bij vrouwen?</pre></div>
+      <div><h4>Out (JSON)</h4><pre class="fl-code">{"about": "Eerste keus bij een ongecompliceerde
+           blaasontsteking bij vrouwen.",
+ "searches": [
+  {"source": "site:richtlijnendatabase.nl",
+   "query": "blaasontsteking behandeling eerste keus"},
+  {"source": "site:farmacotherapeutischkompas.nl",
+   "query": "nitrofurantoïne cystitis"},
+  {"source": "pubmed",
+   "query": "cystitis women first line treatment",
+   "mesh": ["Cystitis", "Anti-Bacterial Agents"]}]}</pre></div>
+    </div>
+    <p class="fl-see"><b>You see</b> "Understanding the question", with the summary and the search terms as chips.</p>
+  </div>
+</li>
+
+<li class="fl-step" id="search">
+  <span class="orb live" data-phase="searching" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">2</span><h3>Search: the app runs the plan</h3><span class="fl-who app">the app</span></header>
+    <p>No model here: the app does the searching, so it can't invent results. Guideline sites go first, so PubMed
+    can't crowd them out.</p>
+    <div class="fl-io">
+      <div><h4>PubMed</h4>
+        <ol class="fl-mini">
+          <li>The MeSH headings are checked against PubMed's MeSH database; made-up ones are dropped.</li>
+          <li>The search runs with the profile's filters (study types, years, humans, languages):</li>
+        </ol>
+        <pre class="fl-code fl-wrap">(("Cystitis"[MeSH Terms] AND "Anti-Bacterial Agents"[MeSH Terms])
+ OR (cystitis women first line treatment))
+AND (systematic[sb] OR meta-analysis[pt]
+     OR randomized controlled trial[pt]
+     OR (guideline[pt] OR practice guideline[pt]))
+AND "last 10 years"[dp] AND humans[mh]</pre>
+        <ol class="fl-mini" start="3">
+          <li>Fewer than 3 hits: the same words once more without filters and MeSH ("broader").</li>
+          <li>At most ~3 requests a second to PubMed, retried when it says "too many requests".</li>
+        </ol>
+      </div>
+      <div><h4>Trusted websites</h4>
+        <ol class="fl-mini">
+          <li>A site-restricted search through the app's own search engine (SearXNG).</li>
+          <li>The top 2 pages are opened and turned into text (at most 8 000 characters each).</li>
+          <li>PubMed Central articles are read in full text.</li>
+          <li>Pages behind a bot check ("Just a moment…") are refused, never bypassed. That's why NHG isn't a source.</li>
+        </ol>
+        <h4>Open web</h4>
+        <p>Off by default for Clear Source: open web results let advocacy sites in.</p>
+      </div>
+    </div>
+    <p class="fl-see"><b>You see</b> one row per search, with what it found and a link to the exact search.</p>
+  </div>
+</li>
+
+<li class="fl-step" id="read">
+  <span class="orb live" data-phase="reading" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">3</span><h3>Read: one source at a time</h3><span class="fl-who model">model call per source</span></header>
+    <p>Up to 20 candidate sources. For each one, a separate model call (<code>EXTRACT_PROMPT</code>):</p>
+    <blockquote class="fl-prompt">“Copy, word for word, up to 4 passages of the source that help answer the question:
+    whole sentences, exactly as written, in the source's own language; change nothing.”</blockquote>
+    <div class="fl-io">
+      <div><h4>The app checks every passage</h4><p>A passage counts only if it appears <b>word for word</b> in that source
+      (spaces and quote marks aside). Anything the model paraphrased or made up is dropped right here.</p></div>
+      <div><h4>Result per source</h4><p><span class="fl-pill ok">2 quotes</span> useful, or
+      <span class="fl-pill">not relevant</span> when no real passage is left, or
+      <span class="fl-pill bad">could not read</span>.</p></div>
+    </div>
+    <div class="fl-round"><b>Round 2.</b> Fewer than 3 useful sources? One more model call (<code>FOLLOWUP_PROMPT</code>)
+    plans new searches with other words (synonyms, Dutch and English, broader terms, other sites), and steps 2 and 3
+    run once more.</div>
+    <p class="fl-see"><b>You see</b> each source appear with its result: "1 quote", "not relevant".</p>
+  </div>
+</li>
+
+<li class="fl-step" id="write">
+  <span class="orb live" data-phase="writing" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">4</span><h3>Write: only from the kept passages</h3><span class="fl-who model">model call, thinks first</span></header>
+    <p>The useful sources (at most 10) are put in order: <b>guidelines first</b>, then meta-analyses and reviews, then
+    trials, then the rest. Only their kept passages go to the model, not the whole pages. Clear Source always lets the
+    model reason before it writes.</p>
+    <div class="fl-io">
+      <div><h4>The rules (<code>RULES</code>)</h4>
+        <ul class="fl-list">
+          <li>Answer only from the numbered passages, never from memory.</li>
+          <li>Fixed headings: Kort antwoord · Nederlandse richtlijnen · Onderzoek · Dosering en bijzondere groepen · Sterkte van het bewijs.</li>
+          <li>Build each part from quotes: <code>&gt; "exact words" [2]</code>, explained below in plain words.</li>
+          <li>Each quote once; the short answer has no quotes.</li>
+          <li>Quotes stay in the source's language; the rest in the question's language.</li>
+          <li>Nothing useful found? The app says so itself, without asking the model.</li>
+        </ul>
+      </div>
+      <div><h4>Out</h4><pre class="fl-code fl-wrap">## Kort antwoord
+De eerste keus is nitrofurantoïne, vijf dagen [1].
+
+## Nederlandse richtlijnen
+&gt; "Behandel een ongecompliceerde cystitis bij
+   niet-zwangere vrouwen met nitrofurantoïne." [1]
+
+De richtlijn noemt nitrofurantoïne als eerste
+middel; de dosering staat in het Kompas [2].</pre></div>
+    </div>
+    <p class="fl-see"><b>You see</b> the text being written; the numbers are clickable straight away.</p>
+  </div>
+</li>
+
+<li class="fl-step" id="check">
+  <span class="orb live" data-phase="idle" data-fl></span>
+  <div class="card fl-card">
+    <header class="fl-h"><span class="fl-n">5</span><h3>Check: compare the answer with the sources again</h3><span class="fl-who app">the app</span></header>
+    <p>The finished answer goes through the checker (<code>verify.py</code>), which knows nothing about the model:</p>
+    <div class="fl-checks">
+      <div><span class="fl-pill ok">✓</span><p>The quote is found word for word in the source it cites.</p></div>
+      <div><span class="fl-pill bad">⚠ not in source 4</span><p>A quote that isn't there, shown in red.</p></div>
+      <div><span class="fl-pill">1 sentence has no source</span><p>A claim without a <code>[n]</code>.</p></div>
+    </div>
+    <p>Then the answer is stored with its sources, the research trail and the check, so it looks the same when you open it later.
+    Tap a number or a checked quote to open its source.</p>
+  </div>
+</li>
+
+</ol>
+
+<section class="card fl-card fl-wide" id="live">
+  <h3>What travels to your screen</h3>
+  <p>The answer arrives as a stream of small events. When the connection drops, the server keeps them, and the page
+  replays them when it comes back.</p>
+  <ol class="fl-events">
+    <li><code>phase</code><span>what it's doing now: the label and the drop's animation</span></li>
+    <li><code>trail</code><span>one research step: a plan, a search, a source read</span></li>
+    <li><code>thinking</code><span>the model's reasoning while it writes</span></li>
+    <li><code>sources</code><span>the sources it will cite, so the [n] work while writing</span></li>
+    <li><code>delta</code><span>a piece of the answer's text</span></li>
+    <li><code>verify</code><span>the checker's report</span></li>
+    <li><code>done</code><span>stored: message id, sources, trail, speed</span></li>
+  </ol>
+</section>
+
+<section class="card fl-card fl-wide" id="knobs">
+  <h3>The numbers that steer it</h3>
+  <p class="small muted">In <code>chat/coder/research.py</code>, with the prompts at the top of the same file.</p>
+  <table class="sg-table">
+    <tbody>
+      <tr><td>Searches per plan</td><td><b>7</b></td><td>PubMed hits per search</td><td><b>8</b></td></tr>
+      <tr><td>Pages opened per site search</td><td><b>2</b></td><td>Candidate sources</td><td><b>20</b></td></tr>
+      <tr><td>Fewer hits than this: search broader</td><td><b>3</b></td><td>Fewer useful sources than this: round 2</td><td><b>3</b></td></tr>
+      <tr><td>Rounds</td><td><b>2</b></td><td>Sources in the answer</td><td><b>10</b></td></tr>
+      <tr><td>Passages per source</td><td><b>4</b></td><td>Characters read per source</td><td><b>8 000</b></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card fl-card fl-wide" id="limits">
+  <h3>Good to know</h3>
+  <ul class="fl-list">
+    <li><b>Time.</b> About 10 model calls: 1 to 3 minutes with a free GPU, longer while the coding agent uses the model.</li>
+    <li><b>Search decides the answer.</b> When PubMed's best matches are off-topic, most sources are rightly rejected and
+      the answer is short, or "no reliable evidence found".</li>
+    <li><b>Abstracts.</b> PubMed gives abstracts; only PubMed Central articles are read in full.</li>
+    <li><b>The checker is literal.</b> A correct paraphrase without quote marks and a number counts as "no source".</li>
+    <li><b>Sources.</b> PubMed, Richtlijnendatabase, RIVM (LCI), JGZ, Palliaweb, NVOG, NICE, WHO, CDC, Thuisarts,
+      Farmacotherapeutisch Kompas, Kinderformularium, Lareb, Geneesmiddelenbulletin, Apotheek.nl and EMA. Change them on the
+      Profiles page.</li>
+  </ul>
+</section>
+
+</main>
+<script type="module" src="/static/styleguide/flow.js"></script>
+</body>
+</html>

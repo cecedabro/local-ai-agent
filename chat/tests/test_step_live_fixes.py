@@ -67,3 +67,10 @@ def test_client_ip():
     assert appmod.client_ip(req) == "203.0.113.9"
     req = SimpleNamespace(headers={"x-forwarded-for": "1.2.3.4"}, client=SimpleNamespace(host="10.0.0.1"))
     assert appmod.client_ip(req) == "10.0.0.1", "X-Forwarded-For is ignored"
+
+
+def test_static_files_are_revalidated(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(appmod.create_app({"DATA_DIR": str(tmp_path), "ADMIN_USER": "a", "ADMIN_PASSWORD": "pw-long-enough-1"}))
+    r = c.get("/static/css/chat.css")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", "a deploy reaches the browser at once"

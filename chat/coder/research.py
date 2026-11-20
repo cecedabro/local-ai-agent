@@ -37,8 +37,11 @@ PLAN_PROMPT = (
     "medicine, its dose, combining it or using it while pregnant: always farmacotherapeutischkompas.nl; "
     "drugs: "
     "farmacotherapeutischkompas.nl; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
-    "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; children's growth, feeding and development (youth health care): jgzrichtlijnen.nl; palliative and end-of-life care: palliaweb.nl; patient advice: thuisarts.nl) and search them in "
-    "Dutch with 2 to 4 key words, no mesh. Use only these sources: {sources}.")
+    "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; children's growth, feeding and development (youth health care): jgzrichtlijnen.nl; palliative and end-of-life care: palliaweb.nl; pregnancy, birth and gynaecology: nvog.nl; "
+    "what a medicine is for and its side effects in plain words: apotheek.nl; EU approval and safety warnings: ema.europa.eu; "
+    "when the Dutch sites may be silent: nice.org.uk (UK guidelines), who.int (international), cdc.gov (infections); "
+    "patient advice: thuisarts.nl) and search them with 2 to 4 key words, no mesh: Dutch sites in Dutch, nice.org.uk, "
+    "who.int, cdc.gov and ema.europa.eu in English. Use only these sources: {sources}.")
 FOLLOWUP_PROMPT = (
     "The searches below found too little for this medical question. Plan new searches with other words: synonyms, "
     "broader or related terms, the Dutch and the English word, fewer words per search, other sites. Do not repeat a "

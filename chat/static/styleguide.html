@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dewdrop style guide</title>
+<script src="/static/js/theme.js"></script>
+<!-- The app's own stylesheets, in the app's order: this page can never drift from what the app looks like. -->
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/chat.css">
+<link rel="stylesheet" href="/static/css/orb.css">
+<link rel="stylesheet" href="/static/styleguide/guide.css">
+</head>
+<body class="sg">
+
+<header class="sg-top">
+  <span class="orb live" data-phase="idle" id="sg-brand"></span>
+  <h1>Dewdrop style guide</h1>
+  <nav class="sg-themes seg four icons theme" role="radiogroup" aria-label="Theme">
+    <input type="radio" name="sgtheme" id="sg-auto" value="auto"><label for="sg-auto" title="Auto">◐</label>
+    <input type="radio" name="sgtheme" id="sg-light" value="light"><label for="sg-light" title="Light">☀</label>
+    <input type="radio" name="sgtheme" id="sg-dark" value="dark"><label for="sg-dark" title="Dark">☾</label>
+    <input type="radio" name="sgtheme" id="sg-blossom" value="blossom"><label for="sg-blossom" title="Blossom">✿</label>
+    <span class="thumb"></span>
+  </nav>
+</header>
+
+<div class="sg-layout">
+<nav class="sg-toc" aria-label="Sections">
+  <a href="#how">How this page works</a>
+  <a href="#tokens">Colour tokens</a>
+  <a href="#type">Type</a>
+  <a href="#buttons">Buttons and switches</a>
+  <a href="#fields">Fields and the composer</a>
+  <a href="#cards">Cards, badges, notes</a>
+  <a href="#drop">The drop</a>
+  <a href="#messages">Messages</a>
+  <a href="#cs">Clear Source</a>
+  <a href="#sidebar">Sidebar</a>
+  <a href="#profiles">Profiles page</a>
+  <a href="#files">Where things live</a>
+</nav>
+
+<main class="sg-main">
+
+<section id="how" class="sg-sec">
+  <h2>How this page works</h2>
+  <p>This page loads the app's real stylesheets (<code>tokens.css</code>, <code>base.css</code>, <code>chat.css</code>,
+  <code>orb.css</code>) and draws most components with the app's own code (<code>stream.js</code>: the drop, the trail, sources,
+  quote checks, citation numbers). Change a component in the CSS and it changes here and in the app at the same time;
+  nothing is copied, so nothing goes stale. Switch the theme at the top right to see every component in Light, Dark and
+  Blossom.</p>
+  <p class="small muted">Open it at <code>/static/styleguide.html</code>. Each section names its class names and the file they live in.
+  The guide's own layout uses <code>sg-</code> classes (<code>styleguide/guide.css</code>); everything else is the app.</p>
+</section>
+
+<section id="tokens" class="sg-sec">
+  <h2>Colour tokens</h2>
+  <p class="small muted"><code>tokens.css</code>: one block per theme on <code>html[data-theme]</code>. Components only use these
+  variables, so a theme is just a new block. The values below are read live from the page.</p>
+  <div class="sg-swatches" id="sg-swatches"></div>
+</section>
+
+<section id="type" class="sg-sec">
+  <h2>Type</h2>
+  <div class="card sg-pad">
+    <h1 class="sg-demo-h1">Page title (h1)</h1>
+    <h2>Section label (h2)</h2>
+    <p>Body text, 15 px. Dewdrop answers questions on your own computer's model. <a href="#type">A link</a> looks like this.</p>
+    <p class="small muted">Small muted text (<code>.small .muted</code>), used for hints and counts.</p>
+    <p><code>inline code</code> · <b>bold</b> · <em>italic</em></p>
+  </div>
+</section>
+
+<section id="buttons" class="sg-sec">
+  <h2>Buttons and switches</h2>
+  <div class="sg-row">
+    <button class="primary">Primary (.primary)</button>
+    <button>Default button</button>
+    <button class="link danger">Danger link (.link.danger)</button>
+    <button class="iconbtn" title="Icon button">⚙</button>
+    <span class="sg-cap">.iconbtn</span>
+  </div>
+  <div class="sg-row">
+    <button class="primary send" title="Send"><span class="arrow">↑</span><span class="sq"></span></button>
+    <span class="sg-cap">.send</span>
+    <button class="primary send stop" title="Stop"><span class="arrow">↑</span><span class="sq"></span></button>
+    <span class="sg-cap">.send.stop (while answering)</span>
+  </div>
+  <div class="sg-row">
+    <div class="seg" role="radiogroup" aria-label="Demo mode">
+      <input type="radio" name="sgmode" id="sgm-q" checked><label for="sgm-q">Quick</label>
+      <input type="radio" name="sgmode" id="sgm-t"><label for="sgm-t">Think</label>
+      <span class="thumb"></span>
+    </div>
+    <span class="sg-cap">.seg (segmented choice, the thumb slides)</span>
+  </div>
+  <div class="sg-row">
+    <label class="switch"><input type="checkbox" checked><span class="track"></span>Switch on</label>
+    <label class="switch"><input type="checkbox"><span class="track"></span>Switch off</label>
+    <span class="sg-cap">.switch</span>
+  </div>
+  <div class="sg-row">
+    <div class="pf-tabs" role="tablist"><button type="button" class="pf-tab" aria-selected="false">General</button><button type="button" class="pf-tab" aria-selected="true">Clear Source</button></div>
+    <span class="sg-cap">.pf-tabs (profiles page switch)</span>
+  </div>
+</section>
+
+<section id="fields" class="sg-sec">
+  <h2>Fields and the composer</h2>
+  <div class="sg-row"><input class="search" placeholder="Search chats"><span class="sg-cap">input.search</span></div>
+  <div class="sg-row sg-grow"><textarea rows="2" placeholder="A textarea (profile instructions, notes)"></textarea></div>
+  <p class="small muted">The composer (<code>.dock .composer</code>, chat.css). In Clear Source the Quick/Think choice is hidden.</p>
+  <div class="dock sg-dock">
+    <form class="composer" action="#">
+      <div class="chips"><span class="file" data-kind="pdf">brief.pdf <small>3k tokens</small><button type="button" class="x">×</button></span></div>
+      <textarea rows="1" placeholder="Message Dewdrop…"></textarea>
+      <div class="cbar">
+        <label class="iconbtn" title="Attach">📎</label>
+        <div class="seg" role="radiogroup" aria-label="Answer mode">
+          <input type="radio" name="sgmode2" id="sgm2-q" checked><label for="sgm2-q">Quick</label>
+          <input type="radio" name="sgmode2" id="sgm2-t"><label for="sgm2-t">Think</label>
+          <span class="thumb"></span>
+        </div>
+        <span class="spacer"></span>
+        <button class="primary send" id="sg-send" type="button" title="Send"><span class="arrow">↑</span><span class="sq"></span></button>
+      </div>
+    </form>
+    <div class="ctx"><span>Context 2.6k / 49.2k</span><div class="bar"><i id="sg-ctx"></i><span class="line" id="sg-line"></span></div><button type="button">Compress now</button></div>
+  </div>
+  <div class="sg-row"><button type="button" id="sg-drop-btn">▶ Show the send drop</button>
+    <span class="sg-cap">.send-drop: blobs out of the send button and shows the phase (round 14)</span></div>
+</section>
+
+<section id="cards" class="sg-sec">
+  <h2>Cards, badges, notes</h2>
+  <div class="sg-grid2">
+    <section class="card"><h2>A card</h2><p class="small muted">.card: glass panel with a sheen; every page section is one.</p></section>
+    <section class="card"><div class="pf-row"><h2>Card with a status</h2><span class="small muted">Saved</span></div>
+      <p class="small muted">.pf-row puts a heading and a status on one line.</p></section>
+  </div>
+  <div class="sg-row">
+    <span class="badge ok">model ready</span><span class="badge">model asleep</span>
+    <span class="sg-cap">.badge, .badge.ok</span>
+  </div>
+  <div class="ai"><span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span><div class="content">
+    <div class="note error">Something went wrong.</div><div class="note stopped">Stopped</div>
+    <div class="note summary">Earlier messages summarised</div></div></div>
+  <div class="strip sg-strip"><span><i></i>Clear Source · answers only from sources</span></div>
+</section>
+
+<section id="drop" class="sg-sec">
+  <h2>The drop</h2>
+  <p class="small muted">The live drop (<code>orbHtml()</code> + <code>startOrb()</code> in stream.js, <code>orb.css</code>). Each phase
+  has its own layer: clouds while thinking, a radar while searching, lines while reading, water filling while writing.</p>
+  <div class="sg-drops" id="sg-drops"></div>
+</section>
+
+<section id="messages" class="sg-sec">
+  <h2>Messages</h2>
+  <p class="small muted"><code>.u .msg.user</code> for yours, <code>.ai</code> (drop + <code>.content</code> with <code>.bub</code> and the
+  stats line <code>.meta2</code>) for Dewdrop's. Rendered with the app's markdown setup.</p>
+  <div class="col sg-thread" id="sg-messages"></div>
+</section>
+
+<section id="cs" class="sg-sec">
+  <h2>Clear Source</h2>
+  <p class="small muted">The research trail (<code>trailHtml</code>), thinking (<code>thoughtHtml</code>), checked quotes
+  (<code>markVerify</code>: ✓ found word for word, ⚠ not found), clickable quotes and numbers, and the sources grouped by
+  kind with soft type badges (<code>sourcesHtml</code>).</p>
+  <div class="col sg-thread" id="sg-cs"></div>
+  <p class="small muted">While researching, the trail is open and the current stage's drop moves:</p>
+  <div class="col sg-thread" id="sg-cs-live"></div>
+</section>
+
+<section id="sidebar" class="sg-sec">
+  <h2>Sidebar</h2>
+  <div class="sg-side">
+    <aside class="side sg-sidebox">
+      <div class="brand"><span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span><b>Dewdrop</b></div>
+      <button class="primary newchat">+ New chat</button>
+      <div class="side-actions"><input class="search" placeholder="Search chats"><button class="iconbtn newfolder" title="New folder">+📁</button></div>
+      <nav class="convs">
+        <details class="folder" open><summary><span>Studie</span><small>1</small><button class="more" title="More">⋯</button></summary>
+          <div class="conv"><span>Samenvatting hoofdstuk 3</span><button class="more" title="More">⋯</button></div></details>
+        <h4>Today</h4>
+        <div class="conv on"><span>Is ibuprofen veilig tijdens de zwangerschap?</span><em class="tag">EH</em><button class="more" title="More">⋯</button></div>
+        <div class="conv"><span>Plan my week</span><button class="more" title="More">⋯</button></div>
+      </nav>
+      <div class="me"><span class="avatar">C</span><div><b>cedric</b><br><small>admin · evidence</small></div></div>
+    </aside>
+  </div>
+</section>
+
+<section id="profiles" class="sg-sec">
+  <h2>Profiles page</h2>
+  <p class="small muted">templates/profiles.html, chat.css "the profiles page". Source rows are <code>.pf-list .src-card</code>.</p>
+  <div class="admin-main pf sg-pf">
+    <div class="pf-side">
+      <section class="card pf-about"><span class="orb eh" data-phase="idle"><i></i><i></i><i></i><i></i></span>
+        <div><h2>Clear Source</h2><p class="small muted">Medical questions, answered only from sources it found and read.</p></div></section>
+    </div>
+    <section class="card pf-src">
+      <div class="pf-row"><h2>Sources</h2></div>
+      <div class="pf-add"><button type="button">+ Website</button><button type="button">↺ Restore Dutch defaults</button></div>
+      <section class="pf-group"><header><span class="title">Guidelines</span><small>2 of 2 on</small></header>
+        <div class="pf-list">
+          <article class="src-card" data-kind="website"><header><span class="bubble">R</span><div class="who"><b>Richtlijnendatabase</b><small>richtlijnendatabase.nl</small></div>
+            <label class="switch"><input type="checkbox" checked><span class="track"></span></label><button type="button" class="link danger">Remove</button></header></article>
+          <article class="src-card off" data-kind="website"><header><span class="bubble">N</span><div class="who"><b>NICE</b><small>nice.org.uk</small></div>
+            <label class="switch"><input type="checkbox"><span class="track"></span></label><button type="button" class="link danger">Remove</button></header></article>
+        </div></section>
+    </div>
+  </div>
+</section>
+
+<section id="files" class="sg-sec">
+  <h2>Where things live</h2>
+  <table class="sg-table">
+    <thead><tr><th>File</th><th>What is in it</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>css/tokens.css</code></td><td>Colours per theme (Light, Dark, Blossom)</td><td>Only variables; components never hard-code a theme colour.</td></tr>
+      <tr><td><code>css/base.css</code></td><td>Page basics: type, buttons, fields, cards, switches, page headers</td><td>Shared by every page.</td></tr>
+      <tr><td><code>css/chat.css</code></td><td>The chat and its pages, in rounds; later rules win. Round 14 is the newest block at the end.</td><td>Add new rules at the end, in a dated block.</td></tr>
+      <tr><td><code>css/orb.css</code></td><td>The drop and its phase layers</td><td>Phases: idle, thinking, searching, reading, writing, welcome.</td></tr>
+      <tr><td><code>js/stream.js</code></td><td>Markup builders used by the app and by this page</td><td>Change markup here, not in copies.</td></tr>
+      <tr><td><code>styleguide.html</code></td><td>This page</td><td>When you add a component, add an example here.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+
+<script src="/static/vendor/markdown-it.min.js"></script>
+<script src="/static/vendor/highlight.min.js"></script>
+<script type="module" src="/static/styleguide/guide.js"></script>
+</body>
+</html>

@@ -173,6 +173,12 @@ export class Follow {
   gap() { return this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight; }
   set(on) { if (on !== this.on) { this.on = on; this.onChange(on); } }
   stick() { if (this.on) { this.el.scrollTop = this.el.scrollHeight; this.lastTop = this.el.scrollTop; } }
+  /** Like stick(), but scrolling smoothly: for a block that appears at once (a research step). */
+  glide() {
+    if (!this.on) return;
+    if (this.el.scrollTo) this.el.scrollTo({ top: this.el.scrollHeight, behavior: "smooth" });
+    else this.stick();
+  }
   bottom(smooth = false) {
     this.set(true);
     if (smooth && this.el.scrollTo) this.el.scrollTo({ top: this.el.scrollHeight, behavior: "smooth" });
@@ -302,7 +308,9 @@ export function sourcesHtml(sources) {
 
 const SITE_KINDS = { "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Guideline", "thuisarts.nl": "Patient information",
   "farmacotherapeutischkompas.nl": "Drug information", "kinderformularium.nl": "Drug information", "ge-bu.nl": "Drug review",
-  "lareb.nl": "Side effects" };
+  "lareb.nl": "Side effects", "jgzrichtlijnen.nl": "Guideline", "palliaweb.nl": "Guideline", "nvog.nl": "Guideline",
+  "nice.org.uk": "Guideline", "who.int": "Guideline", "cdc.gov": "Guideline", "apotheek.nl": "Drug information",
+  "ema.europa.eu": "Drug information" };
 
 /** A source's kind for the list under an answer: [css key, label] or null. */
 export function sourceKind(s) {
@@ -349,10 +357,15 @@ export function citeLinks(el, sources) {
 /** Tapping a [n] opens that source's card under the same answer (and scrolls to it) instead of leaving the app. */
 export function sourceActions(root) {
   root.addEventListener("click", (e) => {
-    const a = e.target.closest("a.cite");
+    if (e.target.closest("a:not(.cite)")) return;
+    const a = e.target.closest("a.cite") || e.target.closest(".q-link[data-qn]");
     if (!a) return;
-    const card = a.closest(".ai")?.querySelector(`details.src[data-n="${a.dataset.n}"]`);
-    if (!card) return;
+    const n = a.dataset.n || a.dataset.qn;
+    const card = a.closest(".ai")?.querySelector(`details.src[data-n="${n}"]`);
+    if (!card) {
+      if (a.matches(".q-link")) a.closest(".ai")?.querySelector(`a.cite[data-n="${n}"]`)?.click();   // no card yet: open the source
+      return;
+    }
     e.preventDefault();
     card.open = true;
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -566,6 +579,7 @@ export function markVerify(bub, report) {
   const mark = (el, q) => {
     el.classList.add(q.ok ? "q-ok" : "q-bad");
     el.title = q.ok ? `Found word for word in source ${q.cites.join(", ")}` : `Not verified: ${q.why}`;
+    if ((q.cites || []).length) { el.dataset.qn = String(q.cites[0]); el.classList.add("q-link"); }   // tap the quote: its source
     if (el.querySelector(".q-mark")) return;
     const last = el.matches("blockquote") ? [...el.querySelectorAll("p")].pop() || el : el;
     last.insertAdjacentHTML("beforeend", `<span class="q-mark">${q.ok ? "✓" : "⚠ " + escHtml(q.why || "not verified")}</span>`);

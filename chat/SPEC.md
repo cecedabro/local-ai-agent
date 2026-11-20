@@ -568,6 +568,22 @@ strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4). A
   with their names (`profiles.label_of`); each source is a row (a bubble with its letter, name, one line, switch);
   its note and PubMed strictness open below it. Profile API sources carry `"group"` and `"label"`.
 
+### 15.7 Round 14 (2026-11-20)
+- Clear Source has no Quick/Think choice (hidden in the composer): it always thinks before writing.
+- Default sources add NVOG, NICE, WHO, CDC (guidelines) and Apotheek.nl, EMA (medicines), all checked readable by the
+  app. English sites are searched in English.
+- A checked quote is a link to its source (`.q-link[data-qn]`, opens the source card like `[n]`); a quote the model
+  wrote inside a paragraph (`text. > "quote" [1] more`) is put on its own line as a blockquote before rendering.
+- `[n]` pills take the theme colour; source-type badges are soft tints with the text colour.
+- While an answer is made, a drop blobs out above the send button (`.send-drop`) with the phase in a word and the same
+  phase animation as the big drop; it sinks back when the answer ends.
+- The page glides down (`Follow.glide`) as the research trail grows.
+- What you type is kept per chat in the browser (`localStorage "dewdrop-draft:<chat id | new>"`) until you send it.
+- Profiles page: a top bar (← Chat, title, profile switch); a profile card, instructions and context on the left, sources
+  on the right (sources right after the profile card on phones).
+- Static files are sent with `Cache-Control: no-cache` (a 304 when unchanged), so a deploy reaches every browser at once.
+- The living style guide is `/static/styleguide.html`; the visual explanation of this flow is `/static/clear-source.html`.
+
 ## 16. Files in and out
 
 Files go both ways: you attach PDF, Word, Excel, HTML or text files to a message, and the model can make a
