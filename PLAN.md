@@ -18,7 +18,7 @@ Rules for every task:
   `chat/coder/files.py` the constants, `MIME`, `TOOL`, `FileError`, `_html_runs`, `_font`, `_number`, `_no_formula`,
   `csv_rows`, `_cells`, `plain`; in `chat/coder/app.py` `_download`, `api_get_file` and the security middleware.
 
-- [ ] D01: In chat/coder/files.py fill in `kind_of`, `check_zip`, `docx_text` and `xlsx_text` as their docstrings say
+- [x] D01: In chat/coder/files.py fill in `kind_of`, `check_zip`, `docx_text` and `xlsx_text` as their docstrings say
   accept: make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"
 - [ ] D02: In chat/coder/files.py fill in `read_upload`, `fence`, `attach_block` and `disposition`
   accept: make chat-test K="test_step_files and (read_upload_text or fence or disposition)"

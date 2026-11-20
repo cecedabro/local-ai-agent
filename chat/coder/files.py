@@ -9,8 +9,11 @@ import html
 import io
 import os
 import re
+import urllib.parse
 import zipfile
 from xml.etree import ElementTree as ET
+
+import openpyxl
 
 MAX_UPLOAD = 10 * 1024 * 1024
 MAX_TEXT = 200_000
@@ -48,7 +51,21 @@ def kind_of(name: str) -> str:
       .doc/.xls -> FileError(415, "Save it as .docx or .xlsx first."), anything else -> "text"
     Tests: test_step_files.py::test_kind_of
     """
-    raise NotImplementedError
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext in ("pdf",):
+        return "pdf"
+    elif ext in ("docx",):
+        return "docx"
+    elif ext in ("xlsx",):
+        return "xlsx"
+    elif ext in ("html", "htm"):
+        return "html"
+    elif ext in ("csv",):
+        return "csv"
+    elif ext in ("doc", "xls"):
+        raise FileError(415, "Save it as .docx or .xlsx first.")
+    else:
+        return "text"
 
 
 def check_zip(data: bytes, what: str) -> zipfile.ZipFile:
@@ -57,7 +74,20 @@ def check_zip(data: bytes, what: str) -> zipfile.ZipFile:
       more than MAX_ZIP_ENTRIES entries, or the sum of their file_size > MAX_UNZIPPED -> FileError(413, "That file is too big inside.")
     Tests: test_step_files.py::test_check_zip
     """
-    raise NotImplementedError
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise FileError(415, f"That {what} file could not be read.")
+    except Exception:
+        raise FileError(415, f"That {what} file could not be read.")
+    if len(z.namelist()) > MAX_ZIP_ENTRIES:
+        z.close()
+        raise FileError(413, "That file is too big inside.")
+    total = sum(i.file_size for i in z.infolist())
+    if total > MAX_UNZIPPED:
+        z.close()
+        raise FileError(413, "That file is too big inside.")
+    return z
 
 
 def docx_text(data: bytes) -> str:
@@ -72,7 +102,73 @@ def docx_text(data: bytes) -> str:
       lines joined by "\n"
     Tests: test_step_files.py::test_docx_text
     """
-    raise NotImplementedError
+    z = check_zip(data, "Word")
+    try:
+        root = ET.fromstring(z.read("word/document.xml"))
+    except KeyError:
+        z.close()
+        raise FileError(415, "That Word file could not be read.")
+    except ET.ParseError:
+        z.close()
+        raise FileError(415, "That Word file could not be read.")
+
+    def para(p):
+        parts = []
+        for child in p.iter():
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if tag == "t" and child.text:
+                parts.append(child.text)
+            elif tag == "tab":
+                parts.append("\t")
+            elif tag == "br":
+                parts.append("\n")
+        text = "".join(parts).strip()
+        if not text:
+            return None
+        prefix = ""
+        pPr = p.find(f"{W}pPr")
+        if pPr is not None:
+            pStyle = pPr.find(f"{W}pStyle")
+            if pStyle is not None:
+                val = pStyle.get(f"{W}val", "")
+                if val.startswith("Heading") and val[7:8].isdigit():
+                    n = int(val[7])
+                    if 1 <= n <= 6:
+                        prefix = "#" * n + " "
+                elif val.startswith("List") or val.startswith("List"):
+                    prefix = "- "
+            if pStyle is None and pPr.find(f"{W}numPr") is not None:
+                prefix = "- "
+        return prefix + text
+
+    def cell_text(tc):
+        para_texts = []
+        for cp in tc.iter():
+            if cp.tag == f"{W}p":
+                t = para(cp)
+                if t is not None:
+                    para_texts.append(t)
+        return " ".join(para_texts)
+
+    lines = []
+    body = root.find(f"{W}body")
+    if body is None:
+        z.close()
+        return ""
+    for child in body:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if tag == "p":
+            t = para(child)
+            if t is not None:
+                lines.append(t)
+        elif tag == "tbl":
+            for tr in child.iter(f"{W}tr"):
+                cells = []
+                for tc in tr.iter(f"{W}tc"):
+                    cells.append(cell_text(tc))
+                lines.append(" | ".join(cells))
+    z.close()
+    return "\n".join(lines)
 
 
 def xlsx_text(data: bytes) -> str:
@@ -84,7 +180,30 @@ def xlsx_text(data: bytes) -> str:
       lines joined by "\n"; close the workbook
     Tests: test_step_files.py::test_xlsx_text
     """
-    raise NotImplementedError
+    check_zip(data, "Excel")
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception:
+        raise FileError(415, "That Excel file could not be read.")
+    lines = []
+    row_count = 0
+    for ws in wb.worksheets:
+        lines.append(f"## {ws.title}")
+        for row in ws.iter_rows(values_only=True):
+            if row_count >= MAX_XLSX_ROWS:
+                break
+            cells = ["" if c is None else str(c) for c in row]
+            # drop trailing empty cells
+            while cells and cells[-1] == "":
+                cells.pop()
+            if not cells:
+                continue
+            lines.append(" | ".join(cells))
+            row_count += 1
+        if row_count >= MAX_XLSX_ROWS:
+            break
+    wb.close()
+    return "\n".join(lines)
 
 
 def read_upload(name: str, data: bytes) -> dict:
@@ -100,7 +219,43 @@ def read_upload(name: str, data: bytes) -> dict:
         FileError(413, "That file is too long (max 200 000 characters).")
     Tests: test_step_files.py::test_read_upload_text_and_limits, ::test_read_upload_pdf_docx_xlsx
     """
-    raise NotImplementedError
+    if len(data) > MAX_UPLOAD:
+        raise FileError(413, "That file is too big (max 10 MB).")
+    kind = kind_of(name)
+    if kind == "pdf":
+        import pypdf
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(data))
+        except Exception:
+            raise FileError(415, "That PDF could not be read.")
+        pages = []
+        for i in range(min(len(reader.pages), MAX_PAGES)):
+            pages.append(reader.pages[i].extract_text() or "")
+        text = "\n\n".join(pages).strip()
+        if not text:
+            raise FileError(415, "That PDF has no text (is it a scan?).")
+        return {"kind": "pdf", "text": text}
+    elif kind == "docx":
+        return {"kind": "docx", "text": docx_text(data)}
+    elif kind == "xlsx":
+        return {"kind": "xlsx", "text": xlsx_text(data)}
+    else:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            raise FileError(415, NOT_TEXT)
+        if "\x00" in text:
+            raise FileError(415, NOT_TEXT)
+        if text.startswith("\ufeff"):
+            text = text[1:]
+        if kind == "html":
+            from coder import tools
+            text = tools.html_text(text)[1]
+        if not text.strip():
+            raise FileError(415, "That file has no text.")
+        if len(text) > MAX_TEXT:
+            raise FileError(413, "That file is too long (max 200 000 characters).")
+        return {"kind": kind, "text": text}
 
 
 def fence(text: str) -> str:
@@ -108,14 +263,28 @@ def fence(text: str) -> str:
     in the text when that run is 3 or longer.
     Tests: test_step_files.py::test_fence
     """
-    raise NotImplementedError
+    longest = 0
+    run = 0
+    for ch in text:
+        if ch == "`":
+            run += 1
+        else:
+            if run > longest:
+                longest = run
+            run = 0
+    if run > longest:
+        longest = run
+    if longest >= 3:
+        return "`" * (longest + 1)
+    return "```"
 
 
 def attach_block(name: str, text: str) -> str:
     r"""TODO (task D02). What an attached file adds to a message (SPEC §16.1): f"\n\nFile {name}:\n{f}\n{text}\n{f}" with f = fence(text).
     Tests: test_step_files.py::test_fence
     """
-    raise NotImplementedError
+    f = fence(text)
+    return f"\n\nFile {name}:\n{f}\n{text}\n{f}"
 
 
 def disposition(name: str) -> str:
@@ -124,7 +293,15 @@ def disposition(name: str) -> str:
       f'attachment; filename="{ascii}"; filename*=UTF-8\'\'{urllib.parse.quote(name, safe="")}'
     Tests: test_step_files.py::test_disposition
     """
-    raise NotImplementedError
+    import urllib.parse
+    ascii_parts = []
+    for ch in name:
+        if ch in ('"', '\\') or not (ch.isprintable() and 32 <= ord(ch) <= 126):
+            ascii_parts.append("_")
+        else:
+            ascii_parts.append(ch)
+    ascii_name = "".join(ascii_parts)
+    return f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{urllib.parse.quote(name, safe="")}'
 
 
 # ------------------------------------------------------------------ Markdown (SPEC §16.4)
@@ -179,7 +356,25 @@ def safe_name(name: str, fmt: str) -> str:
     stripped of spaces and dots; at most 80 characters (then stripped again); empty -> "file"; + "." + fmt
     Tests: test_step_files.py::test_safe_name
     """
-    raise NotImplementedError
+    name = name.rsplit("/", 1)[-1]
+    name = name.rsplit("\\", 1)[-1]
+    lower_fmt = fmt.lower()
+    if name.lower().endswith("." + lower_fmt):
+        name = name[:-(len(lower_fmt) + 1)]
+    safe = []
+    for ch in name:
+        if ch.isalpha() or ch.isdigit() or ch in " ._-()":
+            safe.append(ch)
+        else:
+            safe.append("_")
+    name = "".join(safe)
+    name = re.sub(r" +", " ", name)
+    name = name.strip(" .")
+    if len(name) > 80:
+        name = name[:80].strip(" .")
+    if not name:
+        name = "file"
+    return name + "." + fmt
 
 
 def _no_formula(cell: str) -> str:
@@ -207,7 +402,11 @@ def render_csv(content: str) -> bytes:
     _no_formula; "﻿" + that, encoded UTF-8.
     Tests: test_step_files.py::test_render_csv_and_xlsx
     """
-    raise NotImplementedError
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\r\n")
+    for row in csv_rows(content):
+        w.writerow([_no_formula(c) for c in row])
+    return "\ufeff" + buf.getvalue().encode("utf-8")
 
 
 def render_xlsx(content: str) -> bytes:
@@ -217,7 +416,23 @@ def render_xlsx(content: str) -> bytes:
     (openpyxl.styles.Font(bold=True)). Saved to bytes.
     Tests: test_step_files.py::test_render_csv_and_xlsx
     """
-    raise NotImplementedError
+    import openpyxl
+    from openpyxl.styles import Font
+    rows = csv_rows(content)
+    if len(rows) > MAX_ROWS or any(len(r) > MAX_COLS for r in rows):
+        raise FileError(413, "Too many rows or columns.")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for ri, row in enumerate(rows, 1):
+        for ci, cell_val in enumerate(row, 1):
+            cell = ws.cell(row=ri, column=ci, value=cell_val)
+            cell.data_type = "s"
+            if ri == 1:
+                cell.font = Font(bold=True)
+    buf = io.BytesIO()
+    wb.save(buf)
+    wb.close()
+    return buf.getvalue()
 
 
 def _html_runs(rs: list[dict]) -> str:
@@ -245,7 +460,104 @@ def render_html(title: str, md: str) -> bytes:
         rel="noopener noreferrer">.
     Tests: test_step_files.py::test_render_html_is_safe
     """
-    raise NotImplementedError
+    from coder import blocks
+    style = ("body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 20px}"
+             "pre{background:#f5f5f5;padding:10px;border-radius:4px}"
+             "table{border-collapse:collapse;margin:10px 0}"
+             "th,td{border:1px solid #ddd;padding:6px 10px;text-align:left}"
+             "th{font-weight:bold}")
+    escaped_title = html.escape(title)
+    parts = [f"<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>{escaped_title}</title>"
+             f"<style>{style}</style></head><body>"]
+    bs = blocks(md)
+    # Collect lists: track current ordered/unordered list state
+    cur_ol = None
+    cur_ul = None
+    for b in bs:
+        t = b["t"]
+        if t == "h":
+            if cur_ul:
+                parts.append("</ul>")
+                cur_ul = None
+            if cur_ol:
+                parts.append("</ol>")
+                cur_ol = None
+            parts.append(f"<h{b['level']}>{_html_runs(b['runs'])}</h{b['level']}>")
+        elif t == "p":
+            if cur_ul:
+                parts.append("</ul>")
+                cur_ul = None
+            if cur_ol:
+                parts.append("</ol>")
+                cur_ol = None
+            parts.append(f"<p>{_html_runs(b['runs'])}</p>")
+        elif t == "li":
+            if b["ordered"]:
+                if cur_ul:
+                    parts.append("</ul>")
+                    cur_ul = None
+                if cur_ol is None:
+                    parts.append("<ol>")
+                    cur_ol = []
+                cur_ol.append(f"<li>{_html_runs(b['runs'])}</li>")
+            else:
+                if cur_ol:
+                    parts.append("</ol>")
+                    cur_ol = None
+                if cur_ul is None:
+                    parts.append("<ul>")
+                    cur_ul = []
+                cur_ul.append(f"<li>{_html_runs(b['runs'])}</li>")
+        elif t == "code":
+            if cur_ul:
+                parts.append("</ul>")
+                cur_ul = None
+            if cur_ol:
+                parts.append("</ol>")
+                cur_ol = None
+            parts.append(f"<pre><code>{html.escape(b['text'])}</code></pre>")
+        elif t == "table":
+            if cur_ul:
+                parts.append("</ul>")
+                cur_ul = None
+            if cur_ol:
+                parts.append("</ol>")
+                cur_ol = None
+            rows_html = []
+            for ri, row in enumerate(b["rows"]):
+                tag = "th" if ri == 0 else "td"
+                cells = "".join(f"<{tag}>{_html_runs(cell)}</{tag}>" for cell in row)
+                rows_html.append(f"<tr>{cells}</tr>")
+            parts.append(f"<table>{''.join(rows_html)}</table>")
+        elif t == "hr":
+            if cur_ul:
+                parts.append("</ul>")
+                cur_ul = None
+            if cur_ol:
+                parts.append("</ol>")
+                cur_ol = None
+            parts.append("<hr>")
+    if cur_ul:
+        parts.append("</ul>")
+    if cur_ol:
+        parts.append("</ol>")
+    parts.append("</body></html>")
+    return "\n".join(parts).encode("utf-8")
+
+
+def _plain(runs):
+    """Concatenate text from run dicts."""
+    return "".join(r["text"] for r in runs)
+
+
+def _docx_runs(par, runs, bold=False):
+    """Add inline runs to a docx paragraph."""
+    for r in runs:
+        run = par.add_run(r["text"])
+        run.bold = r["b"] or bold
+        run.italic = r["i"]
+        if r["code"]:
+            run.font.name = "Consolas"
 
 
 def render_docx(md: str) -> bytes:
@@ -257,7 +569,52 @@ def render_docx(md: str) -> bytes:
       "Consolas". Saved to bytes.
     Tests: test_step_files.py::test_render_docx
     """
-    raise NotImplementedError
+    import docx
+    from coder import blocks
+
+    d = docx.Document()
+    for b in blocks(md):
+        t = b["t"]
+        if t == "h":
+            par = d.add_heading(level=b["level"] - 1)
+            par.clear()
+            for r in b["runs"]:
+                run = par.add_run(r["text"])
+                run.bold = r["b"]
+                run.italic = r["i"]
+                if r["code"]:
+                    run.font.name = "Consolas"
+        elif t == "p":
+            par = d.add_paragraph()
+            par.clear()
+            _docx_runs(par, b["runs"])
+        elif t == "li":
+            style_name = "List Number" if b["ordered"] else "List Bullet"
+            par = d.add_paragraph(style=style_name)
+            par.clear()
+            _docx_runs(par, b["runs"])
+        elif t == "code":
+            par = d.add_paragraph()
+            par.clear()
+            run = par.add_run(b["text"])
+            run.font.name = "Consolas"
+        elif t == "table":
+            longest = max(len(row) for row in b["rows"])
+            tbl = d.add_table(rows=len(b["rows"]), cols=longest, style="Table Grid")
+            for ri, row in enumerate(b["rows"]):
+                for ci, cell_runs in enumerate(row):
+                    cell = tbl.cell(ri, ci)
+                    cell.text = ""
+                    p = cell.paragraphs[0]
+                    if ri == 0:
+                        _docx_runs(p, cell_runs, bold=True)
+                    else:
+                        _docx_runs(p, cell_runs)
+        elif t == "hr":
+            d.add_paragraph()
+    buf = io.BytesIO()
+    d.save(buf)
+    return buf.getvalue()
 
 
 def _font(pdf) -> tuple[str, str, bool]:

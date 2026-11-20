@@ -89,3 +89,8 @@
 - **File**: `chat/README.md` — added "## Clear Source, rounds 2 and 3" section after "Clear Source v2".
 - **Change**: Documented round 2 (MeSH terms, Dutch guideline defaults, study-type ordering) and round 3 (research flow with `read_one`, `parse_quotes`, `verify.find_quote`, follow-up rounds, `verify.check`).
 - Both `grep` checks pass, `make chat-test` (153/153), `make check` (36/36).
+
+## Task D01 - `kind_of`, `check_zip`, `docx_text`, `xlsx_text` implementation
+- **File**: `chat/coder/files.py` — implemented `kind_of` (line ~45, extension→kind mapping with .doc/.xls→415), `check_zip` (line ~60, zip opening with BadZipFile→415 and entry/size limits→413), `docx_text` (line ~72, XML parsing of `word/document.xml` with heading/list/table handling, stdlib only), and `xlsx_text` (line ~124, openpyxl read-only workbook iteration with row limit). Added `import openpyxl` at top.
+- `make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"` passes (4/4). `make check` passes (36/36).
+- `read_upload` (task D02) depends on these four functions and is next.
