@@ -104,6 +104,9 @@
 - **File**: `chat/coder/files.py` — implemented `runs` (line ~311, inline Markdown parsing: bold, italic, code, links, plain text using existing `_RUN` regex) and `blocks` (line ~372, block-level parsing: code fences, headings, horizontal rules, ordered/unordered lists, tables, paragraphs). Both handle unclosed code blocks.
 - `make chat-test K="test_step_files and (runs or blocks)"` passes (2/2). `make check` passes (36/36).
 
+## Task D04 - re-verified
+- `make chat-test K="test_step_files and (safe_name or csv_and_xlsx)"` passes (2/2). `make check` passes (36/36). No changes needed.
+
 ## Task D02 - `read_upload`, `fence`, `attach_block`, `disposition` verified
 - **File**: `chat/coder/files.py` — all four functions already implemented (lines 209, 261, 282, 290).
 - `make chat-test K="test_step_files and (read_upload_text or fence or disposition)"` passes (3/3).
