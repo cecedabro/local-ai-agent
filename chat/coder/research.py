@@ -28,18 +28,23 @@ MAX_PASSAGES = 4
 PUBMED_WEB = "https://pubmed.ncbi.nlm.nih.gov/?term="
 PLAN_PROMPT = (
     "You plan literature searches for a medical question. Answer with JSON only: an object "
-    '{"about": "<the question in one plain sentence: who, what, which outcome>", "searches": [<at most 7 objects '
+    '{"about": "<the question in one plain sentence, in the language of the question: who, what, which outcome>", "searches": [<at most 7 objects '
     '{"source": "pubmed" | "site:<domain>" | "web", "query": "<search terms>", "mesh": ["<MeSH heading>", ...]}>]}. '
     "PubMed: 2 to 4 searches, from specific to broad, with English search terms and synonyms, and in \"mesh\" up to "
     '4 official MeSH headings for the main concepts (for example "Renal Insufficiency, Chronic" or "Pregnancy"); leave '
-    "out drugs too new for MeSH. Websites: choose the 1 to 3 sites that fit the question best (drugs: "
+    "out drugs too new for MeSH. Websites: choose the 1 to 3 sites that fit the question best (any question about a "
+    "medicine, its dose, combining it or using it while pregnant: always farmacotherapeutischkompas.nl; "
+    "drugs: "
     "farmacotherapeutischkompas.nl; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
     "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; patient advice: thuisarts.nl) and search them in "
     "Dutch with 2 to 4 key words, no mesh. Use only these sources: {sources}.")
 FOLLOWUP_PROMPT = (
     "The searches below found too little for this medical question. Plan new searches with other words: synonyms, "
-    "broader or related terms, fewer words per search, other sites. Do not repeat a search. Answer with JSON only, the "
-    'same format: {"about": "...", "searches": [...]}. Use only these sources: {sources}.')
+    "broader or related terms, the Dutch and the English word, fewer words per search, other sites. Do not repeat a "
+    "search. Answer with JSON only, the same format as before, every search an object:\n"
+    '{"about": "<the question in one sentence>", "searches": [{"source": "pubmed", "query": "erythromelalgia therapy", '
+    '"mesh": ["Erythromelalgia"]}, {"source": "site:thuisarts.nl", "query": "branderige rode voeten"}]}\n'
+    "Use only these sources: {sources}.")
 EXTRACT_PROMPT = (
     "You read one source for a medical question. Copy, word for word, up to 4 passages of the source that help "
     "answer the question: whole sentences, exactly as written, in the source's own language; change nothing. Answer "
@@ -49,6 +54,10 @@ NO_EVIDENCE = {
           "geen antwoord uit eigen kennis. Probeer de vraag specifieker te stellen of voeg een bron toe.",
     "en": "I found no reliable evidence for this question in the sources I searched, so I won't answer from my own "
           "knowledge. Try asking more specifically, or add a source.",
+}
+UNREACHABLE = {
+    "nl": "\n\nLet op: {} gaf geen antwoord (te druk of onbereikbaar). Probeer het over een minuut opnieuw.",
+    "en": "\n\nNote: {} did not answer (too busy or unreachable). Try again in a minute.",
 }
 _DUTCH = {"de", "het", "een", "is", "bij", "van", "en", "niet", "wat", "hoe", "welke", "voor", "met", "zijn",
           "wordt", "mag", "kan", "helpt", "tegen", "tijdens", "patiënten", "dosis"}
@@ -103,6 +112,28 @@ def plan_messages(question: str, cfg: dict) -> list[dict]:
     ]
 
 
+_PUBMED_HOSTS = ("pubmed", "pubmed.gov", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "www.ncbi.nlm.nih.gov")
+
+
+def text_search(item: str, allowed: list[str]) -> dict | None:
+    """A search the model wrote as text ("terms site:rivm.nl", "terms site:pubmed.gov", "terms") as a plan item.
+    site:<a source's domain> -> that site; a PubMed host, or no site -> pubmed (else the web); other sites -> the web.
+    None when the source it lands on is not allowed or no terms are left."""
+    m = re.search(r"\bsite:(\S+)", item)
+    query = re.sub(r"\bsite:\S+", " ", item)
+    query = re.sub(r"\s+", " ", query).strip().strip('"').strip()
+    site = m.group(1).lower().strip("/").removeprefix("www.") if m else ""
+    if site in _PUBMED_HOSTS or not site:
+        source = "pubmed" if "pubmed" in allowed else "web"
+    elif "site:" + site in allowed:
+        source = "site:" + site
+    else:
+        source = "web"
+    if source not in allowed or not query or (not m and len(query.split()) < 2):
+        return None                                   # a lone word without a site is more likely junk than a search
+    return {"source": source, "query": query}
+
+
 def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
     r"""The searches in the model's plan (SPEC §13.2 step 1).
       allowed = enabled_sources(cfg); t = text stripped
@@ -143,6 +174,8 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         items = []
     result = []
     for item in items:
+        if isinstance(item, str):
+            item = text_search(item, allowed)
         if not isinstance(item, dict):
             continue
         source = str(item.get("source", "")).strip().lower()
@@ -664,6 +697,9 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
 
     if not sources:
         text = NO_EVIDENCE[lang]
+        down = sorted({str(st.get("source")) for st in trail if st.get("kind") == "search" and st.get("error")})
+        if down:
+            text += UNREACHABLE[lang].format(", ".join(down))
         yield _phase("writing", "Writing the answer…")
         yield _sse("delta", {"text": text})
         msg_id = db.add_message(chat["id"], "assistant", text, tokens=0,

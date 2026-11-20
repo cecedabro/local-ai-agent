@@ -132,6 +132,19 @@ def sentences(answer: str) -> list[dict]:
 SUMMARY_HEADINGS = re.compile(r"short answer|kort antwoord|summary|samenvatting|conclusi|strength|sterkte|bewijskracht", re.I)
 
 
+# Sentences about the sources themselves ("the sources give no information on dosing") make no claim of their own.
+_SRC = r"(bron|bronnen|richtlijn|richtlijnen|source|sources|guideline|guidelines)"
+_NEG = r"(geen|niet|no|not|nothing|niets)"
+_INFO = r"(informatie|gegevens|vermeld\w*|noem\w*|beschrij\w*|beschreven|over|information|data|details|mention\w*|describ\w*|say|cover\w*|address\w*)"
+ABOUT_SOURCES = re.compile(rf"\b{_SRC}\b.{{0,80}}\b{_NEG}\b.{{0,80}}\b{_INFO}\b|\b{_NEG}\b.{{0,40}}\b{_INFO}\b.{{0,80}}\b{_SRC}\b", re.I)
+
+
+def not_a_claim(sentence: str) -> bool:
+    """A lead-in to a quote (ends with ":") or a sentence about what the sources do not say: never "uncited"."""
+    t = sentence.strip()
+    return t.endswith(":") or bool(ABOUT_SOURCES.search(t))
+
+
 def summary_sentences(answer: str) -> list[str]:
     r"""The sentences that summarise the quotes and need no [n] (SPEC §15.5), in order.
       no line of the answer starts with "#" (re.search(r"^\s*#", answer, re.M) is None) -> []
@@ -200,7 +213,7 @@ def check(answer: str, sources: list[dict]) -> dict:
     uncited: list[str] = []
     for idx, s in enumerate(sents):
         cited_nums.update(s["cites"])
-        if s["text"] in summary:
+        if s["text"] in summary or not_a_claim(s["text"]):
             continue
         if not s["cites"] and len(re.findall(r"\w+", s["text"])) >= 8:
             if idx == len(sents) - 1 and any(w in normalize(s["text"]) for w in STRENGTH_WORDS):

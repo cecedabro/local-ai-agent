@@ -46,3 +46,4 @@ chat/static/icons/
 chat/tests/test_step_clear.py
 chat/tests/test_accept_clear.py
 chat/tests/test_step_flow.py
+chat/tests/test_step_csfixes.py

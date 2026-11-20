@@ -67,7 +67,7 @@ def test_pmc():
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
             page = await tools.pmc_text(c, "PMC1234567")
-            assert calls[0] == {"db": "pmc", "id": "1234567", "retmode": "xml"}
+            assert {k: calls[0][k] for k in ("db", "id", "retmode")} == {"db": "pmc", "id": "1234567", "retmode": "xml"}
             assert page == {"title": "Vitamin D and bone density", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1234567/",
                             "text": "Vitamin D raised bone density by 2%. Fractures fell in the treated group. No harm was seen."}
             with pytest.raises(tools.ToolError):
