@@ -142,3 +142,7 @@
 - **Change** (`addFileCard`): Finds or creates `.files-out` inside bub's parent, appends a file-card `<a>` via `insertAdjacentHTML`.
 - **Change** (`dlMenu`): If msgId provided, appends `<span class="dl-wrap"><button class="dl">Download</button><span class="dl-menu" hidden>` with links for md/docx/pdf/html export formats; click handler toggles menu with stopPropagation, document click closes.
 - `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).
+
+## Task D12 - browser tests verification
+- **Status**: All browser tests already pass — no code changes needed.
+- `make chat-test` — 182/182 passed. `make chat-browser-test` — 14/14 passed. `node --test chat/tests/js/stream.test.mjs` — 15/15 passed. `make check` — 36/36 passed.
