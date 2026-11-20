@@ -315,7 +315,48 @@ def runs(text: str) -> list[dict]:
       Everything else is plain text ({"b": False, "i": False, "code": False, "href": None}).
     Tests: test_step_files.py::test_runs
     """
-    raise NotImplementedError
+    result = []
+    pos = 0
+    in_code = False
+    code_lines = []
+    for line in text.split("\n"):
+        if not in_code and line.startswith("```"):
+            in_code = True
+            continue
+        if in_code:
+            if line.startswith("```"):
+                in_code = False
+                code_block = "\n".join(code_lines)
+                result.append({"text": code_block, "b": False, "i": False, "code": True, "href": None})
+                code_lines = []
+            else:
+                code_lines.append(line)
+            continue
+        for m in _RUN.finditer(line):
+            if m.start() > pos:
+                result.append({"text": line[pos:m.start()], "b": False, "i": False, "code": False, "href": None})
+            if m.group(1) is not None:
+                result.append({"text": m.group(1), "b": True, "i": False, "code": False, "href": None})
+            elif m.group(2) is not None:
+                result.append({"text": m.group(2), "b": False, "i": False, "code": True, "href": None})
+            elif m.group(3) is not None and m.group(4):
+                url = m.group(4)
+                if url.startswith("http://") or url.startswith("https://"):
+                    result.append({"text": m.group(3), "b": False, "i": False, "code": False, "href": url})
+                else:
+                    result.append({"text": m.group(3), "b": False, "i": False, "code": False, "href": None})
+            elif m.group(5) is not None:
+                result.append({"text": m.group(5), "b": False, "i": True, "code": False, "href": None})
+            elif m.group(6) is not None:
+                result.append({"text": m.group(6), "b": False, "i": True, "code": False, "href": None})
+            pos = m.end()
+        if pos < len(line):
+            result.append({"text": line[pos:], "b": False, "i": False, "code": False, "href": None})
+        pos = 0
+    # Collect remaining code block if never closed
+    if in_code and code_lines:
+        result.append({"text": "\n".join(code_lines), "b": False, "i": False, "code": True, "href": None})
+    return result
 
 
 def _cells(line: str) -> list[str]:
@@ -341,7 +382,112 @@ def blocks(md: str) -> list[dict]:
         {"t": "p", "runs": runs(joined)}
     Tests: test_step_files.py::test_blocks
     """
-    raise NotImplementedError
+    lines = md.split("\n")
+    result = []
+    i = 0
+    in_code = False
+    code_lines = []
+    buf = []
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Code blocks
+        if not in_code and line.startswith("```"):
+            in_code = True
+            code_lines = []
+            i += 1
+            continue
+        if in_code:
+            if line.startswith("```"):
+                in_code = False
+                result.append({"t": "code", "text": "\n".join(code_lines)})
+                code_lines = []
+            else:
+                code_lines.append(line)
+            i += 1
+            continue
+
+        # Headings
+        hm = re.match(r"^(#{1,6})\s(.*)", line)
+        if hm:
+            if buf:
+                result.append({"t": "p", "runs": runs(" ".join(buf))})
+                buf = []
+            level = len(hm.group(1))
+            result.append({"t": "h", "level": level, "runs": runs(hm.group(2).rstrip())})
+            i += 1
+            continue
+
+        # Horizontal rules (3+ identical - * _)
+        if re.fullmatch(r"([-*_]){3,}", line.strip()):
+            if buf:
+                result.append({"t": "p", "runs": runs(" ".join(buf))})
+                buf = []
+            result.append({"t": "hr"})
+            i += 1
+            continue
+
+        # List items
+        li = re.match(r"^(\s*)([-*+])\s+(.+)", line)
+        if li:
+            if buf:
+                result.append({"t": "p", "runs": runs(" ".join(buf))})
+                buf = []
+            result.append({"t": "li", "ordered": False, "runs": runs(li.group(3))})
+            i += 1
+            continue
+        oi = re.match(r"^(\s*)(\d+)[.)]\s+(.+)", line)
+        if oi:
+            if buf:
+                result.append({"t": "p", "runs": runs(" ".join(buf))})
+                buf = []
+            result.append({"t": "li", "ordered": True, "runs": runs(oi.group(3))})
+            i += 1
+            continue
+
+        # Tables
+        if line.startswith("|"):
+            table_lines = [line]
+            i += 1
+            while i < len(lines) and lines[i].startswith("|"):
+                table_lines.append(lines[i])
+                i += 1
+            rows = []
+            seen = set()
+            for tl in table_lines:
+                cells = _cells(tl)
+                key = tuple(cells)
+                if key not in seen and all(re.fullmatch(r":?-{3,}:?", c) for c in cells):
+                    seen.add(key)
+                    continue
+                rows.append(cells)
+            if rows:
+                ncols = len(rows[0])
+                filtered_rows = [r for r in rows if len(r) == ncols]
+                if filtered_rows:
+                    parsed_rows = [[runs(c) for c in row] for row in filtered_rows]
+                    result.append({"t": "table", "rows": parsed_rows})
+            continue
+
+        # Empty line ends paragraph
+        if line == "":
+            if buf:
+                result.append({"t": "p", "runs": runs(" ".join(buf))})
+                buf = []
+            i += 1
+            continue
+
+        # Paragraph content
+        buf.append(line)
+        i += 1
+
+    if buf:
+        result.append({"t": "p", "runs": runs(" ".join(buf))})
+    if in_code and code_lines:
+        result.append({"t": "code", "text": "\n".join(code_lines)})
+
+    return result
 
 
 def plain(rs: list[dict]) -> str:
@@ -406,7 +552,7 @@ def render_csv(content: str) -> bytes:
     w = csv.writer(buf, lineterminator="\r\n")
     for row in csv_rows(content):
         w.writerow([_no_formula(c) for c in row])
-    return "\ufeff" + buf.getvalue().encode("utf-8")
+    return ("\ufeff" + buf.getvalue()).encode("utf-8")
 
 
 def render_xlsx(content: str) -> bytes:
@@ -425,8 +571,12 @@ def render_xlsx(content: str) -> bytes:
     ws = wb.active
     for ri, row in enumerate(rows, 1):
         for ci, cell_val in enumerate(row, 1):
-            cell = ws.cell(row=ri, column=ci, value=cell_val)
-            cell.data_type = "s"
+            n = _number(cell_val)
+            if n is not None:
+                cell = ws.cell(row=ri, column=ci, value=n)
+            else:
+                cell = ws.cell(row=ri, column=ci, value=cell_val)
+                cell.data_type = "s"
             if ri == 1:
                 cell.font = Font(bold=True)
     buf = io.BytesIO()

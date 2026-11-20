@@ -95,6 +95,15 @@
 - `make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"` passes (4/4). `make check` passes (36/36).
 - `read_upload` (task D02) depends on these four functions and is next.
 
+## Task D04 - `safe_name`, `render_csv`, `render_xlsx` implementation
+- **File**: `chat/coder/files.py` — `safe_name` (line ~500, path extraction, invalid char replacement, 80-char limit), `render_csv` (line ~547, csv.writer with UTF-8 BOM and `_no_formula` prefixing), `render_xlsx` (line ~559, openpyxl with `_number` detection, non-numeric cells set as text via `data_type="s"`, row 1 bold).
+- `make chat-test K="test_step_files and (safe_name or render_csv)"` passes (2/2). `make check` passes (36/36).
+- `safe_name` was already implemented; `render_csv` had a string+bytes concatenation bug fixed (`"\ufeff" + ...`.encode() → `("\ufeff" + ...).encode()`). `render_xlsx` had a numeric cell handling bug fixed (`_number` result should not get `data_type="s"` set).
+
+## Task D03 - `runs` and `blocks` implementation
+- **File**: `chat/coder/files.py` — implemented `runs` (line ~311, inline Markdown parsing: bold, italic, code, links, plain text using existing `_RUN` regex) and `blocks` (line ~372, block-level parsing: code fences, headings, horizontal rules, ordered/unordered lists, tables, paragraphs). Both handle unclosed code blocks.
+- `make chat-test K="test_step_files and (runs or blocks)"` passes (2/2). `make check` passes (36/36).
+
 ## Task D02 - `read_upload`, `fence`, `attach_block`, `disposition` verified
 - **File**: `chat/coder/files.py` — all four functions already implemented (lines 209, 261, 282, 290).
 - `make chat-test K="test_step_files and (read_upload_text or fence or disposition)"` passes (3/3).

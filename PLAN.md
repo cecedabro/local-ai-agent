@@ -22,7 +22,7 @@ Rules for every task:
   accept: make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"
 - [x] D02: In chat/coder/files.py fill in `read_upload`, `fence`, `attach_block` and `disposition`
   accept: make chat-test K="test_step_files and (read_upload_text or fence or disposition)"
-- [ ] D03: In chat/coder/files.py fill in `runs` and `blocks` (Markdown to runs and blocks)
+- [x] D03: In chat/coder/files.py fill in `runs` and `blocks` (Markdown to runs and blocks)
   accept: make chat-test K="test_step_files and (runs or blocks)"
 - [ ] D04: In chat/coder/files.py fill in `safe_name`, `render_csv` and `render_xlsx`
   accept: make chat-test K="test_step_files and (safe_name or csv_and_xlsx)"
