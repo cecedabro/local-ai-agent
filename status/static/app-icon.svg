@@ -1,19 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
 <defs>
-<linearGradient id="tile" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" stop-color="#139a8c"/><stop offset=".55" stop-color="#0d6b6a"/><stop offset="1" stop-color="#0a3d4a"/></linearGradient>
-<radialGradient id="glow" cx=".5" cy=".42" r=".55"><stop offset="0" stop-color="#7fffe0" stop-opacity=".35"/><stop offset="1" stop-color="#7fffe0" stop-opacity="0"/></radialGradient>
-<radialGradient id="body" cx=".5" cy=".72" r=".62"><stop offset="0" stop-color="#ffffff"/><stop offset=".14" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".45" stop-color="#a6e3ff"/><stop offset="1" stop-color="#3fa6e6"/></radialGradient>
-<radialGradient id="hl" cx=".36" cy=".26" r=".32"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-<radialGradient id="pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-<radialGradient id="dot" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#d9ffe9"/><stop offset=".45" stop-color="#34d399"/><stop offset="1" stop-color="#0e8a5c"/></radialGradient>
+<linearGradient id="bg" x1="0" y1="0" x2=".5" y2="1"><stop offset="0" stop-color="#14343f"/><stop offset=".6" stop-color="#0a2f36"/><stop offset="1" stop-color="#061c22"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".5" r=".55"><stop offset="0" stop-color="#34d399" stop-opacity=".28"/><stop offset="1" stop-color="#34d399" stop-opacity="0"/></radialGradient>
+<linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fffe0"/><stop offset="1" stop-color="#1aa7a0"/></linearGradient>
+<filter id="blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14"/></filter>
 </defs>
-<rect width="512" height="512" fill="url(#tile)"/>
-<rect width="512" height="512" fill="url(#glow)"/>
-<g transform="translate(250 250) scale(4.2) translate(-32 -32)">
-<circle cx="32" cy="32" r="29" fill="url(#body)"/>
-<ellipse cx="32" cy="50" rx="13" ry="5" fill="url(#pool)" opacity=".9"/>
-<ellipse cx="24" cy="19" rx="15" ry="10" fill="url(#hl)"/>
-<circle cx="32" cy="32" r="28.5" fill="none" stroke="#fff" stroke-opacity=".7"/>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<rect width="1024" height="1024" fill="url(#glow)"/>
+<circle cx="512" cy="512" r="300" fill="none" stroke="url(#ring)" stroke-width="40"/>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M262 540 L394 540 L450 420 L536 650 L600 500 L640 540 L762 540" stroke="#34d399" stroke-width="54" opacity=".55" filter="url(#blur)"/>
+<path d="M262 540 L394 540 L450 420 L536 650 L600 500 L640 540 L762 540" stroke="#eafff6" stroke-width="40"/>
 </g>
-<circle cx="340" cy="340" r="40" fill="url(#dot)" stroke="#fff" stroke-width="7"/>
+<circle cx="762" cy="540" r="26" fill="#34d399"/>
 </svg>
