@@ -425,9 +425,11 @@ async function streamAnswer(chatId, open, retryText) {
 
   // 4. full = ""; writeStart = performance.now(); Typewriter
   let full = "";
+  let liveSources = null;                          // Clear Source sends its sources before it writes
   let writeStart = performance.now();
   const typewriter = new Typewriter((shown, pieces) => {
     renderFade(bub, md.render(shown), pieces);
+    if (liveSources) citeLinks(bub, liveSources);   // [n] become clickable pills while the answer is written
     placeTail(bub, tinyEl);
     const fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
     orb.style.setProperty("--fill", fill);
@@ -484,6 +486,8 @@ async function streamAnswer(chatId, open, retryText) {
     } else if (event === "trail") {
       steps.push(data.step);
       drawPre(true);
+    } else if (event === "sources") {
+      liveSources = data.sources;
     } else if (event === "verify") {
       report = data.report;
     } else if (event === "file") {

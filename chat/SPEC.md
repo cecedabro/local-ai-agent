@@ -501,6 +501,9 @@ searching` (its label) and a `trail` event `{"step": {...}}` → `phase reading`
   LCI guidelines), lareb.nl, ge-bu.nl, jgzrichtlijnen.nl (youth health care, NCJ), palliaweb.nl (palliative care, PZNL),
   thuisarts.nl (NHG's patient information). NHG's own guideline site, NICE and GGZ-standaarden cannot be read by the
   app (a bot check; text loaded by JavaScript), so they are not included.
+- Clear Source sends `sources` = `{"sources": [...]}` (as in `done`) right after its `writing` phase, so the page makes
+  every `[n]` a clickable pill while the answer is still being written. A pill opens the source's card under the
+  answer, or the source itself in a new tab while there is no card yet.
 - A new Clear Source profile starts with general web search **off** (`profiles.WEB_OFF`): open web results let
   advocacy sites in. The add-defaults button below turns it off again too.
 - `POST /api/profiles/<profile>/defaults` (X-Coder header) adds the default cards the user does not have yet

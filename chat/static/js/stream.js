@@ -332,7 +332,7 @@ export function citeLinks(el, sources) {
       for (const s of found) {
         const a = document.createElement("a");
         a.className = "cite";
-        if (s.url) a.href = s.url;            // a file of yours has no link (SPEC §16.2)
+        if (s.url) { a.href = s.url; a.target = "_blank"; a.rel = "noopener noreferrer"; }   // a file of yours has no link (SPEC §16.2)
         a.dataset.n = String(s.n);
         a.title = s.title || s.url;
         a.textContent = String(s.n);

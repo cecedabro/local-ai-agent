@@ -838,6 +838,7 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
         return
 
     yield _phase("writing", f"Writing the answer from {len(sources)} sources…")
+    yield _sse("sources", {"sources": public_sources(sources)})   # the page makes [n] clickable while it writes
 
     stopped = False
     text = ""
