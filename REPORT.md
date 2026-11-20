@@ -1,26 +1,22 @@
-# Agent run agent/clear-source-2
+# Agent run agent/files-in-and-out
 
-Ended 2026-11-19 22:23: plan complete. 16 done, 1 skipped, 2.4 h.
+Ended 2026-11-20 05:23: plan complete. 13 done, 0 skipped, 4.1 h.
 
 | Task | Result | Attempts | Minutes | Note |
 | --- | --- | --- | --- | --- |
-| F02 In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments) | done | 1 | 4 |  |
-| F03 In chat/coder/tools.py fill in `mesh_check` as its docstring says | done | 1 | 4 |  |
-| F04 In chat/coder/research.py do the `TODO (task F04)` comments in `parse_plan` and fill in `plan_about` | done | 1 | 4 |  |
-| F05 In chat/coder/research.py fill in `gather` as its docstring says | done | 1 | 18 |  |
-| F06 In chat/coder/research.py fill in `rank` and `order` as their docstrings say | done | 2 | 20 |  |
-| F08 In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)` | done | 1 | 4 |  |
-| F09 In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`) | done | 1 | 3 |  |
-| F11 In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say | done | 1 | 3 |  |
-| F12 In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say | done | 1 | 5 |  |
-| F13 In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources) | done | 1 | 8 |  |
-| F14 In chat/coder/research.py fill in `investigate` as its docstring says | done | 1 | 24 |  |
-| F15 In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`) | skipped | 3 | 7 | agent made no changes |
-| F16 In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check` | done | 2 | 5 |  |
-| F17 In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json) | done | 3 | 10 |  |
-| F18 In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped) | done | 1 | 10 |  |
-| F19 Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details") | done | 1 | 7 |  |
-| F20 Add a "## Clear Source, rounds 2 and 3" section to chat/README.md (see "F20 details") | done | 1 | 6 |  |
+| D01 In chat/coder/files.py fill in `kind_of`, `check_zip`, `docx_text` and `xlsx_text` as their docstrings say | done | 1 | 31 |  |
+| D02 In chat/coder/files.py fill in `read_upload`, `fence`, `attach_block` and `disposition` | done | 1 | 8 |  |
+| D03 In chat/coder/files.py fill in `runs` and `blocks` (Markdown to runs and blocks) | done | 1 | 27 |  |
+| D04 In chat/coder/files.py fill in `safe_name`, `render_csv` and `render_xlsx` | done | 2 | 15 |  |
+| D05 In chat/coder/files.py fill in `render_html` (every text escaped, only http(s) links; use `_html_runs`) | done | 1 | 13 |  |
+| D06 In chat/coder/files.py fill in `render_docx`, `render_pdf` and `render` | done | 2 | 61 |  |
+| D07 In chat/coder/app.py fill in the routes `api_upload_file` and `api_export_message` (`TODO (task D07)`) | done | 1 | 25 |  |
+| D08 In chat/coder/answer.py fill in `make_file` as its docstring says | done | 1 | 5 |  |
+| D09 In chat/coder/research.py fill in `split_files` and `file_sources` as their docstrings say | done | 1 | 16 |  |
+| D10 In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`) | done | 1 | 7 |  |
+| D11 In chat/static/js/app.js fill in `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` (`TODO (task D11)`) | done | 1 | 10 |  |
+| D12 Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js (see "D12 details") | done | 1 | 11 |  |
+| D13 Add a "## Files in and out" section to chat/README.md (see "D13 details") | done | 1 | 13 |  |
 
 ## CI
 
