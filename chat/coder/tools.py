@@ -22,6 +22,7 @@ import httpx
 PUBMED = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 MAX_BYTES = 2_000_000          # a page larger than this is cut
 PAGE_CHARS = 8000              # text of one page handed to the model
+FULL_CHARS = 60000             # Clear Source picks the relevant parts from this much ("full", research.focus)
 # Bot checks and consent walls instead of the page (SPEC §15.3): such a "page" is never a source.
 BOT_CHECK = re.compile(r"checking your browser|just a moment\.\.\.|verify (that )?you are (a )?human|are you a robot|"
                        r"beveiligingscontrole|recaptcha|hcaptcha|attention required|access denied|"
@@ -190,7 +191,7 @@ async def fetch_page(client: httpx.AsyncClient, url: str, resolve: Callable = so
             title, text = html_text(body)
         if looks_blocked(title, text):
             raise ToolError("blocked by a bot check")
-        return {"title": title or host, "url": url, "text": text[:PAGE_CHARS]}
+        return {"title": title or host, "url": url, "text": text[:PAGE_CHARS], "full": text[:FULL_CHARS]}
     raise ToolError("too many redirects")
 
 
@@ -548,7 +549,7 @@ async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
 
     text = " ".join(parts)
     return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/",
-            "text": text[:PAGE_CHARS]}
+            "text": text[:PAGE_CHARS], "full": text[:FULL_CHARS]}
 
 
 # ------------------------------------------------------------------ the tools offered to the model

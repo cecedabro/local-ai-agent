@@ -59,3 +59,12 @@ def test_a_comment_after_a_quote_is_not_part_of_it():
         {"text": "Behandel bij risicogroepen direct met een antibioticum om complicaties te voorkomen.", "cites": [1]},
         {"text": "Bij zwangeren zeven dagen behandelen met nitrofurantoïne.", "cites": [2]},
         {"text": "A passage over two lines without quote marks", "cites": [1]}]
+
+
+def test_focus_finds_the_section_far_down_a_long_page():
+    text = "Ibuprofen, de inleiding.\n\n" + "\n\n".join(f"Alinea {i}: ibuprofen dosering bij volwassenen. " * 8 for i in range(80)) \
+        + "\n\nZwangerschap\n\nIbuprofen passeert de placenta.\n\nLactatie\n\nGaat over in de moedermelk."
+    got = research.focus(text, "ibuprofen zwangerschap veilig")
+    assert len(got) <= research.SOURCE_CHARS and got.startswith("Ibuprofen, de inleiding.")
+    assert "Zwangerschap\n\nIbuprofen passeert de placenta." in got, "the rare word wins over the word on every paragraph"
+    assert research.focus("kort", "x y z") == "kort"

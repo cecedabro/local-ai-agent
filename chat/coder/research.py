@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import re
 import time
 from typing import Any, AsyncIterator, Callable
@@ -385,9 +386,46 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                         continue
 
                 await step({"kind": "open", "title": page["title"], "url": page["url"]})
-                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=domain)
+                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "",
+                    focus(page.get("full") or page["text"], q), site=domain)
 
     return sources, trail
+
+
+def focus(text: str, query: str, limit: int = SOURCE_CHARS) -> str:
+    """The parts of a long page that matter for a search, at most `limit` characters, in page order.
+
+    Long pages (a Kompas drug text is ~36 000 characters) put the part you need (pregnancy, kidney function, dose)
+    far down; the first `limit` characters would miss it. Paragraphs are scored by how many of the search's words
+    (4+ letters) they contain, rare words counting more; the best ones and the 3 paragraphs after each (a section's body) are kept, plus the
+    first paragraph. Gaps are marked with "…". Short texts, or no usable words, -> the start of the text.
+    """
+    if len(text) <= limit:
+        return text
+    words = {w for w in re.findall(r"\w+", query.lower()) if len(w) > 3}
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not words or len(paras) < 2:
+        return text[:limit]
+    low = [p.lower() for p in paras]
+    # a word on almost every paragraph ("ibuprofen" on the ibuprofen page) says little; a rare one ("zwangerschap") a lot
+    weight = {w: math.log((len(paras) + 1) / (1 + sum(w in p for p in low))) for w in words}
+    scores = [sum(weight[w] for w in words if w in p) for p in low]
+    keep, size = {0}, len(paras[0])
+    for i in sorted(range(len(paras)), key=lambda k: (-scores[k], k)):
+        if scores[i] <= 0 or size >= limit * 0.9:
+            break
+        for j in range(i, min(i + 4, len(paras))):
+            if j not in keep and size + len(paras[j]) + 2 <= limit:
+                keep.add(j)
+                size += len(paras[j]) + 2
+    out: list[str] = []
+    prev = -1
+    for j in sorted(keep):
+        if prev != -1 and j != prev + 1:
+            out.append("…")
+        out.append(paras[j])
+        prev = j
+    return "\n\n".join(out)[:limit]
 
 
 def extract_messages(question: str, src: dict) -> list[dict]:

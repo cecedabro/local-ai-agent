@@ -71,7 +71,7 @@ def test_fetch_page():
     async def go():
         async with client_for(handler) as c:
             page = await tools.fetch_page(c, "https://hop.example/x", resolve)
-            assert page == {"title": "Page", "url": "https://example.org/page", "text": "Hallo wereld"}
+            assert page == {"title": "Page", "url": "https://example.org/page", "text": "Hallo wereld", "full": "Hallo wereld"}
             for bad in ("http://intranet.example/", "https://redirect.example/", "ftp://example.org/x",
                         "http://example.org:8080/", "https://example.org/pdf", "file:///etc/passwd"):
                 with pytest.raises(tools.ToolError):
