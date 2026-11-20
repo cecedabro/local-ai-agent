@@ -154,6 +154,14 @@ function cardHtml(s) {
 function draw() {
   const d = state.data;
   document.querySelectorAll(".pf-tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.profile === state.profile)));
+  const tab = document.querySelector(`.pf-tab[data-profile="${state.profile}"]`);
+  if ($("#pf-name") && tab) { $("#pf-name").textContent = tab.textContent; $("#pf-desc").textContent = tab.dataset.desc || ""; }
+  document.querySelector(".pf-about .orb")?.classList.toggle("eh", state.profile === "evidence");
+  const add = $("#add-defaults");
+  if (add) add.hidden = state.profile !== "evidence";
+  if ($("#pf-web-hint")) $("#pf-web-hint").textContent = state.profile === "evidence"
+    ? (d.web ? "On: open web pages can end up as sources. Off is safer." : "Off: only the trusted sources are used.")
+    : "Searches the web when a question needs current or outside facts.";
   if (document.activeElement !== $("#pf-instructions")) $("#pf-instructions").value = d.instructions;
   $("#pf-web").checked = d.web;
   const sources = d.sources;

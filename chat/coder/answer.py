@@ -113,7 +113,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
     # Clear Source profile: run its own pipeline
     if chat["profile"] == "evidence":
-        async for chunk in research.run_evidence(db, settings, chat, think, stream=stream, complete=complete, stop=stop):
+        # Clear Source has no Quick/Think choice: it always reasons before it writes (one call; searching and reading
+        # are the same either way), because a careful answer matters more here than 30 seconds.
+        async for chunk in research.run_evidence(db, settings, chat, True, stream=stream, complete=complete, stop=stop):
             yield chunk
         return
 
