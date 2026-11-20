@@ -51,17 +51,29 @@
   });
   if (profile) profile.setAttribute("aria-haspopup", "true");
 
-  // The keyboard: iOS lays the keyboard over the page instead of shrinking it, so the composer ends up
-  // hidden behind it. Follow the visible area (visualViewport) and size the app to it, so the composer sits
-  // right on top of the keyboard and its buttons stay tappable.
+  // The keyboard: iOS lays the keyboard over the page instead of shrinking it, and while you type it pans the
+  // visible area (visualViewport) to keep the caret in view, so a full-height app slides down behind the
+  // keyboard a bit with every letter. The app is pinned (CSS: position fixed) to the visible area instead:
+  // its height and top follow visualViewport, so the composer always sits right on top of the keyboard.
   const vv = window.visualViewport;
   const root = document.documentElement;
+  let frame = 0;
   const fit = () => {
     if (!vv) return;
-    root.style.setProperty("--app-h", `${Math.round(vv.height)}px`);
-    if (window.scrollY) window.scrollTo(0, 0);           // iOS scrolls the page up on focus; undo that
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      root.style.setProperty("--app-h", `${Math.round(vv.height)}px`);
+      root.style.setProperty("--app-top", `${Math.round(vv.offsetTop)}px`);
+    });
   };
-  if (vv) { vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit(); }
+  if (vv) {
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    // iOS reports the keyboard's size late on focus; measure again once it has settled
+    document.addEventListener("focusin", () => { fit(); setTimeout(fit, 300); });
+    document.addEventListener("focusout", () => setTimeout(fit, 300));
+    fit();
+  }
 
   // The text field grows with what you type (up to the CSS max-height) and shrinks again after sending.
   const input = document.getElementById("input");
