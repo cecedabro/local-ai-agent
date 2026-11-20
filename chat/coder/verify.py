@@ -89,8 +89,18 @@ def quotes(answer: str) -> list[dict]:
             while i < len(lines) and lines[i].lstrip().startswith(">"):
                 group_lines.append(lines[i].lstrip()[1:].strip())
                 i += 1
-            raw = " ".join(group_lines)
-            result.append({"text": _strip_marks(raw), "cites": cites_in(raw)})
+            # A quote ends at its [n]: what follows in the same blockquote is a new quote, or (when it does not start
+            # with a quote mark) the model's own comment, which is no quote at all.
+            parts: list[list[str]] = [[]]
+            for gl in group_lines:
+                parts[-1].append(gl)
+                if re.search(r"\[\d+(?:\s*,\s*\d+)*\]\s*\.?$", gl):
+                    parts.append([])
+            for k, part in enumerate(p for p in parts if p):
+                if k > 0 and not part[0].startswith(('"', "“", "„", "'", "‘")):
+                    continue
+                raw = " ".join(part)
+                result.append({"text": _strip_marks(raw), "cites": cites_in(raw)})
             continue
         if not in_code:
             for m in _INLINE.finditer(line):

@@ -72,7 +72,9 @@ RULES = (
     "## Dosing and special groups: children, pregnancy, kidney or liver function, the elderly, interactions.\n"
     "## Strength of the evidence: the study types, their size and limitations.\n"
     "Build every part from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
-    '> "exact words from the source" [2], and explain each quote in your own words; every claim ends with its [n]. '
+    '> "exact words from the source" [2] (one quote per blockquote, in the source\'s own language, never translated), '
+    "and explain each quote in your own words in a normal paragraph below it, not inside the blockquote; every claim "
+    "ends with its [n]. "
     "Quote exactly, never change numbers or words, never add facts that are not in the sources. If the sources do "
     "not answer the question, say so plainly instead of answering.")
 

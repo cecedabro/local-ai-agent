@@ -48,3 +48,14 @@ def test_ncbi_retries_a_429(monkeypatch):
             return await tools.ncbi_get(c, "/esearch.fcgi", {"db": "pubmed", "term": "x"})
     r = asyncio.run(go())
     assert r.status_code == 200 and len(calls) == 3 and calls[0]["tool"] == "dewdrop"
+
+
+def test_a_comment_after_a_quote_is_not_part_of_it():
+    a = ('> "Behandel bij risicogroepen direct met een antibioticum om complicaties te voorkomen." [1]\n'
+         "> De bron benadrukt dat zwangeren tot de risicogroep behoren [1].\n"
+         '> "Bij zwangeren zeven dagen behandelen met nitrofurantoïne." [2]\n\n'
+         "> A passage over two lines\n> without quote marks [1]")
+    assert verify.quotes(a) == [
+        {"text": "Behandel bij risicogroepen direct met een antibioticum om complicaties te voorkomen.", "cites": [1]},
+        {"text": "Bij zwangeren zeven dagen behandelen met nitrofurantoïne.", "cites": [2]},
+        {"text": "A passage over two lines without quote marks", "cites": [1]}]
