@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs>
-<radialGradient id="fb" cx=".5" cy=".55" r=".55"><stop offset="0" stop-color="#c9d4dd" stop-opacity=".10"/><stop offset=".72" stop-color="#c9d4dd" stop-opacity=".22"/><stop offset=".93" stop-color="#3d4f5e" stop-opacity=".55"/><stop offset="1" stop-color="#3d4f5e" stop-opacity=".8"/></radialGradient>
-<radialGradient id="fc" cx=".5" cy=".82" r=".42"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".55" stop-color="#ffffff" stop-opacity=".35"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
-<radialGradient id="ft" cx=".5" cy=".08" r=".7"><stop offset="0" stop-color="#2a3a48" stop-opacity=".35"/><stop offset=".5" stop-color="#2a3a48" stop-opacity="0"/></radialGradient>
-<radialGradient id="fh" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-<clipPath id="fk"><circle cx="32" cy="32" r="28"/></clipPath></defs>
-<circle cx="32" cy="32" r="28" fill="url(#fb)"/>
-<g clip-path="url(#fk)"><circle cx="32" cy="32" r="28" fill="url(#ft)"/>
-<ellipse cx="32" cy="47.400000000000006" rx="19.599999999999998" ry="11.76" fill="url(#fc)"/></g>
-<circle cx="32" cy="32" r="26.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3"/>
-<ellipse cx="21.92" cy="20.240000000000002" rx="8.4" ry="4.760000000000001" transform="rotate(-32 21.92 20.240000000000002)" fill="url(#fh)"/>
-<circle cx="18.0" cy="18.0" r="1.54" fill="#fff"/>
-<ellipse cx="43.76" cy="46.0" rx="2.8000000000000003" ry="1.4000000000000001" transform="rotate(-40 43.76 46.0)" fill="#fff" opacity=".7"/><circle cx="32" cy="32" r="29.2" fill="none" stroke="#5b6f80" stroke-opacity=".55" stroke-width="1.6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="#0a2f36" stroke="#34d399" stroke-width="5"/><path d="M14 34 L25 34 L29 24 L35 42 L39 31 L42 34 L50 34" fill="none" stroke="#eafff6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
