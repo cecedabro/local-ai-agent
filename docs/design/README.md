@@ -19,7 +19,7 @@ switch at the top right and animate live).
 Later status tweaks (sonar "model ready", play orb, foldable Recent, the "Start an agent loop" card)
 were decided in chat and built directly; round 6 below has the loop-card ideas.
 
-## Dewdrop (the chat app), 2026-11-17 to 18
+## Dewdrop (the chat app), 2026-11-17 to 20
 
 | Round | Page | What it explored | Chosen |
 |---|---|---|---|
@@ -32,6 +32,10 @@ were decided in chat and built directly; round 6 below has the loop-card ideas.
 | 7 | `chat/2026-11-18-r7-writing-v2.html` | Writing rebuilt like the big apps (measured 120 fps) | **V2** steady letters + soft fade |
 | 8 | `chat/2026-11-18-r8-drop-details.html` | Tiny drop at the end of the text, Blossom drops, water | **E2** (the drop slides into the stats), **P1 rose quartz** for Blossom |
 | 9 | `chat/2026-11-18-r9-water.html` | Realistic filling water | **F4 without the gloss band** |
+| 10 | `chat/2026-11-19-r10-animations.html` | Message appear, profile indicator, phase animations on the drop | **M3** (your message flies in from the send button) |
+| 11 | `chat/2026-11-19-r11-chat-preview.html` | The whole chat with the round-3 phases on the dewdrop; app icons | icons **r4-aero** and **r4-blossom**; drop 44 px while busy → 28 px when done |
+| 12 | `chat/2026-11-19-r12-chat-preview.html` | Round-3 phases exactly, no breathing, livelier clouds, the glossy stop button, Clear Source's colour | **turquoise** Clear Source (deep rose in Blossom); stop = glossy Aero ball |
+| 13 | `chat/2026-11-20-r13-clear-source.html` | Clear Source's research trail in four stages, the short-answer box, ✓ after quotes, grouped sources, the sources page as rows | **13b**: the app's own tokens, plain readable citation numbers, grouped lists (needs a local web server: it loads ES modules) |
 
 The chosen look lives in `chat/static/css/` (`tokens.css`, `base.css`, `chat.css`, `orb.css`) and the
 writing engine in `chat/static/js/stream.js`; `chat/SPEC.md` §9 lists the markup hooks they rely on.
