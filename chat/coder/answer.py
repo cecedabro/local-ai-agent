@@ -72,7 +72,24 @@ def make_file(db: Any, username: str, arguments: str) -> tuple[str, dict | None]
               {"id": fid, "name": name, "size": len(data), "kind": the format})
     Tests: test_step_files.py::test_make_file
     """
-    raise NotImplementedError
+    import json as _json
+    try:
+        args = _json.loads(arguments or "{}")
+        if not isinstance(args, dict):
+            raise ValueError
+    except (ValueError, TypeError):
+        return ("Error: the arguments were not valid JSON.", None)
+    name_in = args.get("name") or "file"
+    fmt = args.get("format") or ""
+    content = args.get("content") or ""
+    try:
+        data, _, name = files.render(name_in, fmt, content)
+    except files.FileError as e:
+        return (f"Error: {e}", None)
+    kind = fmt.lower().lstrip(".")
+    fid = db.add_file(username, name, len(data), data, kind=kind, text=content, made=True)
+    return (f"Made {name} ({len(data)} bytes). The user sees a download card for it; do not repeat its content.",
+            {"id": fid, "name": name, "size": len(data), "kind": kind})
 
 
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,

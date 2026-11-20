@@ -1,3 +1,8 @@
+## Task D08 - `make_file` implementation
+- **File**: `chat/coder/answer.py:65` — filled in the `make_file` function body.
+- **Change**: Parses JSON from `arguments` (invalid/empty/non-dict → error), calls `files.render()` with name/format/content, catches `FileError`, stores file via `db.add_file` with `made=True` and the original content as `text`, returns success message + file dict `{id, name, size, kind}`.
+- `make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"` passes (12/12). `make check` passes (36/36).
+
 ## Task F01 - `study_type` implementation
 - **File**: `chat/coder/tools.py:205` — filled in the `study_type` function body.
 - **Change**: Strips pub_types strings (None → empty), iterates `STUDY_TYPES` in order, matches exact names for all labels, and adds a prefix match for "Clinical Trial" (label "Clinical trial"). Returns the first matching label or None.
