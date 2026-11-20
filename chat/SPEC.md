@@ -141,8 +141,16 @@ Events (`event: <name>\ndata: <json>\n\n`):
 Each phase is sent at most once per answer, in the order they happen. `tokens` = the usage
 chunk's `completion_tokens` (or the number of content chunks if the gateway sent no usage);
 `tps` = tokens / seconds between first content chunk and the end, 1 decimal, or null. On
-`error` no assistant message is stored. If the client disconnects mid-answer, stop reading from
-the gateway and store what arrived so far.
+`error` no assistant message is stored.
+
+### 5.1 Answers keep going when the page goes away
+The answer runs as a server task, not inside the request: the response only follows its events. When the client
+disconnects (a phone locks or switches apps, the network changes) the answer goes on and is stored as usual.
+`GET /api/chats/<id>/live` (session; someone else's chat or nothing running → **204**) replays the running answer's
+events from the first one and follows it to the end; a finished answer stays followable for 60 s. The page follows a
+chat's live answer when it opens a chat whose last message is yours, and opens the chat again when it becomes
+visible after a dropped stream (hidden > 5 s). Stop (§11.2) still ends a running answer. Judge:
+`tests/test_accept_live.py`.
 
 ## 6. Context and compression
 
@@ -271,7 +279,8 @@ ID next time" right after the account is made; `GET /account` (session) lists yo
   stops), the text so far is stored as the assistant message with `stopped` true (nothing is
   stored when no text came yet; then `message_id` is null), and `done` follows with
   `"stopped": true`. Without a running answer the call does nothing (no flag stays behind).
-- If the client disconnects mid-answer, the same happens without the `done` event.
+- A client that disconnects no longer stops the answer (§5.1); `run_answer` itself still stores what arrived when
+  its generator is closed.
 
 ### 11.3 Folders
 A user's chats can live in folders (one level, no nesting of folders).
