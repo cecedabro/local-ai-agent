@@ -129,3 +129,8 @@
 - **Change** (`split_files`): Iterates `_FILE_BLOCK.finditer(content)`, strips text before the first block, returns list of `{"name": group1, "text": group3}` dicts.
 - **Change** (`file_sources`): For each file, chunks text into ≤`DOC_PARTS` pieces of ≤`SOURCE_CHARS` bytes, preferring `\n\n` then `\n` splits near cutoff; formats as source dicts with title (single or "name (part i of k)"), kind "file", meta "Your file".
 - `make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"` passes (31/31). `make check` passes (36/36).
+
+## Task D10 - `uploadFile` implementation
+- **File**: `chat/static/js/app.js:501` — filled in the `uploadFile` function body.
+- **Change**: Creates FormData with "file" key, POSTs to `/api/files`, parses JSON response; on failure creates `<span class="file err">` chip with escaped name and error message, removes after 6s; on success pushes file to `state.files`, creates `<span class="file" data-kind="KIND">` chip with escaped name, tokens (k suffix for ≥1000), and remove button with file id.
+- `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).

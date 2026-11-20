@@ -498,7 +498,36 @@ function drawContext(ctx) {
  *     add `<span class="file" data-kind="KIND">NAME <small>TOKENS</small><button class="x" data-remove="ID">×</button></span>`
  *     to #file-chips (KIND, NAME escaped).
  */
-async function uploadFile(file) {}
+async function uploadFile(file) {
+  let f;
+  let res;
+  try {
+    const fd = new FormData();
+    fd.set("file", file);
+    res = await api("/api/files", { method: "POST", body: fd });
+    f = await res.json();
+  } catch { return; }
+  if (!res.ok) {
+    const err = esc(f?.error || "could not upload");
+    const name = esc(file.name);
+    const chip = document.createElement("span");
+    chip.className = "file err";
+    chip.textContent = name + ": " + err;
+    $("#file-chips").appendChild(chip);
+    setTimeout(() => chip.remove(), 6000);
+    return;
+  }
+  state.files.push(f);
+  const tokens = f.tokens >= 1000 ? Math.round(f.tokens / 1000) + "k tokens" : f.tokens + " tokens";
+  const kind = esc(f.kind);
+  const name = esc(file.name);
+  const id = f.id;
+  const chip = document.createElement("span");
+  chip.className = "file";
+  chip.dataset.kind = kind;
+  chip.innerHTML = name + " <small>" + tokens + "</small><button class=\"x\" data-remove=\"" + id + "\">&times;</button>";
+  $("#file-chips").appendChild(chip);
+}
 
 /** The file input #file-input, dropping files on #composer and pasting them (SPEC §16.6). */
 function setupFiles() {

@@ -36,7 +36,7 @@ Rules for every task:
   accept: make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"
 - [x] D09: In chat/coder/research.py fill in `split_files` and `file_sources` as their docstrings say
   accept: make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"
-- [ ] D10: In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`)
+- [x] D10: In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] D11: In chat/static/js/app.js fill in `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` (`TODO (task D11)`)
   accept: node --check chat/static/js/app.js && make chat-test
