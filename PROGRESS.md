@@ -123,3 +123,9 @@
 - **Change** (`api_export_message`): GET `/api/messages/{id}/export?format=` validates session/message ownership/format; appends sources to markdown when format is md/html; renders via `files.render(fmt, content, sources_markdown)`; returns download with appropriate content-disposition and security headers (`X-Content-Type: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`).
 - **Fix**: `render_pdf()` in `files.py:915` now wraps `pdf.output()` in `bytes()` — fpdf2 returns `bytearray` by default, which caused `AttributeError` during httpx multipart uploads.
 - `make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"` passes (7/7). `make check` passes (36/36).
+
+## Task D09 - `split_files` and `file_sources` implementation
+- **File**: `chat/coder/research.py` — filled in `split_files` (line ~817) and `file_sources` (line ~834).
+- **Change** (`split_files`): Iterates `_FILE_BLOCK.finditer(content)`, strips text before the first block, returns list of `{"name": group1, "text": group3}` dicts.
+- **Change** (`file_sources`): For each file, chunks text into ≤`DOC_PARTS` pieces of ≤`SOURCE_CHARS` bytes, preferring `\n\n` then `\n` splits near cutoff; formats as source dicts with title (single or "name (part i of k)"), kind "file", meta "Your file".
+- `make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"` passes (31/31). `make check` passes (36/36).

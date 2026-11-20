@@ -567,16 +567,21 @@ _FILE_BLOCK = re.compile(r"\n\nFile (.+?):\n(`{3,})\n(.*?)\n\2(?=\n\nFile .+?:\n
 
 
 def split_files(content: str) -> tuple[str, list[dict]]:
-    r"""TODO (task D09). A user message's typed text and its attached files (SPEC §16.2): the blocks files.attach_block made at the end.
+    r"""A user message's typed text and its attached files (SPEC §16.2): the blocks files.attach_block made at the end.
       blocks = _FILE_BLOCK.finditer(content) after the first "\n\nFile " that starts such a block; typed = the text before
       the first block, stripped; files = [{"name": group 1, "text": group 3}] in order. No block -> (content.strip(), []).
     Tests: test_step_files.py::test_split_files
     """
-    raise NotImplementedError
+    blocks = list(_FILE_BLOCK.finditer(content))
+    if not blocks:
+        return (content.strip(), [])
+    typed = content[:blocks[0].start()].strip()
+    files = [{"name": m.group(1), "text": m.group(3)} for m in blocks]
+    return (typed, files)
 
 
 def file_sources(files: list[dict]) -> list[dict]:
-    r"""TODO (task D09). Attached files as sources (SPEC §16.2), in order. Per file: parts = up to DOC_PARTS pieces of text:
+    r"""Attached files as sources (SPEC §16.2), in order. Per file: parts = up to DOC_PARTS pieces of text:
       rest = the text stripped; while rest and fewer than DOC_PARTS parts: when len(rest) <= SOURCE_CHARS take it all;
       else cut = rest[:SOURCE_CHARS]; at = cut.rfind("\n\n"), else cut.rfind("\n"); when at >= SOURCE_CHARS - 1000
       cut = cut[:at]; take cut.strip() and rest = rest[len(cut):].strip()
@@ -584,7 +589,33 @@ def file_sources(files: list[dict]) -> list[dict]:
                     "meta": "Your file", "text": part, "type": None, "site": None}
     Tests: test_step_files.py::test_file_sources
     """
-    raise NotImplementedError
+    result = []
+    for f in files:
+        name = f["name"]
+        rest = f["text"].strip()
+        parts = []
+        while rest and len(parts) < DOC_PARTS:
+            if len(rest) <= SOURCE_CHARS:
+                parts.append(rest)
+                break
+            cut = rest[:SOURCE_CHARS]
+            at = cut.rfind("\n\n")
+            if at < 0:
+                at = cut.rfind("\n")
+            if at >= SOURCE_CHARS - 1000:
+                cut = cut[:at]
+            parts.append(cut.strip())
+            rest = rest[len(cut):].strip()
+        if not parts:
+            continue
+        k = len(parts)
+        for i, part in enumerate(parts, 1):
+            title = name if k == 1 else f"{name} (part {i} of {k})"
+            result.append({
+                "title": title, "url": "", "kind": "file", "meta": "Your file",
+                "text": part, "type": None, "site": None,
+            })
+    return result
 
 
 async def investigate(question: str, cfg: dict, settings: Any, complete: Callable, t: Any = tools,

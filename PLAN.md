@@ -34,7 +34,7 @@ Rules for every task:
   accept: make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"
 - [x] D08: In chat/coder/answer.py fill in `make_file` as its docstring says
   accept: make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"
-- [ ] D09: In chat/coder/research.py fill in `split_files` and `file_sources` as their docstrings say
+- [x] D09: In chat/coder/research.py fill in `split_files` and `file_sources` as their docstrings say
   accept: make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"
 - [ ] D10: In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`)
   accept: node --check chat/static/js/app.js && make chat-test
