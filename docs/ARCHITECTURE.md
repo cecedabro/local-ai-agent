@@ -1,12 +1,13 @@
 # How it fits together
 
 A map of every moving part, how they talk, and where to look when something breaks. Design
-choices and their history: `docs/PLAN.md` (the setup) and `docs/design/` (the looks).
+choices and their history: `docs/PLAN.md` (the setup) and `docs/design/` (the looks). More detail:
+`docs/DEWDROP.md` (the chat app), `docs/CLEAR-SOURCE.md` (the research profile), `docs/STATUS.md` (where things stand).
 
 ## The big picture
 
 ```
-                    phone / Mac (Tailscale)                     the internet (Cloudflare Tunnel, planned)
+                    phone / Mac (Tailscale)                     the internet (Cloudflare Tunnel)
                            │                                                  │
              ┌─────────────┴─────────────┐                                    │
              ▼                           ▼                                    ▼
@@ -38,7 +39,7 @@ through External Secrets; nothing secret is in this repo.
 | Devbox | `devbox/` | StatefulSet `devbox-0` (+ Postgres sidecar) | The agent's workplace: repos in `~/repos`, OpenCode, toolchains, Chromium |
 | agent-queue | `harness/worker.py` | tmux window `agent:queue` in the devbox | Polls the queue, checks out the job's branch, runs agent-loop; lists repos and plans for the page |
 | agent-loop | `harness/loop.py`, `harness/prompt.md` | started by the worker per job | Works through `PLAN.md` one task at a time (below) |
-| Dewdrop | `chat/` (FastAPI) | its own image and pod (planned: public via Cloudflare Tunnel + Access) | The chat app: accounts, chats, streaming, files, EvidenceHunt later |
+| Dewdrop | `chat/` (FastAPI) | its own image and pod (namespace `dewdrop`), public via Cloudflare Tunnel | The chat app: invite-only accounts with passkeys, chats and folders, streaming, web search, Clear Source (`docs/DEWDROP.md`) |
 | devbox-rollout | homelab CronJob | every 5 min | Restarts `devbox-0` on a new image, only when the status service says it is idle |
 
 ## Path 1: an agent loop
@@ -76,6 +77,8 @@ steps in the function's docstring, and a small test per task (see the chat plan 
 4. In the browser, `stream.js` buffers the text and writes it at a steady pace; the dewdrop shows the
    phase (clouds while thinking, water while writing).
 5. When the context passes 75 % of the model's window, older messages are summarised first.
+6. In the Clear Source profile the app runs the research itself and the model only plans, reads and
+   writes; every quote is checked word for word (`docs/CLEAR-SOURCE.md`).
 
 The status page's own quick chat uses the same gateway.
 
@@ -91,7 +94,7 @@ jobs, events, token samples, daily totals, imported history (`status/backfill.py
 | What | How it updates |
 |---|---|
 | agent-status | Merge to main → CI tests → image `X.Y.Z` (git tag `status-vX.Y.Z`) → Flux rolls it in ~3 min |
-| Dewdrop | Same pattern (`chat-vX.Y.Z`, image `local-ai-agent-chat`); the homelab side is added when the first image exists |
+| Dewdrop | Same pattern (`chat-vX.Y.Z`, image `local-ai-agent-chat`, ImagePolicy `dewdrop`) |
 | devbox | Merge to main (devbox/ or harness/) → image `X.Y.Z` (`devbox-vX.Y.Z`) → Flux writes it into the StatefulSet (`OnDelete`) → devbox-rollout restarts the pod at the next idle moment; the queue starts no new job while an update waits (SPEC §15). Roll back by pinning an older tag in the homelab repo |
 | the PC | By hand: `pc/llama/build-llama.sh`, unit and flags in `pc/llama/` |
 
@@ -115,5 +118,7 @@ jobs, events, token samples, daily totals, imported history (`status/backfill.py
 | Tasks keep getting skipped | `~/repos/<repo>/.agent/logs/<task>-a<n>.log` in the devbox; the `accept:` command output is at the end; usually the task is too big |
 | Push or PR fails | The GitHub token's repo access (`gh auth status` in the devbox) |
 | Chat says the model is busy for long | An agent run holds the model; pause it from the Now card |
+| Clear Source takes minutes | Normal while an agent loop runs: each of its ~10 model calls waits for the agent's current request |
+| Clear Source: "PubMed answered 429" | NCBI's rate limit; `tools.ncbi_get` spaces calls out and retries, an `NCBI_API_KEY` raises the limit |
 | Status page not updated after a merge | The `status-image` workflow on GitHub, then the Flux ImagePolicy `agent-status` in the homelab |
 | Devbox not updated | The `devbox-image` workflow, ImagePolicy `agent-devbox`, CronJob `devbox-rollout` logs |

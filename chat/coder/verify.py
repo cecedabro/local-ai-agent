@@ -8,7 +8,7 @@ import re
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "„": '"', "–": "-", "—": "-", "−": "-", "­": None})
 _ELLIPSIS = re.compile(r"\.\.\.|…|\[\s*(?:\.\.\.|…)\s*\]")
-_CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+_CITE = re.compile(r"\[(\d+(?:\s*[,;]\s*\d+)*)\]")
 _INLINE = re.compile(r'"([^"\n]+)"|“([^”\n]+)”')
 STRENGTH_WORDS = ("evidence", "bewijs", "bewijskracht", "studies", "onderzoek")
 
@@ -47,12 +47,12 @@ def find_quote(quote: str, text: str) -> bool:
 
 
 def cites_in(text: str) -> list[int]:
-    r"""Every [n] (also [1, 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
+    r"""Every [n] (also [1, 2] and [1; 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
     and append int(x) when it is not in the list yet.
     """
     result: list[int] = []
     for m in _CITE.finditer(text):
-        for x in m.group(1).split(","):
+        for x in re.split(r"[,;]", m.group(1)):
             n = int(x)
             if n not in result:
                 result.append(n)
@@ -72,7 +72,7 @@ def quotes(answer: str) -> list[dict]:
       - a line whose lstrip() starts with ">": collect it and the following ">" lines (the text after ">", stripped);
         raw = " ".join(group); append {"text": _strip_marks(raw), "cites": cites_in(raw)}
       - otherwise each _INLINE match (group 1 or 2 is the quote) with 4+ words: cites = cites_in of a [..] right after the
-        closing quote (re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest of the line)), else []; append {"text": q.strip(), "cites"}
+        closing quote (re.match(r"\s*(\[(\d+(?:\s*[,;]\s*\d+)*)\])", rest of the line)), else []; append {"text": q.strip(), "cites"}
     """
     result: list[dict] = []
     in_code = False
@@ -89,15 +89,25 @@ def quotes(answer: str) -> list[dict]:
             while i < len(lines) and lines[i].lstrip().startswith(">"):
                 group_lines.append(lines[i].lstrip()[1:].strip())
                 i += 1
-            raw = " ".join(group_lines)
-            result.append({"text": _strip_marks(raw), "cites": cites_in(raw)})
+            # A quote ends at its [n]: what follows in the same blockquote is a new quote, or (when it does not start
+            # with a quote mark) the model's own comment, which is no quote at all.
+            parts: list[list[str]] = [[]]
+            for gl in group_lines:
+                parts[-1].append(gl)
+                if re.search(r"\[\d+(?:\s*[,;]\s*\d+)*\]\s*\.?$", gl):
+                    parts.append([])
+            for k, part in enumerate(p for p in parts if p):
+                if k > 0 and not part[0].startswith(('"', "“", "„", "'", "‘")):
+                    continue
+                raw = " ".join(part)
+                result.append({"text": _strip_marks(raw), "cites": cites_in(raw)})
             continue
         if not in_code:
             for m in _INLINE.finditer(line):
                 q = m.group(1) or m.group(2)
                 if len(q.split()) >= 4:
                     rest = line[m.end():]
-                    cite_m = re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest)
+                    cite_m = re.match(r"\s*(\[(\d+(?:\s*[,;]\s*\d+)*)\])", rest)
                     cites = cites_in(cite_m.group(1)) if cite_m else []
                     result.append({"text": q.strip(), "cites": cites})
         i += 1
@@ -130,6 +140,19 @@ def sentences(answer: str) -> list[dict]:
 
 # Sections that summarise the quotes below them (SPEC §15.5): their sentences need no [n].
 SUMMARY_HEADINGS = re.compile(r"short answer|kort antwoord|summary|samenvatting|conclusi|strength|sterkte|bewijskracht", re.I)
+
+
+# Sentences about the sources themselves ("the sources give no information on dosing") make no claim of their own.
+_SRC = r"(bron|bronnen|richtlijn|richtlijnen|source|sources|guideline|guidelines)"
+_NEG = r"(geen|niet|no|not|nothing|niets)"
+_INFO = r"(informatie|gegevens|vermeld\w*|noem\w*|beschrij\w*|beschreven|over|information|data|details|mention\w*|describ\w*|say|cover\w*|address\w*)"
+ABOUT_SOURCES = re.compile(rf"\b{_SRC}\b.{{0,80}}\b{_NEG}\b.{{0,80}}\b{_INFO}\b|\b{_NEG}\b.{{0,40}}\b{_INFO}\b.{{0,80}}\b{_SRC}\b", re.I)
+
+
+def not_a_claim(sentence: str) -> bool:
+    """A lead-in to a quote (ends with ":") or a sentence about what the sources do not say: never "uncited"."""
+    t = sentence.strip()
+    return t.endswith(":") or bool(ABOUT_SOURCES.search(t))
 
 
 def summary_sentences(answer: str) -> list[str]:
@@ -200,7 +223,7 @@ def check(answer: str, sources: list[dict]) -> dict:
     uncited: list[str] = []
     for idx, s in enumerate(sents):
         cited_nums.update(s["cites"])
-        if s["text"] in summary:
+        if s["text"] in summary or not_a_claim(s["text"]):
             continue
         if not s["cites"] and len(re.findall(r"\w+", s["text"])) >= 8:
             if idx == len(sents) - 1 and any(w in normalize(s["text"]) for w in STRENGTH_WORDS):

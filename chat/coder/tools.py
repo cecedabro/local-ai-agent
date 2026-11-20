@@ -5,10 +5,13 @@ and every page fetch is checked against private addresses first (`resolve` is in
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import re
+import os
 import socket
+import time
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from typing import Any, Callable
@@ -19,10 +22,47 @@ import httpx
 PUBMED = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 MAX_BYTES = 2_000_000          # a page larger than this is cut
 PAGE_CHARS = 8000              # text of one page handed to the model
+FULL_CHARS = 60000             # Clear Source picks the relevant parts from this much ("full", research.focus)
 # Bot checks and consent walls instead of the page (SPEC §15.3): such a "page" is never a source.
 BOT_CHECK = re.compile(r"checking your browser|just a moment\.\.\.|verify (that )?you are (a )?human|are you a robot|"
                        r"beveiligingscontrole|recaptcha|hcaptcha|attention required|access denied|"
                        r"enable javascript and cookies|ddos protection", re.I)
+
+
+# NCBI (PubMed, MeSH, PMC) allows 3 requests a second without an API key and 10 with one; more -> 429.
+# Every E-utilities call goes through ncbi_get: spaced out, and retried politely on 429 / 5xx.
+NCBI_KEY = os.environ.get("NCBI_API_KEY", "")
+_ncbi_last = 0.0
+_ncbi_locks: dict[int, asyncio.Lock] = {}
+
+
+async def ncbi_get(client: httpx.AsyncClient, path: str, params: dict, headers: dict | None = None,
+                   timeout: float = 20, tries: int = 4) -> httpx.Response:
+    """GET PUBMED + path, at most ~3 (or 10 with NCBI_API_KEY) a second, with up to `tries` tries on 429 and 5xx."""
+    global _ncbi_last
+    local = PUBMED.startswith(("http://127.", "http://localhost"))      # the tests' fake NCBI: no waiting
+    gap = 0.0 if local else (0.12 if NCBI_KEY else 0.4)
+    params = {**params, "tool": "dewdrop", **({"api_key": NCBI_KEY} if NCBI_KEY and not local else {})}
+    lock = _ncbi_locks.setdefault(id(asyncio.get_running_loop()), asyncio.Lock())
+    r = None
+    for attempt in range(tries):
+        async with lock:
+            wait = _ncbi_last + gap - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                r = await client.get(PUBMED + path, params=params, headers=headers, timeout=timeout)
+            finally:
+                _ncbi_last = time.monotonic()
+        if r.status_code != 429 and r.status_code < 500:
+            return r
+        if attempt < tries - 1 and not local:
+            try:
+                delay = float(r.headers.get("Retry-After", ""))
+            except ValueError:
+                delay = 0.0
+            await asyncio.sleep(min(max(delay, 1.0 * 2 ** attempt), 8.0))
+    return r
 
 
 def looks_blocked(title: str, text: str) -> bool:
@@ -151,7 +191,7 @@ async def fetch_page(client: httpx.AsyncClient, url: str, resolve: Callable = so
             title, text = html_text(body)
         if looks_blocked(title, text):
             raise ToolError("blocked by a bot check")
-        return {"title": title or host, "url": url, "text": text[:PAGE_CHARS]}
+        return {"title": title or host, "url": url, "text": text[:PAGE_CHARS], "full": text[:FULL_CHARS]}
     raise ToolError("too many redirects")
 
 
@@ -258,8 +298,8 @@ async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list
         if not want:
             return []
 
-        r = await client.get(
-            PUBMED + "/esearch.fcgi",
+        r = await ncbi_get(
+            client, "/esearch.fcgi",
             params={
                 "db": "mesh",
                 "term": " OR ".join(f'"{t}"[MeSH Terms]' for t in want),
@@ -275,8 +315,8 @@ async def mesh_check(client: httpx.AsyncClient, terms: list[str] | None) -> list
         if not ids:
             return []
 
-        r = await client.get(
-            PUBMED + "/esummary.fcgi",
+        r = await ncbi_get(
+            client, "/esummary.fcgi",
             params={"db": "mesh", "id": ",".join(ids), "retmode": "json"},
             headers={"User-Agent": UA},
             timeout=20,
@@ -351,8 +391,8 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     """
     term = pubmed_term(query, filters, mesh)
     try:
-        r = await client.get(
-            PUBMED + "/esearch.fcgi",
+        r = await ncbi_get(
+            client, "/esearch.fcgi",
             params={"db": "pubmed", "term": term, "retmode": "json",
                     "retmax": n, "sort": "relevance"},
             headers={"User-Agent": UA}, timeout=20)
@@ -376,8 +416,8 @@ async def pubmed_search(client: httpx.AsyncClient, query: str, filters: dict | N
     if not ids:
         return []
     try:
-        r2 = await client.get(
-            PUBMED + "/efetch.fcgi",
+        r2 = await ncbi_get(
+            client, "/efetch.fcgi",
             params={"db": "pubmed", "id": ",".join(ids), "retmode": "xml"},
             timeout=30)
     except httpx.HTTPError as e:
@@ -467,8 +507,8 @@ async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
     """
     digits = pmcid.upper().removeprefix("PMC")
     try:
-        r = await client.get(
-            f"{PUBMED}/efetch.fcgi",
+        r = await ncbi_get(
+            client, "/efetch.fcgi",
             params={"db": "pmc", "id": digits, "retmode": "xml"},
             headers={"User-Agent": UA},
             timeout=30,
@@ -509,7 +549,7 @@ async def pmc_text(client: httpx.AsyncClient, pmcid: str) -> dict:
 
     text = " ".join(parts)
     return {"title": title or pmcid, "url": f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid.upper()}/",
-            "text": text[:PAGE_CHARS]}
+            "text": text[:PAGE_CHARS], "full": text[:FULL_CHARS]}
 
 
 # ------------------------------------------------------------------ the tools offered to the model

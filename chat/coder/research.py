@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import re
 import time
 from typing import Any, AsyncIterator, Callable
@@ -28,18 +29,23 @@ MAX_PASSAGES = 4
 PUBMED_WEB = "https://pubmed.ncbi.nlm.nih.gov/?term="
 PLAN_PROMPT = (
     "You plan literature searches for a medical question. Answer with JSON only: an object "
-    '{"about": "<the question in one plain sentence: who, what, which outcome>", "searches": [<at most 7 objects '
+    '{"about": "<the question in one plain sentence, in the language of the question: who, what, which outcome>", "searches": [<at most 7 objects '
     '{"source": "pubmed" | "site:<domain>" | "web", "query": "<search terms>", "mesh": ["<MeSH heading>", ...]}>]}. '
     "PubMed: 2 to 4 searches, from specific to broad, with English search terms and synonyms, and in \"mesh\" up to "
     '4 official MeSH headings for the main concepts (for example "Renal Insufficiency, Chronic" or "Pregnancy"); leave '
-    "out drugs too new for MeSH. Websites: choose the 1 to 3 sites that fit the question best (drugs: "
+    "out drugs too new for MeSH. Websites: choose the 1 to 3 sites that fit the question best (any question about a "
+    "medicine, its dose, combining it or using it while pregnant: always farmacotherapeutischkompas.nl; "
+    "drugs: "
     "farmacotherapeutischkompas.nl; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
     "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; patient advice: thuisarts.nl) and search them in "
     "Dutch with 2 to 4 key words, no mesh. Use only these sources: {sources}.")
 FOLLOWUP_PROMPT = (
     "The searches below found too little for this medical question. Plan new searches with other words: synonyms, "
-    "broader or related terms, fewer words per search, other sites. Do not repeat a search. Answer with JSON only, the "
-    'same format: {"about": "...", "searches": [...]}. Use only these sources: {sources}.')
+    "broader or related terms, the Dutch and the English word, fewer words per search, other sites. Do not repeat a "
+    "search. Answer with JSON only, the same format as before, every search an object:\n"
+    '{"about": "<the question in one sentence>", "searches": [{"source": "pubmed", "query": "erythromelalgia therapy", '
+    '"mesh": ["Erythromelalgia"]}, {"source": "site:thuisarts.nl", "query": "branderige rode voeten"}]}\n'
+    "Use only these sources: {sources}.")
 EXTRACT_PROMPT = (
     "You read one source for a medical question. Copy, word for word, up to 4 passages of the source that help "
     "answer the question: whole sentences, exactly as written, in the source's own language; change nothing. Answer "
@@ -49,6 +55,10 @@ NO_EVIDENCE = {
           "geen antwoord uit eigen kennis. Probeer de vraag specifieker te stellen of voeg een bron toe.",
     "en": "I found no reliable evidence for this question in the sources I searched, so I won't answer from my own "
           "knowledge. Try asking more specifically, or add a source.",
+}
+UNREACHABLE = {
+    "nl": "\n\nLet op: {} gaf geen antwoord (te druk of onbereikbaar). Probeer het over een minuut opnieuw.",
+    "en": "\n\nNote: {} did not answer (too busy or unreachable). Try again in a minute.",
 }
 _DUTCH = {"de", "het", "een", "is", "bij", "van", "en", "niet", "wat", "hoe", "welke", "voor", "met", "zijn",
           "wordt", "mag", "kan", "helpt", "tegen", "tijdens", "patiënten", "dosis"}
@@ -63,7 +73,9 @@ RULES = (
     "## Dosing and special groups: children, pregnancy, kidney or liver function, the elderly, interactions.\n"
     "## Strength of the evidence: the study types, their size and limitations.\n"
     "Build every part from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
-    '> "exact words from the source" [2], and explain each quote in your own words; every claim ends with its [n]. '
+    '> "exact words from the source" [2] (one quote per blockquote, in the source\'s own language, never translated), '
+    "and explain each quote in your own words in a normal paragraph below it, not inside the blockquote; every claim "
+    "ends with its [n]. "
     "Quote exactly, never change numbers or words, never add facts that are not in the sources. If the sources do "
     "not answer the question, say so plainly instead of answering.")
 
@@ -101,6 +113,28 @@ def plan_messages(question: str, cfg: dict) -> list[dict]:
         {"role": "system", "content": PLAN_PROMPT.replace("{sources}", src)},
         {"role": "user", "content": question},
     ]
+
+
+_PUBMED_HOSTS = ("pubmed", "pubmed.gov", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "www.ncbi.nlm.nih.gov")
+
+
+def text_search(item: str, allowed: list[str]) -> dict | None:
+    """A search the model wrote as text ("terms site:rivm.nl", "terms site:pubmed.gov", "terms") as a plan item.
+    site:<a source's domain> -> that site; a PubMed host, or no site -> pubmed (else the web); other sites -> the web.
+    None when the source it lands on is not allowed or no terms are left."""
+    m = re.search(r"\bsite:(\S+)", item)
+    query = re.sub(r"\bsite:\S+", " ", item)
+    query = re.sub(r"\s+", " ", query).strip().strip('"').strip()
+    site = m.group(1).lower().strip("/").removeprefix("www.") if m else ""
+    if site in _PUBMED_HOSTS or not site:
+        source = "pubmed" if "pubmed" in allowed else "web"
+    elif "site:" + site in allowed:
+        source = "site:" + site
+    else:
+        source = "web"
+    if source not in allowed or not query or (not m and len(query.split()) < 2):
+        return None                                   # a lone word without a site is more likely junk than a search
+    return {"source": source, "query": query}
 
 
 def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
@@ -143,6 +177,8 @@ def parse_plan(text: str, cfg: dict, question: str = "") -> list[dict]:
         items = []
     result = []
     for item in items:
+        if isinstance(item, str):
+            item = text_search(item, allowed)
         if not isinstance(item, dict):
             continue
         source = str(item.get("source", "")).strip().lower()
@@ -350,9 +386,46 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                         continue
 
                 await step({"kind": "open", "title": page["title"], "url": page["url"]})
-                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "", page["text"], site=domain)
+                add(page["title"], page["url"], "page", urlsplit(page["url"]).hostname or "",
+                    focus(page.get("full") or page["text"], q), site=domain)
 
     return sources, trail
+
+
+def focus(text: str, query: str, limit: int = SOURCE_CHARS) -> str:
+    """The parts of a long page that matter for a search, at most `limit` characters, in page order.
+
+    Long pages (a Kompas drug text is ~36 000 characters) put the part you need (pregnancy, kidney function, dose)
+    far down; the first `limit` characters would miss it. Paragraphs are scored by how many of the search's words
+    (4+ letters) they contain, rare words counting more; the best ones and the 3 paragraphs after each (a section's body) are kept, plus the
+    first paragraph. Gaps are marked with "…". Short texts, or no usable words, -> the start of the text.
+    """
+    if len(text) <= limit:
+        return text
+    words = {w for w in re.findall(r"\w+", query.lower()) if len(w) > 3}
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not words or len(paras) < 2:
+        return text[:limit]
+    low = [p.lower() for p in paras]
+    # a word on almost every paragraph ("ibuprofen" on the ibuprofen page) says little; a rare one ("zwangerschap") a lot
+    weight = {w: math.log((len(paras) + 1) / (1 + sum(w in p for p in low))) for w in words}
+    scores = [sum(weight[w] for w in words if w in p) for p in low]
+    keep, size = {0}, len(paras[0])
+    for i in sorted(range(len(paras)), key=lambda k: (-scores[k], k)):
+        if scores[i] <= 0 or size >= limit * 0.9:
+            break
+        for j in range(i, min(i + 4, len(paras))):
+            if j not in keep and size + len(paras[j]) + 2 <= limit:
+                keep.add(j)
+                size += len(paras[j]) + 2
+    out: list[str] = []
+    prev = -1
+    for j in sorted(keep):
+        if prev != -1 and j != prev + 1:
+            out.append("…")
+        out.append(paras[j])
+        prev = j
+    return "\n\n".join(out)[:limit]
 
 
 def extract_messages(question: str, src: dict) -> list[dict]:
@@ -664,6 +737,9 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
 
     if not sources:
         text = NO_EVIDENCE[lang]
+        down = sorted({str(st.get("source")) for st in trail if st.get("kind") == "search" and st.get("error")})
+        if down:
+            text += UNREACHABLE[lang].format(", ".join(down))
         yield _phase("writing", "Writing the answer…")
         yield _sse("delta", {"text": text})
         msg_id = db.add_message(chat["id"], "assistant", text, tokens=0,
