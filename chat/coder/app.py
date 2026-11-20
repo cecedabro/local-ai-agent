@@ -6,6 +6,7 @@ both uvicorn and the test client.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -38,6 +39,42 @@ async def _lifespan(app: FastAPI):
     db.close()
 
 
+log = logging.getLogger("dewdrop")
+LIVE_KEEP = 60  # seconds a finished answer's events stay available to a page that reconnects
+
+
+class Live:
+    """The events of one answer while it is written: kept in order so any number of pages can follow them."""
+
+    def __init__(self, username: str) -> None:
+        self.username = username
+        self.chunks: list[str] = []
+        self.done = False
+        self.task: asyncio.Task | None = None
+        self._changed = asyncio.Event()
+
+    def add(self, chunk: str) -> None:
+        self.chunks.append(chunk)
+        self._changed.set()
+
+    def finish(self) -> None:
+        self.done = True
+        self._changed.set()
+
+    async def follow(self):
+        i = 0
+        while True:
+            while i < len(self.chunks):
+                yield self.chunks[i]
+                i += 1
+            if self.done:
+                return
+            self._changed.clear()
+            if i < len(self.chunks) or self.done:
+                continue
+            await self._changed.wait()
+
+
 def create_app(settings: dict | None = None) -> FastAPI:
     """Create the FastAPI application.
 
@@ -51,6 +88,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     app = FastAPI(title="Coder Chat", version="0.1.0", lifespan=_lifespan)
     app.state.settings = settings_obj
     app.state.running: dict[int, asyncio.Event] = {}
+    app.state.live: dict[int, Live] = {}
 
     # ------------------------------------------------------------------ #
     #  Security middleware (CSRF + headers)                               #
@@ -732,16 +770,43 @@ def create_app(settings: dict | None = None) -> FastAPI:
         msg_id = db.add_message(chat_id, "user", content)
         if file_ids:
             db.add_message_files(msg_id, file_ids)
+        # The answer runs on its own (SPEC §5.1): a phone that locks or switches apps drops the connection,
+        # and a Clear Source answer takes minutes. The response only follows the answer's events; when the
+        # page comes back it follows them again via GET /api/chats/<id>/live.
         stop = asyncio.Event()
         app.state.running[chat_id] = stop
-        async def events():
+        live = Live(username)
+        app.state.live[chat_id] = live
+
+        async def pump():
             try:
                 async for chunk in answer.run_answer(db, settings, chat, body.get("mode") == "think", stop=stop):
-                    yield chunk
+                    live.add(chunk)
+            except Exception as e:  # noqa: BLE001 - the page must hear that it ended
+                log.exception("answer failed: %s", e)
+                live.add(answer.sse("error", {"error": "Something went wrong.", "status": 500}))
             finally:
+                live.finish()
                 if app.state.running.get(chat_id) is stop:
                     del app.state.running[chat_id]
-        return StreamingResponse(events(), media_type="text/event-stream")
+                await asyncio.sleep(LIVE_KEEP)       # a page that reconnects right after still sees the end
+                if app.state.live.get(chat_id) is live:
+                    del app.state.live[chat_id]
+
+        live.task = asyncio.create_task(pump())
+        return StreamingResponse(live.follow(), media_type="text/event-stream")
+
+    @app.get("/api/chats/{chat_id}/live")
+    async def api_live(chat_id: int, request: Request) -> Response:
+        """Follow the answer that is being written in this chat, from its first event (SPEC §5.1); 204 when none."""
+        r = _require_session(request, app.state.db)
+        if isinstance(r, Response):
+            return r
+        username, _ = r
+        live = app.state.live.get(chat_id)
+        if live is None or live.username != username:
+            return Response(status_code=204)
+        return StreamingResponse(live.follow(), media_type="text/event-stream")
 
     # ── POST /api/chats/{chat_id}/compress ─────────────────────────────────
 

@@ -53,7 +53,7 @@ Everything is per user: every query that reads a chat, message, file or source c
 | Pages | `GET /`, `/login`, `/invite`, `/account`, `/profiles`, `/admin`, `/manifest.json`, `/apple-touch-icon.png`, `/healthz` |
 | Sign in | `POST /api/login`, `/api/logout`; passkeys: `POST /api/passkeys/register/options`, `…/register/verify`, `…/login/options`, `…/login/verify`; `GET /api/passkeys`, `DELETE /api/passkeys/<id>` |
 | You | `GET /api/me`, `PATCH /api/me` (theme, icon) |
-| Chats | `GET/POST /api/chats`, `GET/PATCH/DELETE /api/chats/<id>`, `POST /api/chats/<id>/messages` (**streams**, `text/event-stream`), `POST /api/chats/<id>/stop`, `POST /api/chats/<id>/compress` |
+| Chats | `GET/POST /api/chats`, `GET/PATCH/DELETE /api/chats/<id>`, `POST /api/chats/<id>/messages` (**streams**, `text/event-stream`), `GET /api/chats/<id>/live`, `POST /api/chats/<id>/stop`, `POST /api/chats/<id>/compress` |
 | Folders | `GET/POST /api/folders`, `PATCH/DELETE /api/folders/<id>` |
 | Files | `POST /api/files`, `GET /api/files/<id>`; loop D adds `GET /api/messages/<id>/export?format=` |
 | Profiles | `GET/PATCH /api/profiles/<p>`, `POST /api/profiles/<p>/sources`, `PATCH/DELETE …/sources/<id>`, `POST …/documents`, `POST …/defaults` |
@@ -74,8 +74,9 @@ Everything is per user: every query that reads a chat, message, file or source c
 | `done` | message id, tokens, speed, context use, title, sources, trail, verify, files |
 | `error` `{error, status}` | the model could not answer; nothing is stored |
 
-Stop (`POST …/stop`) sets an event the stream checks; what was written so far is stored as "Stopped". If the browser
-disconnects, the server stops reading from the model and stores what arrived.
+Stop (`POST …/stop`) sets an event the stream checks; what was written so far is stored as "Stopped". The answer
+runs as a server task (`app.Live`): if the browser disconnects (a phone locks or switches apps) it keeps going and
+is stored; `GET /api/chats/<id>/live` replays and follows a running answer, and the page uses it when you come back.
 
 ### Tests
 

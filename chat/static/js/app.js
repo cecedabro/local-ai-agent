@@ -124,6 +124,8 @@ async function openChat(id) {
   drawContext(chat.context);
   state.follow?.bottom();
   await loadChats();
+  const last = chat.messages[chat.messages.length - 1];
+  if (last && last.role === "user") followLive(chat.id);
 }
 
 let welcomeOrb = null;
@@ -368,139 +370,205 @@ async function send() {
     $("#messages").insertAdjacentHTML("beforeend", `<div class="u">${userChips}<div class="msg user">${userText}</div></div>`);
     flyFrom($("#messages").lastElementChild, $("#send"));
 
-    // Draw assistant message placeholder
-    const aiDiv = document.createElement("div");
-    aiDiv.className = "ai";
-    aiDiv.innerHTML = orbHtml() + `<div class="content"><div class="pre"></div><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
-    $("#messages").appendChild(aiDiv);
-
-    const bub = aiDiv.querySelector(".bub");
-    const meta = aiDiv.querySelector(".meta2");
-    const orb = aiDiv.querySelector(".orb");
-    const liveOrb = startOrb(orb);
-    const tiny = document.createElement("span");
-    tiny.innerHTML = orbHtml("tiny");
-    const tinyEl = tiny.firstElementChild;
-
-    // E16: thinking, trail, and verify tracking
-    const pre = aiDiv.querySelector(".pre");
-    let thinking = "", th0 = null, thoughtSecs = null, report = null, steps = [];
-    let trailAnim = { stop() {} };
-    const drawPre = (live) => {                     // §15.6: the current stage's drop moves while it researches
-      trailAnim.stop();
-      pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live);
-      trailAnim = live ? animateTrail(pre) : { stop() {} };
-    };
-
-    // Clear #input, #file-chips and state.files
+    // Clear #input, #file-chips and state.files (the ids go with the message)
+    const fileIds = state.files.map((f) => f.id);
     $("#input").value = "";
     $("#file-chips").innerHTML = "";
     state.files = [];
 
-    state.follow.bottom();
-
-    // 4. full = ""; writeStart = performance.now(); Typewriter
-    let full = "";
-    let writeStart = performance.now();
-    const typewriter = new Typewriter((shown, pieces) => {
-      renderFade(bub, md.render(shown), pieces);
-      placeTail(bub, tinyEl);
-      const fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
-      orb.style.setProperty("--fill", fill);
-      tinyEl.dataset.phase = "writing";
-      tinyEl.style.setProperty("--fill", fill);
-      meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
-      state.follow.stick();
-    });
-
     // 5. res = POST /api/chats/ID/messages {content: text, mode, files: ids}
-    const res = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages`, {
-      method: "POST",
-      json: { content: text, mode, files: state.files.map((f) => f.id) },
-    });
-    if (!res.ok) {
-      orb.dataset.phase = "idle";
-      liveOrb.stop();
-      meta.innerHTML = "";
-      const errObj = await res.json().catch(() => null);
-      const errMsg = errObj?.error || "Something went wrong.";
-      bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(errMsg)}</div>`);
-      return;
-    }
-
-    // 6. await readEvents(res, (event, data) => ...)
-    let finished = null;
-    await readEvents(res, (event, data) => {
-      if (event === "phase") {
-        orb.dataset.phase = data.phase;
-        meta.innerHTML = `<span class="phase-label">${data.label || data.phase}</span>`;
-        if (data.phase === "writing") {
-          writeStart = performance.now();
-        }
-      } else if (event === "thinking") {
-        th0 = th0 ?? performance.now();
-        thinking += data.text;
-        drawPre(true);
-      } else if (event === "trail") {
-        steps.push(data.step);
-        drawPre(true);
-      } else if (event === "verify") {
-        report = data.report;
-      } else if (event === "file") {
-        addFileCard(bub, data);
-      } else if (event === "delta") {
-        full += data.text;
-        typewriter.push(data.text);
-        if (th0 != null && thoughtSecs == null) {
-          thoughtSecs = (performance.now() - th0) / 1000;
-          drawPre(true);
-        }
-      } else if (event === "done" || event === "error") {
-        finished = { event, data };
-      }
-    });
-
-    // 7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
-    await typewriter.finish();
-    tinyEl.remove();
-    orb.dataset.phase = "idle";
-    liveOrb.stop();
-
-    if (finished && finished.event === "done") {
-      const data = finished.data;
-      if (!full && data.stopped) {
-        meta.innerHTML = "";
-      } else {
-        if (data.sources && data.sources.length) {
-          bub.innerHTML = md.render(full);
-          citeLinks(bub, data.sources);
-          bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
-        }
-        doneMeta(meta, full, data.tokens, data.tps, false, () => text, data.message_id);
-      }
-      drawPre(false);
-      if (report || data.verify) {
-        markVerify(bub, report || data.verify);
-      }
-      if (data.stopped) {
-        meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
-      }
-      if (data.title) {
-        $("#chat-title").textContent = data.title;
-        drawContext(data.context);
-        await loadChats();
-      }
-    } else {
-      meta.innerHTML = "";
-      const errMsg = finished?.data?.error || "The connection was lost.";
-      bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(errMsg)}</div>`);
-    }
-
-    state.follow.stick();
+    const chatId = state.chatId;
+    await streamAnswer(chatId, (signal) => api(`/api/chats/${encodeURIComponent(chatId)}/messages`, {
+      method: "POST", signal,
+      json: { content: text, mode, files: fileIds },
+    }), () => text);
   } finally {
     setBusy(false);
   }
 }
+
+/**
+ * Draw an answer block and fill it from an answer's event stream: `open(signal)` returns the Response (the POST
+ * that sends a message, or GET …/live to follow an answer that is still being written, SPEC §5.1). A phone that
+ * locks or switches apps drops the connection while the server keeps writing; then the chat is opened again as
+ * soon as the page is visible, which shows the stored answer or follows the running one.
+ */
+let current = null;   // the stream being read: {chatId, ctrl}
+
+async function streamAnswer(chatId, open, retryText) {
+  // Draw assistant message placeholder
+  const aiDiv = document.createElement("div");
+  aiDiv.className = "ai";
+  aiDiv.innerHTML = orbHtml() + `<div class="content"><div class="pre"></div><div class="bub"></div><div class="meta2"><span class="phase-label"></span></div></div>`;
+  $("#messages").appendChild(aiDiv);
+
+  const bub = aiDiv.querySelector(".bub");
+  const meta = aiDiv.querySelector(".meta2");
+  const orb = aiDiv.querySelector(".orb");
+  const liveOrb = startOrb(orb);
+  const tiny = document.createElement("span");
+  tiny.innerHTML = orbHtml("tiny");
+  const tinyEl = tiny.firstElementChild;
+
+  // E16: thinking, trail, and verify tracking
+  const pre = aiDiv.querySelector(".pre");
+  let thinking = "", th0 = null, thoughtSecs = null, report = null, steps = [];
+  let trailAnim = { stop() {} };
+  const drawPre = (live) => {                     // §15.6: the current stage's drop moves while it researches
+    trailAnim.stop();
+    pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live);
+    trailAnim = live ? animateTrail(pre) : { stop() {} };
+  };
+
+  state.follow.bottom();
+
+  // 4. full = ""; writeStart = performance.now(); Typewriter
+  let full = "";
+  let writeStart = performance.now();
+  const typewriter = new Typewriter((shown, pieces) => {
+    renderFade(bub, md.render(shown), pieces);
+    placeTail(bub, tinyEl);
+    const fill = (0.82 * (1 - Math.exp(-((performance.now() - writeStart) / 1000) / 2.6))).toFixed(3);
+    orb.style.setProperty("--fill", fill);
+    tinyEl.dataset.phase = "writing";
+    tinyEl.style.setProperty("--fill", fill);
+    meta.innerHTML = `<span class="live">${Math.round(shown.length / 4)} tokens</span>`;
+    state.follow.stick();
+  });
+
+  const ctrl = new AbortController();
+  current = { chatId, ctrl };
+  let res;
+  try {
+    res = await open(ctrl.signal);
+  } catch {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    orb.dataset.phase = "idle";
+    liveOrb.stop();
+    meta.innerHTML = "";
+    const errObj = res ? await res.json().catch(() => null) : null;
+    const errMsg = errObj?.error || "Something went wrong.";
+    bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(errMsg)}</div>`);
+    if (!res) reopenWhenVisible(chatId, aiDiv);
+    return;
+  }
+
+  // 6. await readEvents(res, (event, data) => ...)
+  let finished = null;
+  try {
+  await readEvents(res, (event, data) => {
+    if (event === "phase") {
+      orb.dataset.phase = data.phase;
+      meta.innerHTML = `<span class="phase-label">${data.label || data.phase}</span>`;
+      if (data.phase === "writing") {
+        writeStart = performance.now();
+      }
+    } else if (event === "thinking") {
+      th0 = th0 ?? performance.now();
+      thinking += data.text;
+      drawPre(true);
+    } else if (event === "trail") {
+      steps.push(data.step);
+      drawPre(true);
+    } else if (event === "verify") {
+      report = data.report;
+    } else if (event === "file") {
+      addFileCard(bub, data);
+    } else if (event === "delta") {
+      full += data.text;
+      typewriter.push(data.text);
+      if (th0 != null && thoughtSecs == null) {
+        thoughtSecs = (performance.now() - th0) / 1000;
+        drawPre(true);
+      }
+    } else if (event === "done" || event === "error") {
+      finished = { event, data };
+    }
+  });
+  } catch {
+    // the connection broke (phone locked, app switched, network changed); the server keeps writing
+  }
+  if (current?.ctrl === ctrl) current = null;
+
+  // 7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
+  await typewriter.finish();
+  tinyEl.remove();
+  orb.dataset.phase = "idle";
+  liveOrb.stop();
+
+  if (finished && finished.event === "done") {
+    const data = finished.data;
+    if (!full && data.stopped) {
+      meta.innerHTML = "";
+    } else {
+      if (data.sources && data.sources.length) {
+        bub.innerHTML = md.render(full);
+        citeLinks(bub, data.sources);
+        bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
+      }
+      doneMeta(meta, full, data.tokens, data.tps, false, retryText, data.message_id);
+    }
+    drawPre(false);
+    if (report || data.verify) {
+      markVerify(bub, report || data.verify);
+    }
+    if (data.stopped) {
+      meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
+    }
+    if (data.title) {
+      $("#chat-title").textContent = data.title;
+      drawContext(data.context);
+      await loadChats();
+    }
+  } else if (finished) {
+    meta.innerHTML = "";
+    bub.insertAdjacentHTML("beforeend", `<div class="note error">${esc(finished.data?.error || "Something went wrong.")}</div>`);
+  } else {
+    // no end event: the answer goes on without us; show it again as soon as we can
+    meta.innerHTML = `<span class="phase-label">Still working… the answer keeps going while you're away</span>`;
+    drawPre(false);
+    reopenWhenVisible(chatId, aiDiv);
+  }
+
+  state.follow.stick();
+}
+
+/** Open the chat again (stored answer, or follow the running one) once the page is visible. */
+function reopenWhenVisible(chatId, aiDiv) {
+  const go = () => {
+    if (document.visibilityState !== "visible") return;
+    document.removeEventListener("visibilitychange", go);
+    if (state.chatId === chatId && !state.busy && aiDiv.isConnected) openChat(chatId);
+  };
+  document.addEventListener("visibilitychange", go);
+  setTimeout(go, 1500);
+}
+
+/** Follow the answer this chat is still writing, if any (after a reload, reopening the app, or another device). */
+async function followLive(chatId) {
+  if (state.busy) return;
+  const res = await api(`/api/chats/${encodeURIComponent(chatId)}/live`).catch(() => null);
+  if (!res || res.status !== 200 || state.chatId !== chatId) { res?.body?.cancel?.(); return; }
+  const last = [...$("#messages").querySelectorAll(".msg.user")].pop()?.textContent || "";
+  setBusy(true);
+  try {
+    await streamAnswer(chatId, async () => res, () => last);
+  } finally {
+    setBusy(false);
+  }
+}
+
+// Back from the lock screen or another app: drop a stream iOS may have frozen; the chat then opens again.
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+  if (Date.now() - hiddenAt < 5000 || !current || current.chatId !== state.chatId) return;
+  const c = current;
+  current = null;
+  c.ctrl.abort();
+});
 
 function fmt(n) {
   if (n < 1000) return String(n);
