@@ -59,7 +59,7 @@ class TestRound2Answer:
         login(client)
         cid = new_chat(client)
         evs = send(client, cid, "Plan my week please")
-        assert evs[0][1]["phase"] == "reading"
+        assert evs[0][1]["phase"] == "thinking"
         done = evs[-1][1]
         assert done["title"] == "Plan my week please" and done["stopped"] is False
         msgs = client.get(f"/api/chats/{cid}").json()["messages"]

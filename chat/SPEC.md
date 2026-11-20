@@ -62,9 +62,11 @@ Settings values in tests are strings or numbers; treat `"0"`/`0` as false.
   `X-Coder: 1`, else **403** `{"error": "missing X-Coder header"}` (checked before anything
   else, also for login). Browsers can't send custom headers cross-site without CORS, and this
   app sends no CORS headers.
-- **Rate limit**: 5 failed logins for the same username or from the same client address within
+- **Rate limit**: 5 failed logins for the same username, or 20 from the same client address, within
   15 minutes → further login attempts for it get **429** until the window passes (even with the
-  right password). A success does not reset other addresses' counters.
+  right password). A success does not reset other addresses' counters. The client address is
+  Cloudflare's `Cf-Connecting-IP` when present, else the connection's address (`X-Forwarded-For` is
+  never trusted: a visitor can write it).
 
 Endpoints (JSON in and out; errors are `{"error": "<human sentence>"}`):
 
@@ -149,7 +151,9 @@ disconnects (a phone locks or switches apps, the network changes) the answer goe
 `GET /api/chats/<id>/live` (session; someone else's chat or nothing running → **204**) replays the running answer's
 events from the first one and follows it to the end; a finished answer stays followable for 60 s. The page follows a
 chat's live answer when it opens a chat whose last message is yours, and opens the chat again when it becomes
-visible after a dropped stream (hidden > 5 s). Stop (§11.2) still ends a running answer. Judge:
+visible after a dropped stream (hidden > 5 s). After 15 s without an event the stream sends a comment line
+(`: ping`), so a proxy doesn't hang up on a quiet research step (Cloudflare does after ~100 s). Stop (§11.2) still
+ends a running answer. Judge:
 `tests/test_accept_live.py`.
 
 ## 6. Context and compression
@@ -252,7 +256,7 @@ Endpoints (JSON; the CSRF header rule of §2 applies to every POST/DELETE):
 - `POST /api/passkeys/login/verify` (no session) `{"credential": ...}` → **200** `{"username",
   "rights"}` and the session cookie of §2; the signature counter is stored and `last_used` set.
   Unknown credential, bad signature, missing or used challenge → **401** (same message for all).
-  Rate limit: the address key of §2 (`ip:<client host>`); 5 failures in 15 minutes → **429**.
+  Rate limit: the address key of §2 (`ip:<client address>`); 5 failures in 15 minutes → **429**.
 
 Pages: the sign-in page has "Sign in with a passkey"; the invite page offers "Use Face ID / Touch
 ID next time" right after the account is made; `GET /account` (session) lists your passkeys with
@@ -261,10 +265,13 @@ ID next time" right after the account is made; `GET /account` (session) lists yo
 ## 11. Round 2: phases, stop, folders, code blocks
 
 ### 11.1 Phases and events (changes §5)
-- Order: `compressing` (if auto-compress runs) → `reading` → `waiting` (if busy) → `thinking`
-  (first reasoning chunk) → `writing` (first content chunk). Each at most once per answer.
-  `reading` = `{"phase": "reading", "label": "Reading your message…"}`, sent right before the
-  first gateway call, so the orb clouds over and the label shimmers at once.
+- Order: `compressing` (if auto-compress runs) → `thinking` → `waiting` (if busy) → `thinking`
+  again (first reasoning chunk, only after `waiting`) → `writing` (first content chunk). The first
+  `thinking` = `{"phase": "thinking", "label": "Thinking…"}`, sent right before the first gateway
+  call, so the orb clouds over and the label shimmers at once. A phase is never sent twice in a row.
+  (Until 2026-11-20 the first phase was `reading`, "Reading your message…".)
+- While a phase lasts 5 s or more, the page adds the seconds to its label ("Thinking… · 12 s"); after
+  25 s with nothing written yet it adds "the model may still be starting up" (the PC may just have woken).
 - Every non-empty content chunk becomes a `delta`, the very first one too.
 - `done` = `{"message_id", "tokens", "tps", "context", "title", "stopped"}`: `title` is the
   chat's title after this answer (the page shows it at the top), `stopped` true when §11.2 cut
@@ -494,6 +501,11 @@ searching` (its label) and a `trail` event `{"step": {...}}` → `phase reading`
   LCI guidelines), lareb.nl, ge-bu.nl, jgzrichtlijnen.nl (youth health care, NCJ), palliaweb.nl (palliative care, PZNL),
   thuisarts.nl (NHG's patient information). NHG's own guideline site, NICE and GGZ-standaarden cannot be read by the
   app (a bot check; text loaded by JavaScript), so they are not included.
+- Clear Source sends `sources` = `{"sources": [...]}` (as in `done`) right after its `writing` phase, so the page makes
+  every `[n]` a clickable pill while the answer is still being written. A pill opens the source's card under the
+  answer, or the source itself in a new tab while there is no card yet.
+- A new Clear Source profile starts with general web search **off** (`profiles.WEB_OFF`): open web results let
+  advocacy sites in. The add-defaults button below turns it off again too.
 - `POST /api/profiles/<profile>/defaults` (X-Coder header) adds the default cards the user does not have yet
   (PubMed by kind, websites by domain) and returns `{"added": n, "sources": [...]}`. The profiles page has a
   button `#add-defaults` for it.

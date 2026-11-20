@@ -43,7 +43,9 @@ question ──► 1 Understand ──► 2 Search ──► 3 Read one by one �
 5. **Write** (writing): the useful sources (max 10, guidelines first, then meta-analyses / reviews, trials, the
    rest) and their passages go to the answer call (`RULES`): a long answer in the question's language under fixed
    headings (Kort antwoord, Nederlandse richtlijnen, Onderzoek, Dosering en bijzondere groepen, Sterkte van het
-   bewijs), built from quotes as `> "exact words" [n]` with an explanation under each.
+   bewijs), built from quotes as `> "exact words" [n]` with an explanation under each. The app decides the answer's
+   language from the question (`answer_language`: Dutch or English) and says so in the prompt, because Dutch sources
+   otherwise pull an English question into a Dutch answer. Each quote is used once (no repeating the short answer).
 6. **Check**: `verify.check` marks each quote ✓ or ⚠ and lists uncited claims. The short answer at the top, lead-ins
    ending in ":" and sentences about what the sources don't cover are not counted as claims.
 
@@ -54,13 +56,15 @@ Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb
 JGZ-richtlijnen (youth health care), Palliaweb (palliative care) and Thuisarts. This follows what EvidenceHunt
 searches (FMS guidelines, NHG, the Kompas, NICE, PubMed) as far as the sites can be read: NHG's standards sit behind
 a bot check (we don't get around that) and NICE and GGZ-standaarden load their text with JavaScript, so those three
-are not included. Thuisarts is the readable route to NHG advice.
+are not included. Thuisarts is the readable route to NHG advice. General web search starts **off** for Clear Source (the restore button
+turns it off too): open web results let advocacy sites in.
 Users can add their own websites and documents; files attached to a message are read first, as sources (§16.2).
 
 ## Limits worth knowing
 
 - **Time**: an answer is ~10 model calls and takes 1–3 minutes with an idle GPU; much longer while an agent loop runs
-  (every call queues behind the agent). It isn't stuck.
+  (every call queues behind the agent). It isn't stuck: the label counts the seconds, and the page follows the trail
+  down as it grows.
 - **Search quality decides the answer**: on topics where PubMed's best matches are off-topic (for example "seed oils"
   returns dry-eye and skin-cream studies) most sources are correctly rejected and the answer is short or "no evidence".
 - **Abstracts, not full papers**: PubMed gives abstracts; only PubMed Central articles are read in full, and

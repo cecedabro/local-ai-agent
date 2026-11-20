@@ -266,9 +266,10 @@ class DB:
     def has_recent_failures(self, key: str, minutes: int = 15, limit: int = 5) -> bool:
         with self._lock:
             conn = self._connect()
+            since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()   # same format as _now_iso
             row = conn.execute(
-                "SELECT COUNT(*) AS c FROM login_failures WHERE key = ? AND at >= datetime('now', ?)",
-                (key, f"-{minutes} minutes"),
+                "SELECT COUNT(*) AS c FROM login_failures WHERE key = ? AND at >= ?",
+                (key, since),
             ).fetchone()
             return (row["c"] or 0) >= limit  # type: ignore[no-any-return]
 

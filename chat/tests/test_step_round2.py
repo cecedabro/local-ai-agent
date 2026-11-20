@@ -114,9 +114,9 @@ def test_reading_phase_and_first_delta(db):
     chat = new_chat(db)
     evs = parse(asyncio.run(_collect(answer.run_answer(db, S(), chat, False, sleep=no_sleep,
                                                       stream=stream_of([("content", "Hi"), ("content", " you")])))))
-    assert evs[0] == ("phase", {"phase": "reading", "label": "Reading your message…"})
+    assert evs[0] == ("phase", {"phase": "thinking", "label": "Thinking…"})
     assert [d["text"] for e, d in evs if e == "delta"] == ["Hi", " you"], "the first chunk is sent too"
-    assert [d["phase"] for e, d in evs if e == "phase"] == ["reading", "writing"]
+    assert [d["phase"] for e, d in evs if e == "phase"] == ["thinking", "writing"]
     done = evs[-1][1]
     assert done["title"] == "hello there" and done["stopped"] is False
     assert db.get_messages(chat["id"], "u1")[-1]["content"] == "Hi you"
@@ -124,7 +124,7 @@ def test_reading_phase_and_first_delta(db):
     chat = new_chat(db)
     evs = parse(asyncio.run(_collect(answer.run_answer(db, S(), chat, True, sleep=no_sleep,
                                                       stream=stream_of([("reasoning", "a"), ("reasoning", "b"), ("content", "x")])))))
-    assert [d["phase"] for e, d in evs if e == "phase"] == ["reading", "thinking", "writing"]
+    assert [d["phase"] for e, d in evs if e == "phase"] == ["thinking", "writing"]
 
 
 async def _collect(agen):
