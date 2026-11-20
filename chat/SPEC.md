@@ -482,8 +482,9 @@ searching` (its label) and a `trail` event `{"step": {...}}` → `phase reading`
 ### 14.3 Default sources: Dutch guidelines
 - A new Clear Source profile starts with PubMed and these website cards (`profiles.SEED`): richtlijnendatabase.nl
   (medical specialists' guidelines), farmacotherapeutischkompas.nl, kinderformularium.nl, rivm.nl (incl. the
-  LCI guidelines), lareb.nl, ge-bu.nl, thuisarts.nl (NHG's patient information). NHG's own guideline site and
-  GGZ-standaarden cannot be read by the app (a bot check and a JavaScript-only site), so they are not included.
+  LCI guidelines), lareb.nl, ge-bu.nl, jgzrichtlijnen.nl (youth health care, NCJ), palliaweb.nl (palliative care, PZNL),
+  thuisarts.nl (NHG's patient information). NHG's own guideline site, NICE and GGZ-standaarden cannot be read by the
+  app (a bot check; text loaded by JavaScript), so they are not included.
 - `POST /api/profiles/<profile>/defaults` (X-Coder header) adds the default cards the user does not have yet
   (PubMed by kind, websites by domain) and returns `{"added": n, "sources": [...]}`. The profiles page has a
   button `#add-defaults` for it.

@@ -37,7 +37,7 @@ PLAN_PROMPT = (
     "medicine, its dose, combining it or using it while pregnant: always farmacotherapeutischkompas.nl; "
     "drugs: "
     "farmacotherapeutischkompas.nl; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
-    "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; patient advice: thuisarts.nl) and search them in "
+    "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; children's growth, feeding and development (youth health care): jgzrichtlijnen.nl; palliative and end-of-life care: palliaweb.nl; patient advice: thuisarts.nl) and search them in "
     "Dutch with 2 to 4 key words, no mesh. Use only these sources: {sources}.")
 FOLLOWUP_PROMPT = (
     "The searches below found too little for this medical question. Plan new searches with other words: synonyms, "

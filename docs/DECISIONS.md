@@ -56,7 +56,7 @@ first within each group. Settled decisions are also summarised for coding agents
 | **The app runs the research, the model only plans, reads and writes** | A model alone mixes sources with memory; making the app do the searching and checking makes strictness structural. | — |
 | **Passages must be verbatim** (`verify.find_quote`), and the answer is written only from them; a checker marks every quote ✓ / ⚠ and flags uncited claims | Trust: every claim traceable to an exact sentence in a source. | — |
 | **Read one source at a time** | Small, focused calls work best with a 48k model and keep passages exact. Cost: ~10 calls per answer (slow when the GPU is busy). | Batched reading if speed matters more |
-| **Dutch guideline sites are the default sources** (Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb, Geneesmiddelenbulletin, Thuisarts) plus PubMed | The main user works in Dutch healthcare. | — |
+| **Dutch guideline sites are the default sources** (Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb, Geneesmiddelenbulletin, JGZ-richtlijnen, Palliaweb, Thuisarts) plus PubMed | The main user works in Dutch healthcare. | — |
 | **MeSH headings, checked against PubMed's MeSH database** before use | Better PubMed recall; made-up headings are dropped. | — |
 | **Always detailed answers** under fixed headings | Requested by the main user. | — |
 | NCBI calls spaced out (~3/s) and retried on 429; optional API key | PubMed's rate limit otherwise blocks most searches. | — |

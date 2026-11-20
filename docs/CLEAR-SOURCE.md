@@ -50,8 +50,11 @@ question ──► 1 Understand ──► 2 Search ──► 3 Read one by one �
 ## Sources
 
 Default sources (`profiles.SEED`, restorable with "↺ Restore Dutch defaults" on the sources page): PubMed,
-Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb, Geneesmiddelenbulletin and
-Thuisarts. NHG and GGZ guidelines can't be used: their sites block automated readers, and we don't get around that.
+Richtlijnendatabase, Farmacotherapeutisch Kompas, Kinderformularium, RIVM, Lareb, Geneesmiddelenbulletin,
+JGZ-richtlijnen (youth health care), Palliaweb (palliative care) and Thuisarts. This follows what EvidenceHunt
+searches (FMS guidelines, NHG, the Kompas, NICE, PubMed) as far as the sites can be read: NHG's standards sit behind
+a bot check (we don't get around that) and NICE and GGZ-standaarden load their text with JavaScript, so those three
+are not included. Thuisarts is the readable route to NHG advice.
 Users can add their own websites and documents; files attached to a message are read first, as sources (§16.2).
 
 ## Limits worth knowing
