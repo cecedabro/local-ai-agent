@@ -183,7 +183,11 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText, msgId) {
  * TODO (task D11). A file size for people (SPEC §16.6): n < 1024 -> `${n} B`; n < 1024*1024 -> `${Math.round(n / 1024)} KB`;
  * else `${(n / 1024 / 1024).toFixed(1)} MB`.
  */
-function fmtSize(n) { return ""; }
+function fmtSize(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /**
  * TODO (task D11). The download cards of files the model made (SPEC §16.6). Empty or no list -> "". Else
@@ -191,14 +195,37 @@ function fmtSize(n) { return ""; }
  *   `<a class="file-card" data-kind="KIND" href="/api/files/ID" download><span class="fi">EXT</span><span><b>NAME</b>` +
  *   `<small>SIZE</small></span></a>` (KIND, EXT, NAME escaped with esc(); ID = Number(f.id); SIZE = fmtSize(f.size)) + "</div>"
  */
-function filesOutHtml(list) { return ""; }
+function filesOutHtml(list) {
+  if (!list || !list.length) return "";
+  let html = '<div class="files-out">';
+  for (const f of list) {
+    const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1) : f.kind;
+    const shortExt = ext.slice(0, 4);
+    const id = Number(f.id);
+    html += `<a class="file-card" data-kind="${esc(f.kind)}" href="/api/files/${id}" download><span class="fi">${esc(shortExt)}</span><span><b>${esc(f.name)}</b><small>${fmtSize(f.size)}</small></span></a>`;
+  }
+  return html + "</div>";
+}
 
 /**
  * TODO (task D11). Add one made file's card to an answer while it streams (SPEC §16.6): box = the .files-out inside
  *   bub.parentElement; when there is none, insert '<div class="files-out"></div>' right after bub (afterend) and use it;
  *   then add the card (the <a class="file-card"> of filesOutHtml([f]), without the wrapping div) at its end.
  */
-function addFileCard(bub, f) {}
+function addFileCard(bub, f) {
+  let box = bub.parentElement.querySelector(".files-out");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "files-out";
+    bub.insertAdjacentHTML("afterend", '<div class="files-out"></div>');
+    box = bub.parentElement.querySelector(".files-out");
+  }
+  const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1) : f.kind;
+  const shortExt = ext.slice(0, 4);
+  const id = Number(f.id);
+  const card = `<a class="file-card" data-kind="${esc(f.kind)}" href="/api/files/${id}" download><span class="fi">${esc(shortExt)}</span><span><b>${esc(f.name)}</b><small>${fmtSize(f.size)}</small></span></a>`;
+  box.insertAdjacentHTML("beforeend", card);
+}
 
 /**
  * TODO (task D11). The "Download" button and its menu in a finished answer's stats line `meta` (SPEC §16.5, §16.6).
@@ -207,7 +234,18 @@ function addFileCard(bub, f) {}
  *   md Markdown, docx Word, pdf PDF, html HTML + </span></span>.
  *   Clicking .dl toggles the menu's hidden (stopPropagation); any other click on the document hides it.
  */
-function dlMenu(meta, msgId) {}
+function dlMenu(meta, msgId) {
+  if (!msgId) return;
+  const html = `<span class="dl-wrap"><button class="dl" type="button">Download</button><span class="dl-menu" hidden><a href="/api/messages/${msgId}/export?format=md" download>Markdown</a><a href="/api/messages/${msgId}/export?format=docx" download>Word</a><a href="/api/messages/${msgId}/export?format=pdf" download>PDF</a><a href="/api/messages/${msgId}/export?format=html" download>HTML</a></span></span>`;
+  meta.insertAdjacentHTML("beforeend", html);
+  meta.querySelector(".dl").addEventListener("click", (e) => {
+    e.stopPropagation();
+    meta.querySelector(".dl-menu").hidden = !meta.querySelector(".dl-menu").hidden;
+  });
+  document.addEventListener("click", () => {
+    meta.querySelector(".dl-menu").hidden = true;
+  });
+}
 
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
 function typedText(content) { return content.split("\n\nFile ")[0]; }

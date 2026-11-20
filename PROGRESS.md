@@ -134,3 +134,11 @@
 - **File**: `chat/static/js/app.js:501` — filled in the `uploadFile` function body.
 - **Change**: Creates FormData with "file" key, POSTs to `/api/files`, parses JSON response; on failure creates `<span class="file err">` chip with escaped name and error message, removes after 6s; on success pushes file to `state.files`, creates `<span class="file" data-kind="KIND">` chip with escaped name, tokens (k suffix for ≥1000), and remove button with file id.
 - `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).
+
+## Task D11 - `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` implementation
+- **File**: `chat/static/js/app.js` — filled in four functions (lines ~186-220).
+- **Change** (`fmtSize`): Formats bytes as human-readable — `<1024` → `N B`, `<1024²` → `Math.round(N/1024) KB`, else `(N/1024/1024).toFixed(1) MB`.
+- **Change** (`filesOutHtml`): Generates `<div class="files-out">` with `<a class="file-card">` per file, each having escaped kind/ext/name, size via `fmtSize`, and download href to `/api/files/ID`.
+- **Change** (`addFileCard`): Finds or creates `.files-out` inside bub's parent, appends a file-card `<a>` via `insertAdjacentHTML`.
+- **Change** (`dlMenu`): If msgId provided, appends `<span class="dl-wrap"><button class="dl">Download</button><span class="dl-menu" hidden>` with links for md/docx/pdf/html export formats; click handler toggles menu with stopPropagation, document click closes.
+- `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).

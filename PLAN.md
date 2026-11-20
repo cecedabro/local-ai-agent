@@ -38,7 +38,7 @@ Rules for every task:
   accept: make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"
 - [x] D10: In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`)
   accept: node --check chat/static/js/app.js && make chat-test
-- [ ] D11: In chat/static/js/app.js fill in `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` (`TODO (task D11)`)
+- [x] D11: In chat/static/js/app.js fill in `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` (`TODO (task D11)`)
   accept: node --check chat/static/js/app.js && make chat-test
 - [ ] D12: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js (see "D12 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
