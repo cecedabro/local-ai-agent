@@ -108,7 +108,7 @@ def docx_text(data: bytes) -> str:
     except KeyError:
         z.close()
         raise FileError(415, "That Word file could not be read.")
-    except ET.ParseError:
+    except Exception:  # bad XML, odd entries, damaged deflate data
         z.close()
         raise FileError(415, "That Word file could not be read.")
 
@@ -226,25 +226,17 @@ def read_upload(name: str, data: bytes) -> dict:
         import pypdf
         try:
             reader = pypdf.PdfReader(io.BytesIO(data))
+            pages = [(reader.pages[i].extract_text() or "").strip()
+                     for i in range(min(len(reader.pages), MAX_PAGES))]
         except Exception:
             raise FileError(415, "That PDF could not be read.")
-        pages = []
-        for i in range(min(len(reader.pages), MAX_PAGES)):
-            pages.append(reader.pages[i].extract_text() or "")
         text = "\n\n".join(pages).strip()
         if not text:
             raise FileError(415, "That PDF has no text (is it a scan?).")
-        return {"kind": "pdf", "text": text}
     elif kind == "docx":
         text = docx_text(data)
-        if not text.strip():
-            raise FileError(415, "That file has no text.")
-        return {"kind": "docx", "text": text}
     elif kind == "xlsx":
         text = xlsx_text(data)
-        if not text.strip():
-            raise FileError(415, "That file has no text.")
-        return {"kind": "xlsx", "text": text}
     else:
         try:
             text = data.decode("utf-8")
@@ -257,11 +249,11 @@ def read_upload(name: str, data: bytes) -> dict:
         if kind == "html":
             from coder import tools
             text = tools.html_text(text)[1]
-        if not text.strip():
-            raise FileError(415, "That file has no text.")
-        if len(text) > MAX_TEXT:
-            raise FileError(413, "That file is too long (max 200 000 characters).")
-        return {"kind": kind, "text": text}
+    if not text.strip():
+        raise FileError(415, "That file has no text.")
+    if len(text) > MAX_TEXT:
+        raise FileError(413, "That file is too long (max 200 000 characters).")
+    return {"kind": kind, "text": text}
 
 
 def fence(text: str) -> str:
