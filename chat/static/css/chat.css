@@ -570,7 +570,8 @@ a.cite{cursor:pointer;margin:0 1px}
 .trail .rows .mesh i{font-style:normal;font-size:11px;color:var(--muted);background:none;border:0;padding:0}
 .trail .rows .mesh i+i::before{content:", "}
 .trail .rows .mesh::before{content:"MeSH ";font-size:10px;font-weight:700;color:var(--muted)}
-@media (max-width:560px){.trail .rows .step{grid-template-columns:minmax(0,1fr) auto}.trail .rows .where{display:none}}
+@media (max-width:560px){.trail .rows .step{grid-template-columns:minmax(0,1fr) auto;row-gap:0}
+  .trail .rows .where{grid-column:1/-1;font-size:11px;line-height:1.3}}
 
 /* sources under an answer: grouped lists */
 .ai .sources{display:block;margin-top:16px}
