@@ -94,3 +94,8 @@
 - **File**: `chat/coder/files.py` — implemented `kind_of` (line ~45, extension→kind mapping with .doc/.xls→415), `check_zip` (line ~60, zip opening with BadZipFile→415 and entry/size limits→413), `docx_text` (line ~72, XML parsing of `word/document.xml` with heading/list/table handling, stdlib only), and `xlsx_text` (line ~124, openpyxl read-only workbook iteration with row limit). Added `import openpyxl` at top.
 - `make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"` passes (4/4). `make check` passes (36/36).
 - `read_upload` (task D02) depends on these four functions and is next.
+
+## Task D02 - `read_upload`, `fence`, `attach_block`, `disposition` verified
+- **File**: `chat/coder/files.py` — all four functions already implemented (lines 209, 261, 282, 290).
+- `make chat-test K="test_step_files and (read_upload_text or fence or disposition)"` passes (3/3).
+- `make check` passes (36/36). No code changes needed.
