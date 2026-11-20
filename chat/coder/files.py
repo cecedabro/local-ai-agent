@@ -596,7 +596,9 @@ def _html_runs(rs: list[dict]) -> str:
         if r["b"]:
             t = f"<strong>{t}</strong>"
         if r["href"]:
-            t = f'<a href="{html.escape(r["href"], quote=True)}" rel="noopener noreferrer">{t}</a>'
+            href = r["href"]
+            if href.lower().startswith("http://") or href.lower().startswith("https://"):
+                t = f'<a href="{html.escape(href, quote=True)}" rel="noopener noreferrer">{t}</a>'
         out.append(t)
     return "".join(out)
 
@@ -610,7 +612,7 @@ def render_html(title: str, md: str) -> bytes:
         rel="noopener noreferrer">.
     Tests: test_step_files.py::test_render_html_is_safe
     """
-    from coder import blocks
+    from coder.files import blocks
     style = ("body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 20px}"
              "pre{background:#f5f5f5;padding:10px;border-radius:4px}"
              "table{border-collapse:collapse;margin:10px 0}"
@@ -627,23 +629,28 @@ def render_html(title: str, md: str) -> bytes:
         t = b["t"]
         if t == "h":
             if cur_ul:
+                parts.append("".join(cur_ul))
                 parts.append("</ul>")
                 cur_ul = None
             if cur_ol:
+                parts.append("".join(cur_ol))
                 parts.append("</ol>")
                 cur_ol = None
             parts.append(f"<h{b['level']}>{_html_runs(b['runs'])}</h{b['level']}>")
         elif t == "p":
             if cur_ul:
+                parts.append("".join(cur_ul))
                 parts.append("</ul>")
                 cur_ul = None
             if cur_ol:
+                parts.append("".join(cur_ol))
                 parts.append("</ol>")
                 cur_ol = None
             parts.append(f"<p>{_html_runs(b['runs'])}</p>")
         elif t == "li":
             if b["ordered"]:
                 if cur_ul:
+                    parts.append("".join(cur_ul))
                     parts.append("</ul>")
                     cur_ul = None
                 if cur_ol is None:
@@ -652,6 +659,7 @@ def render_html(title: str, md: str) -> bytes:
                 cur_ol.append(f"<li>{_html_runs(b['runs'])}</li>")
             else:
                 if cur_ol:
+                    parts.append("".join(cur_ol))
                     parts.append("</ol>")
                     cur_ol = None
                 if cur_ul is None:
@@ -660,17 +668,21 @@ def render_html(title: str, md: str) -> bytes:
                 cur_ul.append(f"<li>{_html_runs(b['runs'])}</li>")
         elif t == "code":
             if cur_ul:
+                parts.append("".join(cur_ul))
                 parts.append("</ul>")
                 cur_ul = None
             if cur_ol:
+                parts.append("".join(cur_ol))
                 parts.append("</ol>")
                 cur_ol = None
             parts.append(f"<pre><code>{html.escape(b['text'])}</code></pre>")
         elif t == "table":
             if cur_ul:
+                parts.append("".join(cur_ul))
                 parts.append("</ul>")
                 cur_ul = None
             if cur_ol:
+                parts.append("".join(cur_ol))
                 parts.append("</ol>")
                 cur_ol = None
             rows_html = []
@@ -681,18 +693,22 @@ def render_html(title: str, md: str) -> bytes:
             parts.append(f"<table>{''.join(rows_html)}</table>")
         elif t == "hr":
             if cur_ul:
+                parts.append("".join(cur_ul))
                 parts.append("</ul>")
                 cur_ul = None
             if cur_ol:
+                parts.append("".join(cur_ol))
                 parts.append("</ol>")
                 cur_ol = None
             parts.append("<hr>")
     if cur_ul:
+        parts.append("".join(cur_ul))
         parts.append("</ul>")
     if cur_ol:
+        parts.append("".join(cur_ol))
         parts.append("</ol>")
     parts.append("</body></html>")
-    return "\n".join(parts).encode("utf-8")
+    return "".join(parts).encode("utf-8")
 
 
 def _plain(runs):
@@ -720,7 +736,7 @@ def render_docx(md: str) -> bytes:
     Tests: test_step_files.py::test_render_docx
     """
     import docx
-    from coder import blocks
+    from coder.files import blocks
 
     d = docx.Document()
     for b in blocks(md):
