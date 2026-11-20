@@ -68,3 +68,7 @@ def test_focus_finds_the_section_far_down_a_long_page():
     assert len(got) <= research.SOURCE_CHARS and got.startswith("Ibuprofen, de inleiding.")
     assert "Zwangerschap\n\nIbuprofen passeert de placenta." in got, "the rare word wins over the word on every paragraph"
     assert research.focus("kort", "x y z") == "kort"
+
+
+def test_semicolon_citations():
+    assert verify.cites_in("Zo staat het er [1; 2] en hier [3,1].") == [1, 2, 3]

@@ -319,13 +319,13 @@ export function citeLinks(el, sources) {
   const nodes = [];
   while (walker.nextNode()) {
     const n = walker.currentNode;
-    if (/\[\d+(?:\s*,\s*\d+)*\]/.test(n.data) && !n.parentElement.closest("code,pre,a")) nodes.push(n);
+    if (/\[\d+(?:\s*[,;]\s*\d+)*\]/.test(n.data) && !n.parentElement.closest("code,pre,a")) nodes.push(n);
   }
   for (const node of nodes) {
     const frag = document.createDocumentFragment();
     let last = 0;
-    node.data.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (m, list, at) => {
-      const found = list.split(",").map((x) => byN.get(x.trim())).filter(Boolean);
+    node.data.replace(/\[(\d+(?:\s*[,;]\s*\d+)*)\]/g, (m, list, at) => {
+      const found = list.split(/[,;]/).map((x) => byN.get(x.trim())).filter(Boolean);
       if (!found.length) return m;
       frag.append(node.data.slice(last, at));
       for (const s of found) {
@@ -559,7 +559,7 @@ export function markVerify(bub, report) {
   shortBox(bub);
   const qs = report.quotes || [];
   const find = (text) => qs.find((q) => {
-    const a = norm(q.text), b = norm(text).replace(/\s*\[\d+(\s*,\s*\d+)*\]\s*/g, " ").replace(/^["']|["']$/g, "").trim();
+    const a = norm(q.text), b = norm(text).replace(/\s*\[\d+(\s*[,;]\s*\d+)*\]\s*/g, " ").replace(/^["']|["']$/g, "").trim();
     return a && (b.includes(a) || a.includes(b));
   });
   const mark = (el, q) => {

@@ -8,7 +8,7 @@ import re
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "„": '"', "–": "-", "—": "-", "−": "-", "­": None})
 _ELLIPSIS = re.compile(r"\.\.\.|…|\[\s*(?:\.\.\.|…)\s*\]")
-_CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+_CITE = re.compile(r"\[(\d+(?:\s*[,;]\s*\d+)*)\]")
 _INLINE = re.compile(r'"([^"\n]+)"|“([^”\n]+)”')
 STRENGTH_WORDS = ("evidence", "bewijs", "bewijskracht", "studies", "onderzoek")
 
@@ -47,12 +47,12 @@ def find_quote(quote: str, text: str) -> bool:
 
 
 def cites_in(text: str) -> list[int]:
-    r"""Every [n] (also [1, 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
+    r"""Every [n] (also [1, 2] and [1; 2]) in the text, in order, without duplicates: for each _CITE match split group(1) on ","
     and append int(x) when it is not in the list yet.
     """
     result: list[int] = []
     for m in _CITE.finditer(text):
-        for x in m.group(1).split(","):
+        for x in re.split(r"[,;]", m.group(1)):
             n = int(x)
             if n not in result:
                 result.append(n)
@@ -72,7 +72,7 @@ def quotes(answer: str) -> list[dict]:
       - a line whose lstrip() starts with ">": collect it and the following ">" lines (the text after ">", stripped);
         raw = " ".join(group); append {"text": _strip_marks(raw), "cites": cites_in(raw)}
       - otherwise each _INLINE match (group 1 or 2 is the quote) with 4+ words: cites = cites_in of a [..] right after the
-        closing quote (re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest of the line)), else []; append {"text": q.strip(), "cites"}
+        closing quote (re.match(r"\s*(\[(\d+(?:\s*[,;]\s*\d+)*)\])", rest of the line)), else []; append {"text": q.strip(), "cites"}
     """
     result: list[dict] = []
     in_code = False
@@ -94,7 +94,7 @@ def quotes(answer: str) -> list[dict]:
             parts: list[list[str]] = [[]]
             for gl in group_lines:
                 parts[-1].append(gl)
-                if re.search(r"\[\d+(?:\s*,\s*\d+)*\]\s*\.?$", gl):
+                if re.search(r"\[\d+(?:\s*[,;]\s*\d+)*\]\s*\.?$", gl):
                     parts.append([])
             for k, part in enumerate(p for p in parts if p):
                 if k > 0 and not part[0].startswith(('"', "“", "„", "'", "‘")):
@@ -107,7 +107,7 @@ def quotes(answer: str) -> list[dict]:
                 q = m.group(1) or m.group(2)
                 if len(q.split()) >= 4:
                     rest = line[m.end():]
-                    cite_m = re.match(r"\s*(\[(\d+(?:\s*,\s*\d+)*)\])", rest)
+                    cite_m = re.match(r"\s*(\[(\d+(?:\s*[,;]\s*\d+)*)\])", rest)
                     cites = cites_in(cite_m.group(1)) if cite_m else []
                     result.append({"text": q.strip(), "cites": cites})
         i += 1
