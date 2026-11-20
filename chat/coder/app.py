@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 import hashlib
 
-from . import answer, context, gateway, passkeys, profiles
+from . import answer, context, files, gateway, passkeys, profiles
 from .config import Settings
 from .db import DB
 
@@ -59,7 +60,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
         response = await call_next(request)
-        response.headers["content-security-policy"] = CSP
+        if "content-security-policy" not in response.headers:      # downloads set a stricter one (SPEC §16.1)
+            response.headers["content-security-policy"] = CSP
         response.headers["x-content-type-options"] = "nosniff"
         response.headers["referrer-policy"] = "same-origin"
         return response
@@ -595,33 +597,46 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     @app.post("/api/files")
     async def api_upload_file(request: Request) -> Response:
+        r"""Upload a file to attach (SPEC §7, §16.1). Tests: test_accept_files.py (upload), test_accept_core.py::TestFiles
+          session = _session_from_cookie(request, app.state.db); none -> 401 {"error": "unauthorized"}; username, _ = session
+          form = await request.form(); file_obj = form.get("file"); None or a str -> 400 {"error": "no file"}
+          content = await file_obj.read(files.MAX_UPLOAD + 1)   (read at most one byte more than allowed)
+          name = re.split(r"[/\\]", file_obj.filename or "")[-1][:120] or "upload"
+          got = files.read_upload(name, content); files.FileError e -> JSONResponse({"error": str(e)}, status_code=e.status)
+          file_id = app.state.db.add_file(username, name, len(content), content, kind=got["kind"], text=got["text"])
+          201 {"id": file_id, "name", "size": len(content), "kind": got["kind"], "tokens": profiles.tokens(got["text"])}
+        """
+        if request.headers.get("X-Coder") != "1":
+            return JSONResponse({"error": "missing X-Coder header"}, status_code=403)
         session = _session_from_cookie(request, app.state.db)
         if not session:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         username, _ = session
         form = await request.form()
         file_obj = form.get("file")
-        if file_obj is None:
+        if not file_obj or isinstance(file_obj, str):
             return JSONResponse({"error": "no file"}, status_code=400)
-        content = file_obj.file.read()
-        filename = file_obj.filename or "upload"
-        name = os.path.basename(filename).replace("\\", "/")
-        while "/" in name and name != name.split("/", 1)[-1]:
-            name = name.rsplit("/", 1)[-1]
-        name = name[:120]
-        if not name:
-            name = "upload"
-        size = len(content)
-        if size > 200000:
-            return JSONResponse({"error": "file too large"}, status_code=413)
+        content = await file_obj.read(files.MAX_UPLOAD + 1)
+        name = re.split(r"[/\\]", file_obj.filename or "")[-1][:120] or "upload"
         try:
-            content.decode("utf-8")
-        except UnicodeDecodeError:
-            return JSONResponse({"error": "file must be valid UTF-8"}, status_code=415)
-        if b"\x00" in content:
-            return JSONResponse({"error": "file must not contain NUL bytes"}, status_code=415)
-        file_id = app.state.db.add_file(username, name, size, content)
-        return JSONResponse({"id": file_id, "name": name, "size": size}, status_code=201)
+            got = files.read_upload(name, content)
+        except files.FileError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status)
+        file_id = app.state.db.add_file(username, name, len(content), content, kind=got["kind"], text=got["text"])
+        return JSONResponse({
+            "id": file_id,
+            "name": name,
+            "size": len(content),
+            "kind": got["kind"],
+            "tokens": profiles.tokens(got["text"] or ""),
+        }, status_code=201)
+
+    def _download(data: bytes, name: str, kind: str) -> Response:
+        resp = Response(content=data, media_type=files.MIME.get(kind, "application/octet-stream"))
+        resp.headers["Content-Disposition"] = files.disposition(name)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        return resp
 
     @app.get("/api/files/{file_id}")
     async def api_get_file(request: Request, file_id: int) -> Response:
@@ -632,13 +647,41 @@ def create_app(settings: dict | None = None) -> FastAPI:
         f = app.state.db.get_file(file_id, username)
         if f is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        content = app.state.db.get_file_content(file_id)
-        if content is None:
+        return _download(bytes(f["content"]), f["name"], f.get("kind") or "text")
+
+    @app.get("/api/messages/{message_id}/export")
+    async def api_export_message(request: Request, message_id: int, format: str = "md") -> Response:
+        r"""Download an answer as a file (SPEC §16.5). Tests: test_accept_files.py (export)
+          session as in api_get_file (401); m = app.state.db.get_message(message_id, username); None -> 404 {"error": "not found"}
+          format not in ("md", "docx", "pdf", "html") -> 400 {"error": "Unknown format."}
+          chat = app.state.db.get_chat(m["chat_id"], username); text = m["content"]
+          when m["sources"]: text += "\n\n## Sources\n\n" + "\n".join of, per source s (i from 0):
+            f"- [{s.get('n', i + 1)}] {s.get('title') or s.get('url')}" + (f" — {s['url']}" when s has a url, else "")
+          data, _, name = files.render(chat["title"] if chat else "answer", format, text)  (FileError e -> {"error"}, e.status)
+          return _download(data, name, format)
+        """
+        session = _session_from_cookie(request, app.state.db)
+        if not session:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = session
+        m = app.state.db.get_message(message_id, username)
+        if m is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        resp = Response(content=content)
-        resp.headers["Content-Disposition"] = f'attachment; filename="{f["name"]}"'
-        resp.headers["X-Content-Type-Options"] = "nosniff"
-        return resp
+        if format not in ("md", "docx", "pdf", "html"):
+            return JSONResponse({"error": "Unknown format."}, status_code=400)
+        chat = app.state.db.get_chat(m["chat_id"], username)
+        text = m["content"]
+        if m.get("sources"):
+            text += "\n\n## Sources\n\n" + "\n".join(
+                f"- [{s.get('n', i + 1)}] {s.get('title') or s.get('url')}"
+                + (f" — {s['url']}" if s.get("url") else "")
+                for i, s in enumerate(m["sources"])
+            )
+        try:
+            data, _, name = files.render(chat["title"] if chat else "answer", format, text)
+        except files.FileError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status)
+        return _download(data, name, format)
 
     # ── POST /api/chats/{chat_id}/messages (streaming) ─────────────────────
 
@@ -683,11 +726,9 @@ def create_app(settings: dict | None = None) -> FastAPI:
         for fid in file_ids:
             if not db.get_file(fid, username):
                 return JSONResponse({"error": "One or more files not found."}, status_code=400)
-        if file_ids:
-            for fid in file_ids:
-                f = db.get_file(fid, username)
-                fc = db.get_file_content(fid)
-                content += f'\n\nFile {f["name"]}:\n```\n{fc.decode()}\n```'
+        for fid in file_ids:
+            f = db.get_file(fid, username)
+            content += files.attach_block(f["name"], db.get_file_text(fid) or "")
         msg_id = db.add_message(chat_id, "user", content)
         if file_ids:
             db.add_message_files(msg_id, file_ids)

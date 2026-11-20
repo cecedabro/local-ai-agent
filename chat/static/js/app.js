@@ -148,8 +148,9 @@ function drawWelcome() {
  *   Retry -> if state.busy do nothing; else put retryText() in #input and send().
  *   if stopped: insert <div class="note stopped">Stopped</div> right after meta (meta.insertAdjacentHTML("afterend", ...)).
  */
-function doneMeta(meta, content, tokens, tps, stopped, retryText) {
+function doneMeta(meta, content, tokens, tps, stopped, retryText, msgId) {
   meta.innerHTML = TINY + `<span>${metaText(tokens, tps)}</span><button data-copy>Copy</button><button data-retry>Retry</button>`;
+  dlMenu(meta, msgId);
   meta.querySelector("[data-copy]").addEventListener("click", () => { navigator.clipboard.writeText(content); });
   meta.querySelector("[data-retry]").addEventListener("click", () => { if (state.busy) return; $("#input").value = retryText(); send(); });
   if (stopped) {
@@ -178,6 +179,74 @@ function doneMeta(meta, content, tokens, tps, stopped, retryText) {
  *       delta    -> the first time after thinking: thoughtSecs = (performance.now() - th0) / 1000; drawPre(true)
  *     done (after the sources and doneMeta): drawPre(false); markVerify(bub, report || data.verify)
  */
+/**
+ * TODO (task D11). A file size for people (SPEC §16.6): n < 1024 -> `${n} B`; n < 1024*1024 -> `${Math.round(n / 1024)} KB`;
+ * else `${(n / 1024 / 1024).toFixed(1)} MB`.
+ */
+function fmtSize(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * TODO (task D11). The download cards of files the model made (SPEC §16.6). Empty or no list -> "". Else
+ *   '<div class="files-out">' + per file f: ext = the part of f.name after its last "." (or f.kind), max 4 characters;
+ *   `<a class="file-card" data-kind="KIND" href="/api/files/ID" download><span class="fi">EXT</span><span><b>NAME</b>` +
+ *   `<small>SIZE</small></span></a>` (KIND, EXT, NAME escaped with esc(); ID = Number(f.id); SIZE = fmtSize(f.size)) + "</div>"
+ */
+function filesOutHtml(list) {
+  if (!list || !list.length) return "";
+  let html = '<div class="files-out">';
+  for (const f of list) {
+    const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1) : f.kind;
+    const shortExt = ext.slice(0, 4);
+    const id = Number(f.id);
+    html += `<a class="file-card" data-kind="${esc(f.kind)}" href="/api/files/${id}" download><span class="fi">${esc(shortExt)}</span><span><b>${esc(f.name)}</b><small>${fmtSize(f.size)}</small></span></a>`;
+  }
+  return html + "</div>";
+}
+
+/**
+ * TODO (task D11). Add one made file's card to an answer while it streams (SPEC §16.6): box = the .files-out inside
+ *   bub.parentElement; when there is none, insert '<div class="files-out"></div>' right after bub (afterend) and use it;
+ *   then add the card (the <a class="file-card"> of filesOutHtml([f]), without the wrapping div) at its end.
+ */
+function addFileCard(bub, f) {
+  let box = bub.parentElement.querySelector(".files-out");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "files-out";
+    bub.insertAdjacentHTML("afterend", '<div class="files-out"></div>');
+    box = bub.parentElement.querySelector(".files-out");
+  }
+  const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1) : f.kind;
+  const shortExt = ext.slice(0, 4);
+  const id = Number(f.id);
+  const card = `<a class="file-card" data-kind="${esc(f.kind)}" href="/api/files/${id}" download><span class="fi">${esc(shortExt)}</span><span><b>${esc(f.name)}</b><small>${fmtSize(f.size)}</small></span></a>`;
+  box.insertAdjacentHTML("beforeend", card);
+}
+
+/**
+ * TODO (task D11). The "Download" button and its menu in a finished answer's stats line `meta` (SPEC §16.5, §16.6).
+ *   No msgId -> nothing. Else add at the end of meta: <span class="dl-wrap"><button class="dl" type="button">Download</button>
+ *   <span class="dl-menu" hidden> + four links <a href="/api/messages/ID/export?format=F" download>LABEL</a> for
+ *   md Markdown, docx Word, pdf PDF, html HTML + </span></span>.
+ *   Clicking .dl toggles the menu's hidden (stopPropagation); any other click on the document hides it.
+ */
+function dlMenu(meta, msgId) {
+  if (!msgId) return;
+  const html = `<span class="dl-wrap"><button class="dl" type="button">Download</button><span class="dl-menu" hidden><a href="/api/messages/${msgId}/export?format=md" download>Markdown</a><a href="/api/messages/${msgId}/export?format=docx" download>Word</a><a href="/api/messages/${msgId}/export?format=pdf" download>PDF</a><a href="/api/messages/${msgId}/export?format=html" download>HTML</a></span></span>`;
+  meta.insertAdjacentHTML("beforeend", html);
+  meta.querySelector(".dl").addEventListener("click", (e) => {
+    e.stopPropagation();
+    meta.querySelector(".dl-menu").hidden = !meta.querySelector(".dl-menu").hidden;
+  });
+  document.addEventListener("click", () => {
+    meta.querySelector(".dl-menu").hidden = true;
+  });
+}
+
 /** The user text the page shows: the content without the file blocks the server added (SPEC §11.1). (done) */
 function typedText(content) { return content.split("\n\nFile ")[0]; }
 
@@ -201,14 +270,14 @@ function drawMessage(m) {
     if (m.files) {
       chips = m.files.map((f) => `<span class="file">${esc(f.name)}</span>`).join("");
     }
-    let text = m.files ? typedText(m.content) : esc(m.content);
+    const text = esc(m.files && m.files.length ? typedText(m.content) : m.content);   // always escaped
     $("#messages").insertAdjacentHTML("beforeend", `<div class="u">${chips}<div class="msg user">${text}</div></div>`);
     return;
   }
   // assistant
   const div = document.createElement("div");
   div.className = "ai";
-  div.innerHTML = ORB + `<div class="content"><div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div><div class="bub">${md.render(m.content)}</div>${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
+  div.innerHTML = ORB + `<div class="content"><div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div><div class="bub">${md.render(m.content)}</div>${filesOutHtml(m.files)}${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
   $("#messages").appendChild(div);
   citeLinks(div.querySelector(".bub"), m.sources);
   markVerify(div.querySelector(".bub"), m.verify);
@@ -216,7 +285,7 @@ function drawMessage(m) {
   doneMeta(meta2, m.content, m.tokens, m.tps, m.stopped, () => {
     const lastU = $("#messages").querySelectorAll(".u .msg.user").item(-1);
     return lastU ? lastU.textContent : "";
-  });
+  }, m.id);
 }
 
 /**
@@ -377,6 +446,8 @@ async function send() {
         drawPre(true);
       } else if (event === "verify") {
         report = data.report;
+      } else if (event === "file") {
+        addFileCard(bub, data);
       } else if (event === "delta") {
         full += data.text;
         typewriter.push(data.text);
@@ -405,7 +476,7 @@ async function send() {
           citeLinks(bub, data.sources);
           bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
         }
-        doneMeta(meta, full, data.tokens, data.tps, false, () => text);
+        doneMeta(meta, full, data.tokens, data.tps, false, () => text, data.message_id);
       }
       drawPre(false);
       if (report || data.verify) {
@@ -456,20 +527,65 @@ function drawContext(ctx) {
   }
 }
 
-/** The file input #file-input: upload each file and show it as a chip until sent. */
+/**
+ * TODO (task D10). Upload one file and show it as a chip until sent (SPEC §16.6).
+ *   res = await api("/api/files", {method: "POST", body: a FormData with "file" = file}); f = await res.json() (error -> {})
+ *   not res.ok -> add `<span class="file err">NAME: ERROR</span>` to #file-chips (NAME = file.name, ERROR = f.error or
+ *     "could not upload", both escaped) and remove that chip after 6000 ms; stop.
+ *   else state.files.push(f); tokens = f.tokens >= 1000 ? `${Math.round(f.tokens / 1000)}k tokens` : `${f.tokens} tokens`;
+ *     add `<span class="file" data-kind="KIND">NAME <small>TOKENS</small><button class="x" data-remove="ID">×</button></span>`
+ *     to #file-chips (KIND, NAME escaped).
+ */
+async function uploadFile(file) {
+  let f;
+  let res;
+  try {
+    const fd = new FormData();
+    fd.set("file", file);
+    res = await api("/api/files", { method: "POST", body: fd });
+    f = await res.json();
+  } catch { return; }
+  if (!res.ok) {
+    const err = esc(f?.error || "could not upload");
+    const name = esc(file.name);
+    const chip = document.createElement("span");
+    chip.className = "file err";
+    chip.textContent = name + ": " + err;
+    $("#file-chips").appendChild(chip);
+    setTimeout(() => chip.remove(), 6000);
+    return;
+  }
+  state.files.push(f);
+  const tokens = f.tokens >= 1000 ? Math.round(f.tokens / 1000) + "k tokens" : f.tokens + " tokens";
+  const kind = esc(f.kind);
+  const name = esc(file.name);
+  const id = f.id;
+  const chip = document.createElement("span");
+  chip.className = "file";
+  chip.dataset.kind = kind;
+  chip.innerHTML = name + " <small>" + tokens + "</small><button class=\"x\" data-remove=\"" + id + "\">&times;</button>";
+  $("#file-chips").appendChild(chip);
+}
+
+/** The file input #file-input, dropping files on #composer and pasting them (SPEC §16.6). */
 function setupFiles() {
   $("#file-input").addEventListener("change", async () => {
-    for (const file of $("#file-input").files) {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await api("/api/files", { method: "POST", body: formData });
-      if (res.status === 413) { alert("File too big (max 200 KB)"); continue; }
-      if (res.status === 415) { alert("Only text files"); continue; }
-      const f = await res.json();
-      state.files.push(f);
-      $("#file-chips").insertAdjacentHTML("beforeend", `<span class="file">${esc(f.name)} <button data-remove="${f.id}">×</button></span>`);
-    }
+    for (const file of [...$("#file-input").files]) await uploadFile(file);
     $("#file-input").value = "";
+  });
+  const composer = $("#composer");
+  composer.addEventListener("dragover", (e) => { e.preventDefault(); composer.classList.add("drop"); });
+  composer.addEventListener("dragleave", () => composer.classList.remove("drop"));
+  composer.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    composer.classList.remove("drop");
+    for (const file of [...(e.dataTransfer?.files || [])]) await uploadFile(file);
+  });
+  $("#input").addEventListener("paste", async (e) => {
+    const list = [...(e.clipboardData?.files || [])];
+    if (!list.length) return;
+    e.preventDefault();
+    for (const file of list) await uploadFile(file);
   });
   $("#file-chips").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-remove]");

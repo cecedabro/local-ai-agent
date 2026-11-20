@@ -201,6 +201,13 @@ class DB:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
             if "icon" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(files)")}
+            if "kind" not in cols:
+                conn.execute("ALTER TABLE files ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
+            if "text" not in cols:
+                conn.execute("ALTER TABLE files ADD COLUMN text TEXT DEFAULT NULL")
+            if "made" not in cols:
+                conn.execute("ALTER TABLE files ADD COLUMN made INTEGER NOT NULL DEFAULT 0")
             conn.commit()
 
     def create_user(self, username: str, pw_hash: str, rights: list[str]) -> None:
@@ -386,7 +393,7 @@ class DB:
             if owner is None or owner["username"] != username:
                 return []
             rows = conn.execute(
-                """SELECT m.*, mf.file_id, f.name as file_name, f.size as file_size
+                """SELECT m.*, mf.file_id, f.name as file_name, f.size as file_size, f.kind as file_kind
                    FROM messages m
                    LEFT JOIN message_files mf ON m.id = mf.message_id
                    LEFT JOIN files f ON mf.file_id = f.id
@@ -419,6 +426,7 @@ class DB:
                         "id": r["file_id"],
                         "name": r["file_name"],
                         "size": r["file_size"],
+                        "kind": r["file_kind"],
                     })
             return list(msgs.values())
 
@@ -434,13 +442,14 @@ class DB:
             ).fetchall()
             return [{"role": r["role"], "content": r["content"]} for r in rows]
 
-    def add_file(self, username: str, name: str, size: int, content: bytes) -> int:
+    def add_file(self, username: str, name: str, size: int, content: bytes,
+                 kind: str = "text", text: str | None = None, made: bool = False) -> int:
         now = _now_iso()
         with self._lock:
             conn = self._connect()
             cur = conn.execute(
-                "INSERT INTO files (username, name, size, content, created) VALUES (?, ?, ?, ?, ?)",
-                (username, name, size, content, now),
+                "INSERT INTO files (username, name, size, content, created, kind, text, made) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (username, name, size, content, now, kind, text, int(made)),
             )
             conn.commit()
             return cur.lastrowid
@@ -465,6 +474,30 @@ class DB:
             if row is None:
                 return None
             return row["content"]
+
+    def get_file_text(self, file_id: int) -> str | None:
+        """The text read from a file (SPEC §16.1): its `text`, or for older rows its content decoded (UTF-8, replace)."""
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute("SELECT text, content FROM files WHERE id = ?", (file_id,)).fetchone()
+            if row is None:
+                return None
+            if row["text"] is not None:
+                return row["text"]
+            return bytes(row["content"]).decode("utf-8", "replace")
+
+    def get_message(self, message_id: int, username: str) -> dict[str, Any] | None:
+        """One message of one of this user's chats (with its chat_id), or None (SPEC §16.5)."""
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT m.* FROM messages m JOIN chats c ON c.id = m.chat_id WHERE m.id = ? AND c.username = ?",
+                (message_id, username)).fetchone()
+            if row is None:
+                return None
+            d = dict(row)
+            d["sources"] = json.loads(d.get("sources") or "[]")
+            return d
 
     def add_message_files(self, message_id: int, file_ids: list[int]) -> None:
         with self._lock:

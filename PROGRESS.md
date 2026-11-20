@@ -1,3 +1,8 @@
+## Task D08 - `make_file` implementation
+- **File**: `chat/coder/answer.py:65` — filled in the `make_file` function body.
+- **Change**: Parses JSON from `arguments` (invalid/empty/non-dict → error), calls `files.render()` with name/format/content, catches `FileError`, stores file via `db.add_file` with `made=True` and the original content as `text`, returns success message + file dict `{id, name, size, kind}`.
+- `make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"` passes (12/12). `make check` passes (36/36).
+
 ## Task F01 - `study_type` implementation
 - **File**: `chat/coder/tools.py:205` — filled in the `study_type` function body.
 - **Change**: Strips pub_types strings (None → empty), iterates `STUDY_TYPES` in order, matches exact names for all labels, and adds a prefix match for "Clinical Trial" (label "Clinical trial"). Returns the first matching label or None.
@@ -89,3 +94,60 @@
 - **File**: `chat/README.md` — added "## Clear Source, rounds 2 and 3" section after "Clear Source v2".
 - **Change**: Documented round 2 (MeSH terms, Dutch guideline defaults, study-type ordering) and round 3 (research flow with `read_one`, `parse_quotes`, `verify.find_quote`, follow-up rounds, `verify.check`).
 - Both `grep` checks pass, `make chat-test` (153/153), `make check` (36/36).
+
+## Task D01 - `kind_of`, `check_zip`, `docx_text`, `xlsx_text` implementation
+- **File**: `chat/coder/files.py` — implemented `kind_of` (line ~45, extension→kind mapping with .doc/.xls→415), `check_zip` (line ~60, zip opening with BadZipFile→415 and entry/size limits→413), `docx_text` (line ~72, XML parsing of `word/document.xml` with heading/list/table handling, stdlib only), and `xlsx_text` (line ~124, openpyxl read-only workbook iteration with row limit). Added `import openpyxl` at top.
+- `make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"` passes (4/4). `make check` passes (36/36).
+- `read_upload` (task D02) depends on these four functions and is next.
+
+## Task D04 - `safe_name`, `render_csv`, `render_xlsx` implementation
+- **File**: `chat/coder/files.py` — `safe_name` (line ~500, path extraction, invalid char replacement, 80-char limit), `render_csv` (line ~547, csv.writer with UTF-8 BOM and `_no_formula` prefixing), `render_xlsx` (line ~559, openpyxl with `_number` detection, non-numeric cells set as text via `data_type="s"`, row 1 bold).
+- `make chat-test K="test_step_files and (safe_name or render_csv)"` passes (2/2). `make check` passes (36/36).
+- `safe_name` was already implemented; `render_csv` had a string+bytes concatenation bug fixed (`"\ufeff" + ...`.encode() → `("\ufeff" + ...).encode()`). `render_xlsx` had a numeric cell handling bug fixed (`_number` result should not get `data_type="s"` set).
+
+## Task D03 - `runs` and `blocks` implementation
+- **File**: `chat/coder/files.py` — implemented `runs` (line ~311, inline Markdown parsing: bold, italic, code, links, plain text using existing `_RUN` regex) and `blocks` (line ~372, block-level parsing: code fences, headings, horizontal rules, ordered/unordered lists, tables, paragraphs). Both handle unclosed code blocks.
+- `make chat-test K="test_step_files and (runs or blocks)"` passes (2/2). `make check` passes (36/36).
+
+## Task D04 - re-verified
+- `make chat-test K="test_step_files and (safe_name or csv_and_xlsx)"` passes (2/2). `make check` passes (36/36). No changes needed.
+
+## Task D02 - `read_upload`, `fence`, `attach_block`, `disposition` verified
+- **File**: `chat/coder/files.py` — all four functions already implemented (lines 209, 261, 282, 290).
+- `make chat-test K="test_step_files and (read_upload_text or fence or disposition)"` passes (3/3).
+- `make check` passes (36/36). No code changes needed.
+
+## Task D07 - `api_upload_file` and `api_export_message` routes
+- **File**: `chat/coder/app.py:599-700` — filled in both routes (replaced `raise NotImplementedError`).
+- **Change** (`api_upload_file`): POST `/api/files` with `X-Coder` header + session cookie validation; parses form, enforces size/kind via `files.read_upload`, stores via `db.add_file`, returns 201 `{id, name, size, kind, tokens}`.
+- **Change** (`api_export_message`): GET `/api/messages/{id}/export?format=` validates session/message ownership/format; appends sources to markdown when format is md/html; renders via `files.render(fmt, content, sources_markdown)`; returns download with appropriate content-disposition and security headers (`X-Content-Type: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`).
+- **Fix**: `render_pdf()` in `files.py:915` now wraps `pdf.output()` in `bytes()` — fpdf2 returns `bytearray` by default, which caused `AttributeError` during httpx multipart uploads.
+- `make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"` passes (7/7). `make check` passes (36/36).
+
+## Task D09 - `split_files` and `file_sources` implementation
+- **File**: `chat/coder/research.py` — filled in `split_files` (line ~817) and `file_sources` (line ~834).
+- **Change** (`split_files`): Iterates `_FILE_BLOCK.finditer(content)`, strips text before the first block, returns list of `{"name": group1, "text": group3}` dicts.
+- **Change** (`file_sources`): For each file, chunks text into ≤`DOC_PARTS` pieces of ≤`SOURCE_CHARS` bytes, preferring `\n\n` then `\n` splits near cutoff; formats as source dicts with title (single or "name (part i of k)"), kind "file", meta "Your file".
+- `make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"` passes (31/31). `make check` passes (36/36).
+
+## Task D10 - `uploadFile` implementation
+- **File**: `chat/static/js/app.js:501` — filled in the `uploadFile` function body.
+- **Change**: Creates FormData with "file" key, POSTs to `/api/files`, parses JSON response; on failure creates `<span class="file err">` chip with escaped name and error message, removes after 6s; on success pushes file to `state.files`, creates `<span class="file" data-kind="KIND">` chip with escaped name, tokens (k suffix for ≥1000), and remove button with file id.
+- `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).
+
+## Task D11 - `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` implementation
+- **File**: `chat/static/js/app.js` — filled in four functions (lines ~186-220).
+- **Change** (`fmtSize`): Formats bytes as human-readable — `<1024` → `N B`, `<1024²` → `Math.round(N/1024) KB`, else `(N/1024/1024).toFixed(1) MB`.
+- **Change** (`filesOutHtml`): Generates `<div class="files-out">` with `<a class="file-card">` per file, each having escaped kind/ext/name, size via `fmtSize`, and download href to `/api/files/ID`.
+- **Change** (`addFileCard`): Finds or creates `.files-out` inside bub's parent, appends a file-card `<a>` via `insertAdjacentHTML`.
+- **Change** (`dlMenu`): If msgId provided, appends `<span class="dl-wrap"><button class="dl">Download</button><span class="dl-menu" hidden>` with links for md/docx/pdf/html export formats; click handler toggles menu with stopPropagation, document click closes.
+- `node --check chat/static/js/app.js && make chat-test` passes (182/182). `make check` passes (36/36).
+
+## Task D12 - browser tests verification
+- **Status**: All browser tests already pass — no code changes needed.
+- `make chat-test` — 182/182 passed. `make chat-browser-test` — 14/14 passed. `node --test chat/tests/js/stream.test.mjs` — 15/15 passed. `make check` — 36/36 passed.
+
+## Task D13 - "## Files in and out" section
+- **File**: `chat/README.md` — added "## Files in and out" section after "Clear Source, rounds 2 and 3".
+- **Change**: Documented the file upload/download flow — `read_upload` for parsing PDF/DOCX/XLSX/HTML/text, `make_file` tool for model-created files, `render` for format rendering, export via `GET /api/messages/<id>/export`, and UI behavior (upload chips, file cards, download button with export links).
+- Both `grep` checks pass, `make chat-test` — 182/182 passed. `make check` — 36/36 passed.

@@ -102,10 +102,11 @@ class TestProfileAnswers:
         body = gw.chat_requests()[-1]["body"]
         system = body["messages"][0]["content"]
         assert "Be brief." in system and "SECRET PLAN" in system
-        assert [t["function"]["name"] for t in body["tools"]] == ["web_search", "open_page"]
+        assert [t["function"]["name"] for t in body["tools"]] == ["web_search", "open_page", "make_file"]
         client.patch("/api/profiles/general", json={"web": False}, headers=H)
         send(client, cid, "again")
-        assert "tools" not in gw.chat_requests()[-1]["body"], "no tools when nothing is enabled"
+        assert [t["function"]["name"] for t in gw.chat_requests()[-1]["body"]["tools"]] == ["make_file"], \
+            "only make_file when no source is enabled (SPEC §16.3)"
 
     def test_search_round(self, tmp_path, gw):
         gw.search_results = [{"title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "content": "Wie krijgt hem"}]

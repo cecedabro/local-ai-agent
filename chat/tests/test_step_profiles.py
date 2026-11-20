@@ -165,7 +165,7 @@ def test_tool_rounds(db):
     phases = [(d["phase"], d["label"]) for e, d in evs if e == "phase"]
     assert phases[:3] == [("reading", "Reading your message…"), ("searching", 'Searching PubMed for "vitamin D depression"…'),
                           ("reading", "Reading www.rivm.nl…")]
-    assert seen[0]["tools"] == ["web_search", "search_site", "search_pubmed", "open_page"], "the profile's tools are offered"
+    assert seen[0]["tools"] == ["web_search", "search_site", "search_pubmed", "open_page", "make_file"], "the profile's tools are offered"
     second = seen[1]["messages"]
     assert second[-3]["role"] == "assistant" and [t["function"]["name"] for t in second[-3]["tool_calls"]] == ["search_pubmed", "open_page"]
     assert second[-2]["role"] == "tool" and second[-2]["tool_call_id"] == "a" and second[-2]["content"].startswith("RESULTS")

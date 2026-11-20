@@ -5,6 +5,7 @@
 //   round 3: the profiles page (notes, filters, a website, a document, the budget bar), sources under answers
 //   round 4: Clear Source's trail, thinking and checked quotes; PubMed strictness (C); the app icon picker
 //   round 5: MeSH chips in the trail, study-type badges, the Dutch guideline sources and #add-defaults
+//   round 6: files in and out: attach (chip with tokens, a refused file), a file the model made, "Download as" (§16)
 //   passkey: add a passkey on /account (Chromium's virtual authenticator), sign out, sign in with it
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -268,6 +269,52 @@ async function main() {
     await ev(`document.querySelector('#icon-pick button[data-icon=blossom]').click()`);
     await waitFor(() => ev(`/home screen/.test(document.getElementById('icon-msg').textContent)`), 5000, "the saved message");
     if ((await ev(`fetch('/api/me').then(r=>r.json())`)).icon !== "blossom") throw new Error("icon not saved");
+  });
+
+  await check("round 6: attach files, a file the model made, download an answer (SPEC §16)", async () => {
+    await go("/");
+    await waitFor(() => ev(`!!document.getElementById('composer')`), 5000, "the chat page");
+    await ev(`document.getElementById('profile').click()`);
+    await ev(`document.querySelector('#pmenu .opt[data-profile=general]').click()`);
+    await waitFor(() => ev(`document.documentElement.dataset.profile==='general'`), 3000, "the general profile");
+    await ev(`document.getElementById('new-chat').click()`);
+    await sleep(400);
+    const accept = await ev(`document.getElementById('file-input').accept`);
+    if (!/\.pdf/.test(accept) || !/\.docx/.test(accept)) throw new Error("#file-input accept: " + accept);
+    const pick = (name, body) => ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${JSON.stringify(body)}],${JSON.stringify(name)}));` +
+      `const i=document.getElementById('file-input');i.files=dt.files;i.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    await pick("notes.md", "# Notes\nBring water and a towel to every practice.");
+    await waitFor(() => ev(`!!document.querySelector('#file-chips .file:not(.err)')`), 5000, "the file chip");
+    const chip = await ev(`document.querySelector('#file-chips .file:not(.err)').textContent`);
+    if (!/notes\.md/.test(chip) || !/token/.test(chip)) throw new Error("the chip should show the name and its tokens: " + chip);
+    if (await ev(`document.querySelector('#file-chips .file:not(.err)').dataset.kind`) !== "text") throw new Error("chip data-kind");
+    await pick("old.doc", "x");
+    await waitFor(() => ev(`!!document.querySelector('#file-chips .file.err')`), 5000, "a chip for the refused file (.file.err)");
+    if (!/docx/.test(await ev(`document.querySelector('#file-chips .file.err').textContent`))) throw new Error("the refused chip has no reason");
+    await waitFor(() => ev(`!document.querySelector('#file-chips .file.err')`), 9000, "the refused chip to go away after 6 s");
+    await sendText("make a word file <b>please</b>");
+    await idle();
+    if (!(await ev(`!![...document.querySelectorAll('.u')].pop()?.querySelector('.file')`))) throw new Error("no file chip on your message");
+    const card = last(".files-out a.file-card");
+    await waitFor(() => ev(`!!${card}`), 5000, "the download card (.files-out a.file-card)");
+    if ((await ev(`${card}.dataset.kind`)) !== "docx" || !(await ev(`${card}.hasAttribute('download')`))) throw new Error("card data-kind/download");
+    if (!/^\/api\/files\/\d+$/.test(await ev(`${card}.getAttribute('href')`))) throw new Error("card href");
+    if (!/Weekplan\.docx/.test(await ev(`${card}.textContent`))) throw new Error("card name");
+    if ((await ev(`${card}.querySelector('.fi')?.textContent.trim().toLowerCase()`)) !== "docx") throw new Error("card .fi");
+    if (!/KB|B$/.test(await ev(`${card}.querySelector('small')?.textContent||''`))) throw new Error("card size");
+    const ct = await ev(`fetch(${card}.getAttribute('href')).then(r=>r.headers.get('content-type'))`);
+    if (!/wordprocessingml/.test(ct)) throw new Error("download type " + ct);
+    await ev(`${last(".meta2 .dl")}.click()`);
+    await waitFor(() => ev(`!${last(".dl-menu")}?.hidden`), 3000, "the Download as menu (.dl-menu)");
+    const links = await ev(`[...${last(".dl-menu")}.querySelectorAll('a')].map(a=>a.getAttribute('href'))`);
+    if (links.length !== 4 || !links.every((h) => /^\/api\/messages\/\d+\/export\?format=(md|docx|pdf|html)$/.test(h)))
+      throw new Error("menu links: " + JSON.stringify(links));
+    const pdf = await ev(`fetch(${last(".dl-menu")}.querySelector('a[href$="pdf"]').getAttribute('href')).then(r=>r.headers.get('content-type'))`);
+    if (pdf !== "application/pdf") throw new Error("export pdf type " + pdf);
+    await cmd("Page.reload"); await sleep(1200);                          // the newest chat opens again
+    await waitFor(() => ev(`!!document.querySelector('.ai .files-out a.file-card')`), 6000, "the card again after a reload");
+    if (await ev(`!!document.querySelector('.u .msg.user b')`)) throw new Error("your own text is not escaped");
+    if (!/<b>please<\/b>/.test(await ev(`[...document.querySelectorAll('.u .msg.user')].pop().textContent`))) throw new Error("typed text lost");
   });
 
   await check("passkey: add one on /account, sign out, sign in with it", async () => {

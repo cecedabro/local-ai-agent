@@ -13,7 +13,7 @@ from typing import Any, AsyncIterator, Callable
 
 import httpx
 
-from . import context, gateway, profiles, research, tools
+from . import context, files, gateway, profiles, research, tools
 
 MAX_ROUNDS = 4
 
@@ -62,6 +62,36 @@ def make_title(text: str) -> str:
 #      thought_s = round((t0 or clock()) - th0, 1) when th0 is not None, else None.
 #   6. done also carries "trail": trail.
 
+def make_file(db: Any, username: str, arguments: str) -> tuple[str, dict | None]:
+    r"""TODO (task D08). Run the make_file tool (SPEC §16.3): (the tool result for the model, the file for the page or None).
+      args = json.loads(arguments or "{}") (not JSON or not a dict -> ("Error: the arguments were not valid JSON.", None))
+      data, _, name = files.render(args.get("name") or "file", args.get("format") or "", args.get("content") or "")
+        (files.FileError e -> (f"Error: {e}", None))
+      fid = db.add_file(username, name, len(data), data, kind=the format (lower case, without "."), text=content, made=True)
+      return (f"Made {name} ({len(data)} bytes). The user sees a download card for it; do not repeat its content.",
+              {"id": fid, "name": name, "size": len(data), "kind": the format})
+    Tests: test_step_files.py::test_make_file
+    """
+    import json as _json
+    try:
+        args = _json.loads(arguments or "{}")
+        if not isinstance(args, dict):
+            raise ValueError
+    except (ValueError, TypeError):
+        return ("Error: the arguments were not valid JSON.", None)
+    name_in = args.get("name") or "file"
+    fmt = args.get("format") or ""
+    content = args.get("content") or ""
+    try:
+        data, _, name = files.render(name_in, fmt, content)
+    except files.FileError as e:
+        return (f"Error: {e}", None)
+    kind = fmt.lower().lstrip(".")
+    fid = db.add_file(username, name, len(data), data, kind=kind, text=content, made=True)
+    return (f"Made {name} ({len(data)} bytes). The user sees a download card for it; do not repeat its content.",
+            {"id": fid, "name": name, "size": len(data), "kind": kind})
+
+
 async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                      stream: Callable = gateway.stream_chat,
                      complete: Callable = gateway.complete,
@@ -90,7 +120,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     # Step 2
     messages = context.build_messages(db, chat)
     cfg = profiles.config(db, chat["username"], chat["profile"])
-    specs = tools.tool_specs(cfg)
+    specs = tools.tool_specs(cfg) + [files.TOOL]
     yield phase("reading")
 
     # Step 3-4: Tool rounds loop
@@ -106,6 +136,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     trail: list[dict] = []
     thinking_text = ""
     th0 = None
+    made: list[dict] = []
 
     try:
         while True:
@@ -208,6 +239,18 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                 for i, call in enumerate(calls):
                     name = call["name"]
                     arguments = call["arguments"]
+                    if name == "make_file":
+                        try:
+                            fname = str(json.loads(arguments or "{}").get("name") or "a file")[:60]
+                        except (ValueError, TypeError, AttributeError):
+                            fname = "a file"
+                        yield sse("phase", {"phase": "writing", "label": f"Making {fname}…"})
+                        result, made_file = make_file(db, chat["username"], arguments)
+                        if made_file:
+                            made.append(made_file)
+                            yield sse("file", made_file)
+                        messages.append({"role": "tool", "tool_call_id": ids[i], "content": result})
+                        continue
                     ph, label = tools.describe(name, arguments)
                     yield sse("phase", {"phase": ph, "label": label})
 
@@ -251,8 +294,10 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
         yield sse("error", {"error": "The model could not answer.", "status": e.status})
         return
     finally:
-        if not msg_stored and text:
-            db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True, sources=sources, trail=trail, thinking=thinking_text)
+        if not msg_stored and (text or made):
+            mid = db.add_message(chat["id"], "assistant", text, tokens=count, tps=None, stopped=True, sources=sources, trail=trail, thinking=thinking_text)
+            if made:
+                db.add_message_files(mid, [f["id"] for f in made])
         try:
             await agen.aclose()
         except Exception:
@@ -263,10 +308,12 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     tokens = usage["completion_tokens"] if usage else count
     tps = round(tokens / (clock() - t0), 1) if t0 else None
 
-    if text or not stopped:
+    if text or made or not stopped:
         msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped, sources=sources, trail=trail, thinking=thinking_text,
                                 thought_s=round((t0 or clock()) - th0, 1) if th0 is not None else None)
         msg_stored = True
+        if made:
+            db.add_message_files(msg_id, [f["id"] for f in made])
     else:
         msg_id = None
     if msg_id is not None and usage:
@@ -284,7 +331,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     yield sse("done", {"message_id": msg_id, "tokens": tokens, "tps": tps,
                         "context": context.info(db, chat, settings),
                         "title": chat["title"], "stopped": stopped,
-                        "sources": sources, "trail": trail})
+                        "sources": sources, "trail": trail, "files": made})
 
 
 def _unused() -> None:

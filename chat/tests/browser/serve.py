@@ -38,6 +38,8 @@ class Script(dict):
     def get(self, key, default=None):
         msgs = self.gw.requests[-1]["body"]["messages"]
         if key == "tool_calls":                   # "search ..." -> one web search first (SPEC §12.3)
+            if "word file" in str(msgs[-1]["content"]):                       # SPEC §16.3: the model makes a file
+                return [{"name": "make_file", "arguments": '{"name": "Weekplan", "format": "docx", "content": "# Week\\n\\n- rust"}'}]
             return [{"name": "web_search", "arguments": '{"query": "flu shot"}'}] if "search" in msgs[-1]["content"] else None
         if key == "content" and str(msgs[-1]["content"]).startswith("Sources:"):     # Clear Source's answer (SPEC §13)
             return [w + " " for w in EH_ANSWER.split(" ")]

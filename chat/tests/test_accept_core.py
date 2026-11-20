@@ -378,7 +378,7 @@ class TestFiles:
         last = gw.chat_requests()[-1]["body"]["messages"][-1]["content"]
         assert "what is in it?" in last and "File notes.md:" in last and "line two" in last
         msg = client.get(f"/api/chats/{cid}").json()["messages"][0]
-        assert msg["files"] == [{"id": f["id"], "name": "notes.md", "size": 17}]
+        assert msg["files"] == [{"id": f["id"], "name": "notes.md", "size": 17, "kind": "text"}]
 
     def test_limits_and_isolation(self, client):
         login(client)
