@@ -13,7 +13,7 @@
     <span class="avatar">{{ me.username[:1] | upper }}</span>
     <div><b>{{ me.username }}</b><br><small>{{ me.rights | join(' · ') }}</small></div>
     {% if 'admin' in me.rights %}<a class="iconbtn" href="/admin" title="People">⚙</a>{% endif %}
-    <a class="iconbtn" href="/account" title="Your account and passkeys">🔑</a>
+    <a class="iconbtn" href="/account" title="Settings: icon, passkeys, how Dewdrop works">🔑</a>
     <button class="iconbtn" id="logout" title="Sign out">⎋</button>
   </div>
 </aside>

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Your account · Dewdrop{% endblock %}
+{% block title %}Settings · Dewdrop{% endblock %}
 {% block body %}
 <body class="admin">
-<header><h1>Your account</h1><a href="/">← back to the chat</a></header>
+<header class="pf-head"><a class="back" href="/" title="Back to the chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Chat</a><h1>Settings</h1></header>
 <main class="admin-main">
   <section class="card">
     <h2>App icon</h2>
@@ -21,6 +21,15 @@
     <ul id="passkey-list" class="plain"></ul>
     <button type="button" class="primary" id="passkey-add">Add a passkey</button>
     <p id="passkey-msg" class="small" role="status"></p>
+  </section>
+  <section class="card">
+    <h2>How Dewdrop works</h2>
+    <p class="muted small">Look behind the scenes: every part of the design in one page, and how Clear Source finds,
+      reads and checks its sources.</p>
+    <div class="doc-links">
+      <a class="doc-link" href="/static/styleguide.html" target="_blank" rel="noopener"><b>Style guide</b><small>Every component, in every theme</small></a>
+      <a class="doc-link" href="/static/clear-source.html" target="_blank" rel="noopener"><b>How Clear Source works</b><small>From your question to a checked answer</small></a>
+    </div>
   </section>
 </main>
 <script src="/static/js/webauthn.js"></script>
