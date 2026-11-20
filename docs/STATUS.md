@@ -20,13 +20,15 @@ the second search round, long pages read where it matters, fewer checker false a
 
 | What | Where | Next step |
 |---|---|---|
-| Loop D: files in and out (SPEC §16): attach PDF / Word / Excel / HTML / text, the model makes files (`make_file`), "Download as" for any answer | branch `agent/files-in-and-out`, agent job #15 | When the job ends: review, browser check, merge after the fixes PR |
+| Loop D: files in and out (SPEC §16): attach PDF / Word / Excel / HTML / text, the model makes files (`make_file`), "Download as" for any answer | branch `agent/files-in-and-out`, agent job #15 | Agent finished D01–D13; review, browser check, then merge |
 
 ## Known issues
 
-- **Model at half speed after the PC woke (2026-11-20 night)**: ~20 instead of ~40 tok/s since llama-server
-  restarted on wake. Diagnosed and restarted at 02:23 UTC; see the result in the session notes. If it recurs, a
-  speed check after wake that restarts llama-server is planned.
+- **Model at half speed after a Windows restart (2026-11-20 night)**: ~20 instead of ~40 tok/s. Not llama-server
+  (a restart didn't help), not RAM, CPU, WSL or the build: the PC was restarted from the Start menu at 00:46 and
+  the new Windows session runs GPU apps (Wallpaper Engine, NVIDIA overlay, Steam, Movies & TV, LG HUB) that share
+  the 12 GB card with the model. Fix: quit those apps (or sign out) while the model works. Planned: a speed check
+  after wake that warns on the status page.
 
 - **Clear Source is slow while an agent loop runs.** Every one of its ~10 model calls queues behind the agent's
   current request (one GPU, one request at a time). Idea: read several sources in one call, or pause the agent

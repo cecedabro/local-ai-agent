@@ -76,4 +76,4 @@ PC and works through `PLAN.md`:
 | Profiles, sources, tools (B01–B19) | `agent/dewdrop-profiles` | 19/19 |
 | Clear Source v2 (E01–E19) | `agent/evidencehunt-v2` | 19/19 first try |
 | Clear Source rounds 2–3 (F01–F20) | `agent/clear-source-2` | 17/17 (one already done by another task) |
-| Files in and out (D01–D13) | `agent/files-in-and-out` | running (job #15) |
+| Files in and out (D01–D13) | `agent/files-in-and-out` | 13/13 (job #15), in review |
