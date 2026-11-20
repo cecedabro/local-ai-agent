@@ -171,7 +171,7 @@ async function main() {
     await go("/profiles");
     await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "two profile tabs");
     await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
-    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===8`), 5000, "the seeded PubMed and 7 Dutch guideline cards");
+    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===10`), 5000, "the seeded PubMed and 9 Dutch guideline cards");
     if (!(await ev(`document.querySelector('.pf-tab[data-profile=evidence]').getAttribute('aria-selected')==='true'`))) throw new Error("the open tab is not aria-selected");
     if (!(await ev(`document.querySelectorAll('#budget-bar i').length>=1 && /tokens/.test(document.getElementById('budget-text').textContent)`))) throw new Error("no budget bar");
     await ev(`(()=>{const t=document.querySelector('.src-card[data-kind=pubmed] [data-note]');t.value='Alleen RCTs en reviews';t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
