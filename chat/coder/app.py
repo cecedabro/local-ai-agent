@@ -40,6 +40,7 @@ async def _lifespan(app: FastAPI):
 
 
 log = logging.getLogger("dewdrop")
+LIVE_PING = 15        # seconds of silence before a keep-alive comment
 LIVE_KEEP = 60  # seconds a finished answer's events stay available to a page that reconnects
 
 
@@ -72,7 +73,19 @@ class Live:
             self._changed.clear()
             if i < len(self.chunks) or self.done:
                 continue
-            await self._changed.wait()
+            try:
+                await asyncio.wait_for(self._changed.wait(), LIVE_PING)
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"          # keeps proxies (Cloudflare closes after ~100 s of silence) from hanging up
+
+
+def client_ip(request: Request) -> str:
+    """The visitor's address for rate limits: Cloudflare's Cf-Connecting-IP (Cloudflare sets it and overwrites what a
+    visitor sends), else the connection's address. X-Forwarded-For is not used: a visitor can write it themselves."""
+    cf = request.headers.get("cf-connecting-ip", "").strip()
+    if cf:
+        return cf[:64]
+    return request.client.host if request.client else "unknown"
 
 
 def create_app(settings: dict | None = None) -> FastAPI:
@@ -172,17 +185,15 @@ def create_app(settings: dict | None = None) -> FastAPI:
             return JSONResponse({"error": "missing username or password"}, status_code=400)
 
         # Rate limiting
-        if app.state.db.has_recent_failures(f"user:{username}"):
+        ipkey = f"ip:{client_ip(request)}"      # one visitor trying many names is stopped too
+        if app.state.db.has_recent_failures(f"user:{username}") or app.state.db.has_recent_failures(ipkey, limit=20):
             return JSONResponse({"error": "too many failures – wait a moment"}, status_code=429)
 
-        user = app.state.db.get_user(username)
-        if user is None:
-            app.state.db.record_login_failure(f"user:{username}")
-            return JSONResponse({"error": "invalid credentials"}, status_code=401)
-
         from .auth import verify_password
-        if not verify_password(password, user["pw_hash"]):
+        user = app.state.db.get_user(username)
+        if user is None or not verify_password(password, user["pw_hash"]):
             app.state.db.record_login_failure(f"user:{username}")
+            app.state.db.record_login_failure(ipkey)
             return JSONResponse({"error": "invalid credentials"}, status_code=401)
 
         app.state.db.clear_failures(username)
@@ -550,6 +561,8 @@ def create_app(settings: dict | None = None) -> FastAPI:
                                         domain=card.get("domain", ""), note=card["note"],
                                         filters=card.get("filters"))
             added.append(s)
+        if profile in profiles.WEB_OFF:
+            app.state.db.set_profile_settings(username, profile, web=False)   # the defaults are the trusted sites only
         return JSONResponse({"added": len(cards), "sources": [_source_json(s) for s in app.state.db.list_sources(username, profile)]})
 
     @app.patch("/api/profiles/{profile}/sources/{source_id}")
@@ -1056,7 +1069,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     async def passkeys_login_verify(request: Request) -> JSONResponse:
         db = app.state.db
         settings = app.state.settings
-        ipkey = f"ip:{request.client.host if request.client else 'unknown'}"
+        ipkey = f"ip:{client_ip(request)}"
         if db.has_recent_failures(ipkey):
             return JSONResponse({"error": "Too many tries. Wait 15 minutes."}, status_code=429)
         try:

@@ -418,6 +418,7 @@ async function streamAnswer(chatId, open, retryText) {
     trailAnim.stop();
     pre.innerHTML = thoughtHtml(thinking, thoughtSecs) + trailHtml(steps, live);
     trailAnim = live ? animateTrail(pre) : { stop() {} };
+    if (live) state.follow.stick();               // the page goes down with the research, like with the text
   };
 
   state.follow.bottom();
@@ -457,13 +458,24 @@ async function streamAnswer(chatId, open, retryText) {
 
   // 6. await readEvents(res, (event, data) => ...)
   let finished = null;
+  // A phase that takes a while shows how long it has been, so a slow step doesn't look stuck.
+  let phaseLabel = "", phaseAt = 0;
+  const drawPhase = () => {
+    const secs = Math.round((performance.now() - phaseAt) / 1000);
+    const slow = secs >= 25 && !full && !thinking && !steps.length ? " · the model may still be starting up" : "";
+    meta.innerHTML = `<span class="phase-label">${esc(phaseLabel)}${secs >= 5 ? ` · ${secs} s` : ""}${slow}</span>`;
+  };
+  const ticker = setInterval(() => { if (phaseLabel && meta.querySelector(".phase-label")) drawPhase(); }, 1000);
   try {
   await readEvents(res, (event, data) => {
     if (event === "phase") {
       orb.dataset.phase = data.phase;
-      meta.innerHTML = `<span class="phase-label">${data.label || data.phase}</span>`;
+      phaseLabel = data.label || data.phase;
+      phaseAt = performance.now();
+      drawPhase();
       if (data.phase === "writing") {
         writeStart = performance.now();
+        phaseLabel = "";
       }
     } else if (event === "thinking") {
       th0 = th0 ?? performance.now();
@@ -490,6 +502,7 @@ async function streamAnswer(chatId, open, retryText) {
   } catch {
     // the connection broke (phone locked, app switched, network changed); the server keeps writing
   }
+  clearInterval(ticker);
   if (current?.ctrl === ctrl) current = null;
 
   // 7. await typewriter.finish(); tiny.remove(); orb.dataset.phase = "idle".
@@ -577,6 +590,7 @@ function fmt(n) {
 }
 
 function drawContext(ctx) {
+  state.ctx = ctx;
   const { used, max, compress_at } = ctx;
   const barI = document.querySelector(".ctx .bar > i");
   const line = document.querySelector(".ctx .line");
@@ -899,6 +913,7 @@ async function start() {
     if (state.busy) return;
     state.chatId = null;
     $("#chat-title").textContent = "New chat";
+    if (state.ctx) drawContext({ ...state.ctx, used: 0 });
     drawWelcome();
     loadChats();
   });
@@ -918,6 +933,7 @@ async function start() {
       $("#pmenu").classList.add("hidden");
       state.chatId = null;
       $("#chat-title").textContent = "New chat";
+      if (state.ctx) drawContext({ ...state.ctx, used: 0 });
       drawWelcome();
     });
   });

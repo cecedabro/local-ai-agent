@@ -410,6 +410,10 @@ body.admin>header{padding-top:max(12px,env(safe-area-inset-top));padding-left:ma
 @media (max-width:760px){
   /* follows the visible area above the keyboard (mobile.js sets --app-h from visualViewport) */
   html:has(body.app){overflow:hidden;overscroll-behavior:none}
+  /* the stats line stays one line: the numbers shorten, Copy · Retry · Download stay on it */
+  .meta2:has(.dl-wrap){flex-wrap:nowrap}
+  .meta2:has(.dl-wrap)>span:not(.dl-wrap){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .meta2:has(.dl-wrap) button{flex:none}
   body.app{position:fixed;left:0;right:0;top:var(--app-top,0);height:var(--app-h,100dvh);overscroll-behavior:none}
   .composer textarea{max-height:30vh}
   .cbar .seg label{padding:6px 11px}

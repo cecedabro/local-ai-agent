@@ -257,7 +257,7 @@ class TestStream:
         evs = send(client, cid, "  Say   hello to the whole wide world please, in a friendly and very long way  ", mode="think")
         names = [e for e, _ in evs]
         phases = [d["phase"] for e, d in evs if e == "phase"]
-        assert phases == ["reading", "thinking", "writing"]
+        assert phases == ["thinking", "writing"]
         assert "".join(d["text"] for e, d in evs if e == "delta") == "Hello world"
         # SPEC §13.3: reasoning comes as thinking events, never as part of the answer
         assert [d["text"] for e, d in evs if e == "thinking"] == ["let me think"]
@@ -289,7 +289,7 @@ class TestStream:
         cid = new_chat(client)
         gw.busy_left = 1
         evs = send(client, cid, "hi")
-        assert [d["phase"] for e, d in evs if e == "phase"][:3] == ["reading", "waiting", "writing"]
+        assert [d["phase"] for e, d in evs if e == "phase"][:3] == ["thinking", "waiting", "writing"]
         assert evs[-1][0] == "done"
 
     def test_gives_up_after_wait_limit(self, tmp_path, gw):

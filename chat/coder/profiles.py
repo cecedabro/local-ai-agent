@@ -113,6 +113,7 @@ def clean_filters(f: Any) -> dict:
     return result
 
 
+WEB_OFF = ("evidence",)   # profiles that start without general web search: open web pages let advocacy sites in
 GROUPS = ("guidelines", "medicines", "research", "documents", "websites")   # the sources page's sections, in order
 
 
@@ -186,7 +187,11 @@ def config(db: Any, username: str, profile: str) -> dict:
             db.add_source(username, profile, card["kind"], card["title"],
                           domain=card.get("domain", ""), note=card["note"],
                           filters=card.get("filters"))
-        db.set_profile_settings(username, profile, seeded=True)
+        if profile in WEB_OFF:
+            db.set_profile_settings(username, profile, seeded=True, web=False)
+            st = {**st, "web": False}
+        else:
+            db.set_profile_settings(username, profile, seeded=True)
     return {"profile": profile, "instructions": st["instructions"], "web": st["web"],
             "sources": db.list_sources(username, profile)}
 

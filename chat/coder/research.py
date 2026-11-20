@@ -62,6 +62,17 @@ UNREACHABLE = {
 }
 _DUTCH = {"de", "het", "een", "is", "bij", "van", "en", "niet", "wat", "hoe", "welke", "voor", "met", "zijn",
           "wordt", "mag", "kan", "helpt", "tegen", "tijdens", "patiënten", "dosis"}
+_DUTCH_MORE = {"werkt", "wanneer", "waarom", "welk", "mijn", "ik", "kind", "kinderen", "zwanger", "zwangerschap",
+               "eerste", "keus", "behandeling", "ouderen", "bijwerkingen", "veilig", "gebruiken", "nemen", "moet",
+               "ook", "dat", "dit", "deze", "geen", "op", "aan", "bij", "naar", "uit", "als", "er", "heeft", "hebben"}
+
+
+def answer_language(question: str) -> str:
+    """The language to write the answer in: Dutch when the question looks Dutch (a short question needs one Dutch
+    word, a longer one two), else English."""
+    words = re.findall(r"[a-zà-ÿ]+", question.lower())
+    hits = sum(1 for w in words if (w in _DUTCH or w in _DUTCH_MORE) and w != "is")   # "is" is English too
+    return "Dutch (Nederlands)" if hits >= 2 or (hits and len(words) <= 4) else "English"
 RULES = (
     "You are Clear Source. Answer ONLY from the passages of the numbered sources below; never use your own knowledge. "
     "Answer in the language of the question, in Markdown. Write a long, detailed answer under these ## headings "
@@ -76,7 +87,10 @@ RULES = (
     '> "exact words from the source" [2] (one quote per blockquote, in the source\'s own language, never translated), '
     "and explain each quote in your own words in a normal paragraph below it, not inside the blockquote; every claim "
     "ends with its [n]. "
-    "Quote exactly, never change numbers or words, never add facts that are not in the sources. If the sources do "
+    "Quote exactly, never change numbers or words, never add facts that are not in the sources. "
+    "Use every quote only once: the short answer has no blockquotes, and each later part adds quotes and facts the "
+    "earlier parts did not use. In Dutch, write correct Dutch spelling and give the sources their own names (for "
+    "example Farmacotherapeutisch Kompas, Richtlijnendatabase). If the sources do "
     "not answer the question, say so plainly instead of answering.")
 
 
@@ -566,10 +580,11 @@ def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dic
 
     pack = "\n\n".join(src_block(s) for s in sources)
     extra = cfg.get("instructions", "")
+    lang = answer_language(question)
+    system = RULES + f"\n\nThe question is in {lang}: write the whole answer, headings included, in {lang}, " \
+                     "even when the sources are in another language (only the quotes stay in the source's language)."
     if extra and extra.strip():
-        system = RULES + "\n\nExtra instructions from the user:\n" + extra.strip()
-    else:
-        system = RULES
+        system += "\n\nExtra instructions from the user:\n" + extra.strip()
     return [{"role": "system", "content": system}, {"role": "user", "content": f"Sources:\n\n{pack}\n\nQuestion: {question}"}]
 
 

@@ -163,7 +163,7 @@ def test_tool_rounds(db):
         ev, data = ch.strip("\n").split("\n")
         evs.append((ev.removeprefix("event: "), json.loads(data.removeprefix("data: "))))
     phases = [(d["phase"], d["label"]) for e, d in evs if e == "phase"]
-    assert phases[:3] == [("reading", "Reading your message…"), ("searching", 'Searching PubMed for "vitamin D depression"…'),
+    assert phases[:3] == [("thinking", "Thinking…"), ("searching", 'Searching PubMed for "vitamin D depression"…'),
                           ("reading", "Reading www.rivm.nl…")]
     assert seen[0]["tools"] == ["web_search", "search_site", "search_pubmed", "open_page", "make_file"], "the profile's tools are offered"
     second = seen[1]["messages"]

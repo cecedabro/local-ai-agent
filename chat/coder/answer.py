@@ -121,7 +121,8 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
     messages = context.build_messages(db, chat)
     cfg = profiles.config(db, chat["username"], chat["profile"])
     specs = tools.tool_specs(cfg) + [files.TOOL]
-    yield phase("reading")
+    yield phase("thinking")         # the model reads the prompt, then thinks (SPEC §11.3)
+    shown = "thinking"              # the phase on screen, so a new round's reasoning doesn't repeat it
 
     # Step 3-4: Tool rounds loop
     sources: list[dict] = []
@@ -155,6 +156,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                 except gateway.Busy:
                     if not waited:
                         yield phase("waiting")
+                        shown = "waiting"
                         waited = True
                     if clock() - start >= settings.WAIT_LIMIT:
                         yield sse("error", {"error": "The model is still busy, try again in a minute.", "status": 503})
@@ -182,9 +184,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
             async for tag, val in events():
                 if tag == "reasoning":
-                    if not hasattr(events, "_thinking_sent") or not events._thinking_sent:
+                    if shown != "thinking":
                         yield phase("thinking")
-                        events._thinking_sent = True
+                        shown = "thinking"
                     if val:
                         th0 = th0 or clock()
                         thinking_text += val
@@ -196,6 +198,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                         if not content_started:
                             content_started = True
                             yield phase("writing")
+                            shown = "writing"
                             t0 = clock()
                         said += show
                         text += show
@@ -245,6 +248,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                         except (ValueError, TypeError, AttributeError):
                             fname = "a file"
                         yield sse("phase", {"phase": "writing", "label": f"Making {fname}…"})
+                        shown = "writing"
                         result, made_file = make_file(db, chat["username"], arguments)
                         if made_file:
                             made.append(made_file)
@@ -253,6 +257,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                         continue
                     ph, label = tools.describe(name, arguments)
                     yield sse("phase", {"phase": ph, "label": label})
+                    shown = ph
 
                     result, found = await run_tool(name, arguments, cfg, client, settings.SEARXNG_URL)
                     if isinstance(found, dict):
@@ -284,6 +289,7 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                 # Continue the loop if the model has already written text
                 if said:
                     yield phase("writing")
+                    shown = "writing"
                     continue
                 continue
             else:
