@@ -2,6 +2,8 @@
 #   docker build -f chat/Dockerfile -t coder-chat:local .
 FROM python:3.11.11-slim
 WORKDIR /app
+# DejaVu fonts: PDFs made by files.render_pdf can show every character (SPEC §16.4)
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 COPY chat/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY chat/coder ./coder

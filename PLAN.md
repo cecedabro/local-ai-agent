@@ -1,70 +1,59 @@
-# PLAN: Clear Source, rounds 2 and 3
+# PLAN: Files in and out
 
-Clear Source (the research profile, id `evidence`) gets better searches and answers (chat/SPEC.md §14): PubMed searches
-use MeSH headings that the app checks against PubMed's MeSH database, every PubMed source gets its study type, the
-sources are ordered guidelines first, the Dutch guideline sites are default sources (with a button to add them back),
-and the trail shows the exact PubMed search. Round 3 (§15) is the research flow: understand the question, search
-(broader when too little is found, PubMed Central full text), read every source on its own and keep only word-for-word
-passages, a second round with new words when too little is useful, a checker that lets summaries be, and the sources page
-grouped. Small steps: every task names one file and a few functions; the steps are
-in their docstrings or TODO comments (`grep -n "task Fxx" <file>`). Each task has its own test.
+Dewdrop gets files both ways (chat/SPEC.md §16): you attach PDF, Word, Excel, HTML or text files to a message (their
+text goes to the model; in Clear Source they are read as sources first), the model can make a file for you with the
+`make_file` tool (Markdown, text, CSV, HTML, Word, Excel, PDF) that shows as a download card, and every answer can be
+downloaded as Markdown, Word, PDF or HTML. The work is in a new module `chat/coder/files.py` (pure functions) plus two
+routes, one tool function, two research helpers and the page. Small steps: every task names one file and a few
+functions; the steps are in their docstrings or TODO comments (`grep -n "task Dxx" <file>`). Each task has its own test.
 
 Rules for every task:
 - Non-interactive: nobody reads questions. Make the edit, run the accept command, fix what fails, stop.
-- Only change what the task names. Don't refactor, rename or move other code. Remove the TODO comment you fill in.
-- Never read a whole large file (`chat/coder/app.py` ~1050 lines, `chat/coder/tools.py` ~560): `grep -n`, then `sed -n 'a,bp'`.
-- Python: only the packages in `chat/requirements.txt`.
+- Only change what the task names. Don't refactor, rename or move other code. Remove the TODO text you fill in.
+- Never read a whole large file (`chat/coder/app.py` ~1100 lines, `chat/static/js/app.js` ~830, `chat/coder/research.py`
+  ~800): `grep -n`, then `sed -n 'a,bp'`.
+- Python: only the packages in `chat/requirements.txt` (python-docx is imported as `docx`, fpdf2 as `fpdf`, openpyxl, pypdf).
 - Do not touch tests, `chat/SPEC.md`, `chat/static/css/`, `chat/static/js/stream.js`, `chat/static/vendor/`,
-  `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, the constants `PLAN_PROMPT`, `RULES`, `RANKS`,
-  `STUDY_TYPES`, `SEED`, `PUBMED_N`, `MIN_FOUND`, `MIN_USED`, `MAX_ROUNDS`, `MAX_PASSAGES`, the
-  prompts (`*_PROMPT`), `SUMMARY_HEADINGS`, `GROUPS`, and in `chat/coder/tools.py` `looks_blocked` and `BOT_CHECK`, and in `chat/coder/tools.py` the functions `html_text`, `is_public` and `fetch_page`.
+  `chat/static/icons/`, `chat/coder/templates/`, `Makefile`, `docs/`, `chat/requirements.txt`, `chat/Dockerfile`, and in
+  `chat/coder/files.py` the constants, `MIME`, `TOOL`, `FileError`, `_html_runs`, `_font`, `_number`, `_no_formula`,
+  `csv_rows`, `_cells`, `plain`; in `chat/coder/app.py` `_download`, `api_get_file` and the security middleware.
 
-- [x] F01: In chat/coder/tools.py fill in `study_type` as its docstring says
-  accept: make chat-test K="test_step_clear and study_type"
-- [x] F02: In chat/coder/tools.py add MeSH to `pubmed_term` and `pubmed_search` (the two `TODO (task F02)` comments)
-  accept: make chat-test K="test_step_clear and (pubmed_term_mesh or pubmed_search_mesh) or test_step_tools"
-- [x] F03: In chat/coder/tools.py fill in `mesh_check` as its docstring says
-  accept: make chat-test K="test_step_clear and mesh_check"
-- [x] F04: In chat/coder/research.py do the `TODO (task F04)` comments in `parse_plan` and fill in `plan_about`
-  accept: make chat-test K="parse_plan or plan_object"
-- [x] F05: In chat/coder/research.py fill in `gather` as its docstring says
-  accept: make chat-test K="gather"
-- [x] F06: In chat/coder/research.py fill in `rank` and `order` as their docstrings say
-  accept: make chat-test K="test_step_clear and order"
-- [x] F08: In chat/coder/profiles.py fill in `missing_defaults` and in chat/coder/app.py add the route of `TODO (task F08)`
-  accept: make chat-test K="missing_defaults or add_defaults"
-- [x] F09: In chat/static/js/profiles.js wire the #add-defaults button (`TODO (task F09)`)
-  accept: node --check chat/static/js/profiles.js && make chat-test K="add_defaults"
-- [x] F11: In chat/coder/tools.py fill in `pmc_id` and `pmc_text` as their docstrings say
-  accept: make chat-test K="test_step_flow and pmc"
-- [x] F12: In chat/coder/research.py fill in `extract_messages`, `parse_quotes` and `read_one` as their docstrings say
-  accept: make chat-test K="test_step_flow and (extract or read_one)"
-- [x] F13: In chat/coder/research.py fill in `followup_messages` and do the `TODO (task F13)` comments (evidence_messages, public_sources)
-  accept: make chat-test K="followup or public_sources or evidence_messages"
-- [x] F14: In chat/coder/research.py fill in `investigate` as its docstring says
-  accept: make chat-test K="investigate"
-- [~] F15: In chat/coder/research.py do `TODO (task F15)` in `run_evidence` (run the research with `investigate`) — skipped: agent made no changes
-  accept: make chat-test K="test_step_research or test_step_clear or TestEvidenceV2 or mesh_in_a_real_answer"
-- [x] F16: In chat/coder/verify.py fill in `summary_sentences` and do `TODO (task F16)` in `check`
-  accept: make chat-test K="test_step_verify or summary_sentences"
-- [x] F17: In chat/coder/profiles.py fill in `group_of` and `label_of` and do the `TODO (task F17)` comments (profiles.public, app.py _source_json)
-  accept: make chat-test
-- [x] F18: In chat/static/js/profiles.js do the `TODO (task F18)` comments (a row per source, sources grouped)
-  accept: node --check chat/static/js/profiles.js && make chat-test
-- [x] F19: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/{app,profiles,icons}.js (see "F19 details")
+- [ ] D01: In chat/coder/files.py fill in `kind_of`, `check_zip`, `docx_text` and `xlsx_text` as their docstrings say
+  accept: make chat-test K="test_step_files and (kind_of or check_zip or docx_text or xlsx_text)"
+- [ ] D02: In chat/coder/files.py fill in `read_upload`, `fence`, `attach_block` and `disposition`
+  accept: make chat-test K="test_step_files and (read_upload_text or fence or disposition)"
+- [ ] D03: In chat/coder/files.py fill in `runs` and `blocks` (Markdown to runs and blocks)
+  accept: make chat-test K="test_step_files and (runs or blocks)"
+- [ ] D04: In chat/coder/files.py fill in `safe_name`, `render_csv` and `render_xlsx`
+  accept: make chat-test K="test_step_files and (safe_name or csv_and_xlsx)"
+- [ ] D05: In chat/coder/files.py fill in `render_html` (every text escaped, only http(s) links; use `_html_runs`)
+  accept: make chat-test K="test_step_files and render_html"
+- [ ] D06: In chat/coder/files.py fill in `render_docx`, `render_pdf` and `render`
+  accept: make chat-test K="test_step_files and not (make_file or split_files or file_sources)"
+- [ ] D07: In chat/coder/app.py fill in the routes `api_upload_file` and `api_export_message` (`TODO (task D07)`)
+  accept: make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"
+- [ ] D08: In chat/coder/answer.py fill in `make_file` as its docstring says
+  accept: make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"
+- [ ] D09: In chat/coder/research.py fill in `split_files` and `file_sources` as their docstrings say
+  accept: make chat-test K="split_files or file_sources or a_file_is_a_source or test_step_research or test_step_clear or TestEvidenceV2 or TestClearSource or file_block_format"
+- [ ] D10: In chat/static/js/app.js fill in `uploadFile` (`TODO (task D10)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [ ] D11: In chat/static/js/app.js fill in `fmtSize`, `filesOutHtml`, `addFileCard` and `dlMenu` (`TODO (task D11)`)
+  accept: node --check chat/static/js/app.js && make chat-test
+- [ ] D12: Make the browser tests pass: run `make chat-browser-test`, read the FAIL line, fix only chat/coder/ or chat/static/js/app.js (see "D12 details")
   accept: make chat-test && make chat-browser-test && node --test chat/tests/js/stream.test.mjs
-- [x] F20: Add a "## Clear Source, rounds 2 and 3" section to chat/README.md (see "F20 details")
-  accept: grep -q "## Clear Source, rounds 2 and 3" chat/README.md && grep -q "read_one" chat/README.md && make chat-test
+- [ ] D13: Add a "## Files in and out" section to chat/README.md (see "D13 details")
+  accept: grep -q "## Files in and out" chat/README.md && grep -q "make_file" chat/README.md && make chat-test
 
-## F19 details
+## D12 details
 `make chat-browser-test` drives a real headless Chromium against the app (chat/tests/browser/run.mjs; serve.py fakes the
-model, SearXNG, PubMed and MeSH). It prints one `ok`/`FAIL <name>: <reason>` line per check. Fix the first FAIL, run
-again, repeat. Console errors on the page also fail a check: read them in the FAIL line.
+model: a message with "word file" in it makes the model call make_file). Round 6 attaches notes.md and old.doc through
+#file-input, sends "make a word file <b>please</b>", and checks the chips, the download card, the Download menu and that
+both survive a reload. Read the FAIL line; it names the element it waited for. Fix the code, never the test.
 
-## F20 details
-Append to `chat/README.md` a section `## Clear Source, rounds 2 and 3` (8-12 lines): MeSH headings checked by
-`tools.mesh_check` and combined with the words (`pubmed_term`); `tools.study_type` and `research.order` (guidelines first);
-the Dutch guideline sites as default sources (+ the restore button); the flow in `research.investigate`: understand,
-search (broader when too little, PubMed Central full text via `tools.pmc_text`, bot checks skipped), read each source on
-its own (`read_one`: only word-for-word passages count), a second round with new words, write from the passages; the
-checker lets the summary sections be (`verify.summary_sentences`); the sources page grouped (`profiles.group_of`).
+## D13 details
+In chat/README.md, after the last section, add "## Files in and out" with: what you can attach (PDF, Word .docx, Excel
+.xlsx, HTML, text; max 10 MB, 200 000 characters of text), that the text (not the file) goes to the model, that Clear
+Source reads attached files first as sources, what `make_file` makes (md, txt, csv, html, docx, xlsx, pdf) and the
+"Download as" menu (`/api/messages/<id>/export`). Mention `chat/coder/files.py` and the safety rules: zip size checks,
+no formulas in CSV/Excel, escaped HTML, downloads as attachments with a strict Content-Security-Policy.

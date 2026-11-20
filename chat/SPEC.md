@@ -545,3 +545,99 @@ strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4). A
 - The sources page groups the sources (`profiles.group_of`: guidelines, medicines, research, documents, websites)
   with their names (`profiles.label_of`); each source is a row (a bubble with its letter, name, one line, switch);
   its note and PubMed strictness open below it. Profile API sources carry `"group"` and `"label"`.
+
+## 16. Files in and out
+
+Files go both ways: you attach PDF, Word, Excel, HTML or text files to a message, and the model can make a
+file for you (Markdown, text, CSV, HTML, Word, Excel or PDF). Any answer can also be downloaded as a file.
+The file work lives in a new module `chat/coder/files.py` (pure functions, no database, no network).
+
+### 16.1 Reading uploads (`files.read_upload`)
+- `POST /api/files` (multipart field `file`, a session) takes up to `MAX_UPLOAD` = 10 MB (more → **413**
+  `{"error": "That file is too big (max 10 MB)."}`). It stores the original bytes and the text read from them and
+  answers **201** `{"id", "name", "size", "kind", "tokens"}` (`tokens` = `profiles.tokens(text)`). A file that can't be
+  read → the `FileError`'s status (413 or 415) and `{"error": message}`. Names: last path part, max 120 characters.
+- `files.read_upload(name, data)` → `{"kind", "text"}`; `kind` from the extension (lower case):
+  `.pdf` → `pdf`, `.docx` → `docx`, `.xlsx` → `xlsx`, `.html`/`.htm` → `html`, `.csv` → `csv`, `.doc`/`.xls` → 415
+  "Save it as .docx or .xlsx first.", anything else → `text`.
+  - pdf: `pypdf`, at most 300 pages, pages joined by a blank line. Unreadable → 415 "That PDF could not be read.";
+    no text → 415 "That PDF has no text (is it a scan?)."
+  - docx and xlsx are zip files: more than 2000 entries or more than 50 MB unpacked → 413 "That file is too big
+    inside."; a bad zip → 415 "That Word file could not be read." / "That Excel file could not be read."
+  - docx (`files.docx_text`, stdlib `zipfile` + `xml.etree`): `word/document.xml`, the body's paragraphs and tables in
+    order. A paragraph = its `w:t` texts joined, `w:tab` → a tab, `w:br` → a newline; style `Heading1`..`Heading6` →
+    that many `#` and a space in front; a style starting with `List` or a `w:numPr` → `- ` in front; empty paragraphs are skipped. A
+    table row = its cells' texts joined by ` | `. Lines joined by `\n`.
+  - xlsx (`files.xlsx_text`, `openpyxl` read-only, values not formulas): per sheet `## <title>` and then its rows,
+    cells joined by ` | ` (None → empty, trailing empty cells dropped, empty rows skipped), at most 5000 rows in all.
+  - html: `tools.html_text(text)` (the title is dropped). text and csv: UTF-8 (a BOM is dropped); not UTF-8 or a NUL
+    byte → 415 "Only PDF, Word, Excel, HTML and text files."
+  - Text that is empty after strip → 415 "That file has no text."; more than 200 000 characters → 413 "That file is too
+    long (max 200 000 characters)."
+- The database keeps per file: `kind` (default `text`), `text` (the read text; older rows: their content decoded) and
+  `made` (0, or 1 for files the model made, §16.3). `GET /api/files/<id>` sends the original bytes with the kind's
+  type (`files.MIME`), `Content-Disposition: attachment; filename="<ascii name>"; filename*=UTF-8''<percent-encoded name>`,
+  `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`.
+- In a message an attached file adds its **text** (never the raw bytes) after the typed text:
+  `\n\nFile <name>:\n<fence>\n<text>\n<fence>` where `<fence>` = `files.fence(text)`: three backticks, or one more
+  than the longest run of backticks in the text. Stored messages list their files as `{"id", "name", "size", "kind"}`.
+
+### 16.2 Attached files in Clear Source
+- `research.split_files(content)` → `(typed, [{"name", "text"}])`: the file blocks of §16.1 at the end of a user
+  message are cut off; `typed` is what is left, stripped.
+- `run_evidence` researches the typed question; the files are read first, as sources: `research.file_sources(files)`
+  gives per file up to `DOC_PARTS` = 3 parts of `SOURCE_CHARS` characters (split at a blank line or a line end when one is
+  in the last 1000 characters of a part), each a source `{"title": name or "name (part i of k)", "url": "", "kind":
+  "file", "meta": "Your file", "text", "type": None, "site": None}`. `investigate(..., files=parts)` puts them first in
+  the candidates and reads them before the first search (phase reading `Reading your file <name>…`). A file source
+  with passages is used like any other; in the sources list its kind is `file` (group "Your files").
+
+### 16.3 Files the model makes (the `make_file` tool)
+- Every profile except Clear Source offers the tool `make_file` `{"name": string, "format": one of md, txt, csv,
+  html, docx, xlsx, pdf, "content": string}`: "Make a file the user can download. content is Markdown for md, txt, html,
+  docx and pdf; CSV (first row = the headers) for csv and xlsx. Use it when the user asks for a file or a document."
+- `answer.run_answer` runs it itself (not `tools.run_tool`): `files.render(name, format, content)`; a `FileError` → the
+  tool result `Error: <message>`. Otherwise the file is stored (`made` = 1, `text` = the content, `kind` = the
+  format), the page gets `event: file` `{"id", "name", "size", "kind"}`, and the model gets `Made <name> (<size>
+  bytes). The user sees a download card for it; do not repeat its content.` The phase while it runs: writing,
+  `Making <name>…`. The assistant message is linked to the files it made (`message_files`), and `done` carries
+  `"files": [{"id", "name", "size", "kind"}]`.
+
+### 16.4 Rendering (`files.render(name, fmt, content)` → `(bytes, mime, filename)`)
+- `fmt` not in `FORMATS` → `FileError(400, "Unknown format.")`; content longer than 200 000 characters →
+  `FileError(413, "That file is too long.")`. `filename = files.safe_name(name, fmt)`: last path part, a trailing
+  `.<fmt>` dropped, characters other than letters, digits, space, `.`, `_`, `-`, `(`, `)` → `_`, spaces collapsed,
+  stripped of spaces and dots, max 80 characters, empty → `file`; then `.<fmt>`.
+- Markdown is read by `files.blocks(md)` into a list of blocks:
+  `{"t": "h", "level": 1-6, "runs"}`, `{"t": "p", "runs"}`, `{"t": "li", "ordered": bool, "runs"}`, `{"t": "code",
+  "text"}`, `{"t": "table", "rows": [[runs, ...], ...]}` (the first row is the header; the `---` row is dropped), and
+  `{"t": "hr"}`. Runs (`files.runs(text)`) are `{"text", "b", "i", "code", "href"}` from `**bold**`, `*italic*` /
+  `_italic_`, `` `code` `` and `[text](http(s)://url)` (other link targets stay plain text).
+- md and txt: the content as UTF-8. csv: rows read with `csv` and written again, UTF-8 with a BOM; a cell starting
+  with `=`, `+`, `-` or `@` that is not a number gets a `'` in front (no formulas in a spreadsheet you open).
+- xlsx (`openpyxl`): one sheet, the CSV rows (max 10 000 rows, 100 columns, else `FileError(413, "Too many rows or
+  columns.")`); cells that are numbers become numbers; text cells stay text even when they start with `=` (never a
+  formula); the first row is bold.
+- html: a complete page (`<!doctype html>`, `<meta charset="utf-8">`, `<title>`, a small inline style) with the blocks;
+  every text is escaped and only http(s) links are links: no HTML from the content ever reaches the page.
+- docx (`python-docx`): headings (`add_heading`, level 1-6), paragraphs with bold / italic / monospace runs, links as
+  their text, list items in the styles `List Bullet` / `List Number`, code blocks in a monospace font, tables in the
+  style `Table Grid` with a bold first row, `hr` as an empty paragraph.
+- pdf (`fpdf2`, A4): the DejaVu Sans font when `files.FONT_DIR` has `DejaVuSans.ttf` (and Bold/Oblique/Mono when
+  there), else Helvetica with characters outside Latin-1 replaced by `?`; headings bigger and bold, list items with
+  `•` (`-` with Helvetica) or their number, code in a monospace font, tables with `pdf.table()`.
+
+### 16.5 Download an answer
+- `GET /api/messages/<id>/export?format=md|docx|pdf|html` (a session; the message's chat must be yours, else **404**;
+  another format → **400**) → the message rendered by `files.render`: its text, and when it has sources a `## Sources`
+  list `[n] title — url`. The name is the chat's title. Sent like `GET /api/files/<id>`.
+
+### 16.6 The page (`app.js`; markup and styles are human-owned)
+- The paperclip takes the formats of §16.1 (`#file-input` `accept`); files can also be dropped on `#composer` or pasted.
+  Each upload is a chip `<span class="file" data-kind=KIND>NAME <small>TOKENS</small><button class="x">×</button></span>`
+  in `#file-chips`; a failed upload is a chip `<span class="file err">NAME: ERROR</span>` that goes away after 6 s.
+- A `file` event (and an assistant message with files) draws in the answer, after its text:
+  `<div class="files-out"><a class="file-card" data-kind=KIND href="/api/files/ID" download>` with
+  `<span class="fi">EXT</span><b>NAME</b><small>SIZE</small></a>...</div>` (SIZE like `12 KB`).
+- A finished assistant answer's meta row has a `.dl` button that opens `.dl-menu` with links to the export of §16.5:
+  Markdown, Word, PDF, HTML.

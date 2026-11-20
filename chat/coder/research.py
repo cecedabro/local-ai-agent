@@ -562,8 +562,34 @@ def _site_first(plan: list[dict]) -> list[dict]:
     return sorted(plan, key=lambda i: 0 if i["source"].startswith("site:") else 1 if i["source"] == "pubmed" else 2)
 
 
+DOC_PARTS = 3
+_FILE_BLOCK = re.compile(r"\n\nFile (.+?):\n(`{3,})\n(.*?)\n\2(?=\n\nFile .+?:\n`{3,}\n|\Z)", re.S)
+
+
+def split_files(content: str) -> tuple[str, list[dict]]:
+    r"""TODO (task D09). A user message's typed text and its attached files (SPEC §16.2): the blocks files.attach_block made at the end.
+      blocks = _FILE_BLOCK.finditer(content) after the first "\n\nFile " that starts such a block; typed = the text before
+      the first block, stripped; files = [{"name": group 1, "text": group 3}] in order. No block -> (content.strip(), []).
+    Tests: test_step_files.py::test_split_files
+    """
+    raise NotImplementedError
+
+
+def file_sources(files: list[dict]) -> list[dict]:
+    r"""TODO (task D09). Attached files as sources (SPEC §16.2), in order. Per file: parts = up to DOC_PARTS pieces of text:
+      rest = the text stripped; while rest and fewer than DOC_PARTS parts: when len(rest) <= SOURCE_CHARS take it all;
+      else cut = rest[:SOURCE_CHARS]; at = cut.rfind("\n\n"), else cut.rfind("\n"); when at >= SOURCE_CHARS - 1000
+      cut = cut[:at]; take cut.strip() and rest = rest[len(cut):].strip()
+      each part -> {"title": name when 1 part, else f"{name} (part {i} of {k})", "url": "", "kind": "file",
+                    "meta": "Your file", "text": part, "type": None, "site": None}
+    Tests: test_step_files.py::test_file_sources
+    """
+    raise NotImplementedError
+
+
 async def investigate(question: str, cfg: dict, settings: Any, complete: Callable, t: Any = tools,
-                      stop: asyncio.Event | None = None, out: dict | None = None) -> AsyncIterator[str]:
+                      stop: asyncio.Event | None = None, out: dict | None = None,
+                      files: list[dict] | None = None) -> AsyncIterator[str]:
     r"""The research stages as SSE text (SPEC §15.1-15.5); the results go into `out`.
       out = out or {}; trail, candidates, used = [], [], []; done_q = set() of (source, query.lower()); out.update(used=used, trail=trail)
       note(step): append it to trail and return _sse("trail", {"step": step})   (yield what it returns)
@@ -610,6 +636,18 @@ async def investigate(question: str, cfg: dict, settings: Any, complete: Callabl
     yield note({"kind": "plan", "about": plan_about(plan_text),
                 "queries": [i["query"] for i in plan],
                 "mesh": [m for i in plan for m in i.get("mesh", [])]})
+
+    # SPEC §16.2: the user's own files are read first, as sources
+    for i, src in enumerate(files or [], 1):
+        if stop and stop.is_set():
+            break
+        src = {**src, "n": len(candidates) + 1}
+        candidates.append(src)
+        yield _phase("reading", f"Reading your file {src['title'][:60]}…")
+        quotes, st = await read_one(question, src, settings, complete)
+        yield note(st)
+        if quotes:
+            used.append({**src, "passages": quotes})
 
     async with httpx.AsyncClient() as client:
         for rnd in range(1, MAX_ROUNDS + 1):
@@ -685,10 +723,10 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     Tests: test_step_research.py::test_run_evidence_events_and_storage, ::test_run_evidence_nothing_found, ::test_run_evidence_flags_a_changed_quote
     """
     msgs = db.get_messages(chat["id"], chat["username"])
-    question = msgs[-1]["content"]
+    question, attached = split_files(msgs[-1]["content"])          # SPEC §16.2
     cfg = profiles.config(db, chat["username"], chat["profile"])
     out: dict = {}
-    async for ev in investigate(question, cfg, settings, complete, t, stop, out):
+    async for ev in investigate(question, cfg, settings, complete, t, stop, out, files=file_sources(attached)):
         yield ev
     sources = out.get("used", [])
     trail = out.get("trail", [])

@@ -281,8 +281,8 @@ export function codeActions(root) {
 export function sourcesHtml(sources) {
   if (!sources || !sources.length) return "";
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
-  const groups = [["guide", "Guidelines"], ["study", "Studies"], ["other", "Other sources"]];
-  const groupOf = (s) => (s.site || s.type === "Guideline" ? "guide" : s.kind === "pubmed" ? "study" : "other");
+  const groups = [["file", "Your files"], ["guide", "Guidelines"], ["study", "Studies"], ["other", "Other sources"]];
+  const groupOf = (s) => (s.kind === "file" ? "file" : s.site || s.type === "Guideline" ? "guide" : s.kind === "pubmed" ? "study" : "other");
   const item = (s) => {
     const kind = sourceKind(s);
     const meta = (s.type ? String(s.meta || "").replace(s.type, "").replace(/^\s*·\s*/, "") : s.meta) || host(s.url);
@@ -290,7 +290,7 @@ export function sourcesHtml(sources) {
       `<div><b>${escHtml(s.title || s.url)}</b><small>${kind ? `<span class="stype" data-kind="${escHtml(kind[0])}">${escHtml(kind[1])}</span> · ` : ""}` +
       `${escHtml(meta)}</small></div></summary>` +
       `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
-      `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` +
+      (s.url ? `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` : "") +
       "</div></details>";
   };
   const parts = groups.map(([g, name]) => {
@@ -306,6 +306,7 @@ const SITE_KINDS = { "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Guidelin
 
 /** A source's kind for the list under an answer: [css key, label] or null. */
 export function sourceKind(s) {
+  if (s.kind === "file") return ["file", "Your file"];
   if (s.type) return [{ Guideline: "guide", "Meta-analysis": "review", "Systematic review": "review", RCT: "rct" }[s.type] || "study", s.type];
   if (s.site) return ["guide", SITE_KINDS[s.site] || "Website"];
   return null;
@@ -331,7 +332,7 @@ export function citeLinks(el, sources) {
       for (const s of found) {
         const a = document.createElement("a");
         a.className = "cite";
-        a.href = s.url;
+        if (s.url) a.href = s.url;            // a file of yours has no link (SPEC §16.2)
         a.dataset.n = String(s.n);
         a.title = s.title || s.url;
         a.textContent = String(s.n);
