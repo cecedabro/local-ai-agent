@@ -597,7 +597,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     @app.post("/api/files")
     async def api_upload_file(request: Request) -> Response:
-        r"""TODO (task D07). Upload a file to attach (SPEC §7, §16.1). Tests: test_accept_files.py (upload), test_accept_core.py::TestFiles
+        r"""Upload a file to attach (SPEC §7, §16.1). Tests: test_accept_files.py (upload), test_accept_core.py::TestFiles
           session = _session_from_cookie(request, app.state.db); none -> 401 {"error": "unauthorized"}; username, _ = session
           form = await request.form(); file_obj = form.get("file"); None or a str -> 400 {"error": "no file"}
           content = await file_obj.read(files.MAX_UPLOAD + 1)   (read at most one byte more than allowed)
@@ -606,7 +606,30 @@ def create_app(settings: dict | None = None) -> FastAPI:
           file_id = app.state.db.add_file(username, name, len(content), content, kind=got["kind"], text=got["text"])
           201 {"id": file_id, "name", "size": len(content), "kind": got["kind"], "tokens": profiles.tokens(got["text"])}
         """
-        raise NotImplementedError
+        if request.headers.get("X-Coder") != "1":
+            return JSONResponse({"error": "missing X-Coder header"}, status_code=403)
+        session = _session_from_cookie(request, app.state.db)
+        if not session:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = session
+        form = await request.form()
+        file_obj = form.get("file")
+        if not file_obj or isinstance(file_obj, str):
+            return JSONResponse({"error": "no file"}, status_code=400)
+        content = await file_obj.read(files.MAX_UPLOAD + 1)
+        name = re.split(r"[/\\]", file_obj.filename or "")[-1][:120] or "upload"
+        try:
+            got = files.read_upload(name, content)
+        except files.FileError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status)
+        file_id = app.state.db.add_file(username, name, len(content), content, kind=got["kind"], text=got["text"])
+        return JSONResponse({
+            "id": file_id,
+            "name": name,
+            "size": len(content),
+            "kind": got["kind"],
+            "tokens": profiles.tokens(got["text"] or ""),
+        }, status_code=201)
 
     def _download(data: bytes, name: str, kind: str) -> Response:
         resp = Response(content=data, media_type=files.MIME.get(kind, "application/octet-stream"))
@@ -628,7 +651,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
 
     @app.get("/api/messages/{message_id}/export")
     async def api_export_message(request: Request, message_id: int, format: str = "md") -> Response:
-        r"""TODO (task D07). Download an answer as a file (SPEC §16.5). Tests: test_accept_files.py (export)
+        r"""Download an answer as a file (SPEC §16.5). Tests: test_accept_files.py (export)
           session as in api_get_file (401); m = app.state.db.get_message(message_id, username); None -> 404 {"error": "not found"}
           format not in ("md", "docx", "pdf", "html") -> 400 {"error": "Unknown format."}
           chat = app.state.db.get_chat(m["chat_id"], username); text = m["content"]
@@ -637,7 +660,28 @@ def create_app(settings: dict | None = None) -> FastAPI:
           data, _, name = files.render(chat["title"] if chat else "answer", format, text)  (FileError e -> {"error"}, e.status)
           return _download(data, name, format)
         """
-        raise NotImplementedError
+        session = _session_from_cookie(request, app.state.db)
+        if not session:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, _ = session
+        m = app.state.db.get_message(message_id, username)
+        if m is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if format not in ("md", "docx", "pdf", "html"):
+            return JSONResponse({"error": "Unknown format."}, status_code=400)
+        chat = app.state.db.get_chat(m["chat_id"], username)
+        text = m["content"]
+        if m.get("sources"):
+            text += "\n\n## Sources\n\n" + "\n".join(
+                f"- [{s.get('n', i + 1)}] {s.get('title') or s.get('url')}"
+                + (f" — {s['url']}" if s.get("url") else "")
+                for i, s in enumerate(m["sources"])
+            )
+        try:
+            data, _, name = files.render(chat["title"] if chat else "answer", format, text)
+        except files.FileError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status)
+        return _download(data, name, format)
 
     # ── POST /api/chats/{chat_id}/messages (streaming) ─────────────────────
 

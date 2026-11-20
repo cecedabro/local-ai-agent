@@ -912,7 +912,7 @@ def render_pdf(title: str, md: str) -> bytes:
         elif t == "empty":
             pass
 
-    return pdf.output()
+    return bytes(pdf.output())
 
 
 def _runs_text(run_list):

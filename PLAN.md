@@ -30,7 +30,7 @@ Rules for every task:
   accept: make chat-test K="test_step_files and render_html"
 - [x] D06: In chat/coder/files.py fill in `render_docx`, `render_pdf` and `render`
   accept: make chat-test K="test_step_files and not (make_file or split_files or file_sources)"
-- [ ] D07: In chat/coder/app.py fill in the routes `api_upload_file` and `api_export_message` (`TODO (task D07)`)
+- [x] D07: In chat/coder/app.py fill in the routes `api_upload_file` and `api_export_message` (`TODO (task D07)`)
   accept: make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"
 - [ ] D08: In chat/coder/answer.py fill in `make_file` as its docstring says
   accept: make chat-test K="make_file or the_model_makes_a_file or test_step_answer or test_tool_rounds"

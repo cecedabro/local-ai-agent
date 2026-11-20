@@ -111,3 +111,10 @@
 - **File**: `chat/coder/files.py` — all four functions already implemented (lines 209, 261, 282, 290).
 - `make chat-test K="test_step_files and (read_upload_text or fence or disposition)"` passes (3/3).
 - `make check` passes (36/36). No code changes needed.
+
+## Task D07 - `api_upload_file` and `api_export_message` routes
+- **File**: `chat/coder/app.py:599-700` — filled in both routes (replaced `raise NotImplementedError`).
+- **Change** (`api_upload_file`): POST `/api/files` with `X-Coder` header + session cookie validation; parses form, enforces size/kind via `files.read_upload`, stores via `db.add_file`, returns 201 `{id, name, size, kind, tokens}`.
+- **Change** (`api_export_message`): GET `/api/messages/{id}/export?format=` validates session/message ownership/format; appends sources to markdown when format is md/html; renders via `files.render(fmt, content, sources_markdown)`; returns download with appropriate content-disposition and security headers (`X-Content-Type: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`).
+- **Fix**: `render_pdf()` in `files.py:915` now wraps `pdf.output()` in `bytes()` — fpdf2 returns `bytearray` by default, which caused `AttributeError` during httpx multipart uploads.
+- `make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"` passes (7/7). `make check` passes (36/36).
