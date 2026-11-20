@@ -236,9 +236,15 @@ def read_upload(name: str, data: bytes) -> dict:
             raise FileError(415, "That PDF has no text (is it a scan?).")
         return {"kind": "pdf", "text": text}
     elif kind == "docx":
-        return {"kind": "docx", "text": docx_text(data)}
+        text = docx_text(data)
+        if not text.strip():
+            raise FileError(415, "That file has no text.")
+        return {"kind": "docx", "text": text}
     elif kind == "xlsx":
-        return {"kind": "xlsx", "text": xlsx_text(data)}
+        text = xlsx_text(data)
+        if not text.strip():
+            raise FileError(415, "That file has no text.")
+        return {"kind": "xlsx", "text": text}
     else:
         try:
             text = data.decode("utf-8")
@@ -742,7 +748,7 @@ def render_docx(md: str) -> bytes:
     for b in blocks(md):
         t = b["t"]
         if t == "h":
-            par = d.add_heading(level=b["level"] - 1)
+            par = d.add_heading(level=b["level"])
             par.clear()
             for r in b["runs"]:
                 run = par.add_run(r["text"])
@@ -772,6 +778,7 @@ def render_docx(md: str) -> bytes:
                     cell = tbl.cell(ri, ci)
                     cell.text = ""
                     p = cell.paragraphs[0]
+                    p.clear()
                     if ri == 0:
                         _docx_runs(p, cell_runs, bold=True)
                     else:
@@ -808,7 +815,112 @@ def render_pdf(title: str, md: str) -> bytes:
       Returns bytes(pdf.output()).
     Tests: test_step_files.py::test_render_pdf
     """
-    raise NotImplementedError
+    from fpdf import FPDF
+    pdf = FPDF(format="A4", unit="mm")
+    pdf.set_margins(18, 18, 18)
+    pdf.auto_page_break = True
+    body_font, mono_font, unicode = _font(pdf)
+
+    def safe_text(text: str) -> str:
+        if unicode:
+            return text
+        return text.encode("latin-1", "replace").decode("latin-1")
+
+    def write_runs(run_list, font=body_font, size=11):
+        pdf.set_font(font, "", size)
+        for r in run_list:
+            style = ""
+            if r["b"] and r["i"]:
+                style = "BI"
+            elif r["b"]:
+                style = "B"
+            elif r["i"]:
+                style = "I"
+            if r["code"]:
+                pdf.set_font(mono_font, "", size)
+            else:
+                pdf.set_font(font, style, size)
+            pdf.write(text=safe_text(r["text"]))
+            if r["code"]:
+                pdf.set_font(font, style if style in ("", "B", "I", "BI") else "", size)
+
+    bs = blocks(md)
+    pdf.add_page()
+    h_sizes = [20, 16, 14, 12, 12, 12]
+    li_count = 0
+
+    for b in bs:
+        t = b["t"]
+        if t == "h":
+            level = b["level"]
+            pdf.set_font(body_font, "B", h_sizes[level - 1])
+            pdf.write(text=safe_text(_runs_text(b["runs"])))
+            pdf.ln(4)
+        elif t == "p":
+            pdf.set_font(body_font, "", 11)
+            for r in b["runs"]:
+                style = ""
+                if r["b"]:
+                    style = "B"
+                elif r["i"]:
+                    style = "I"
+                pdf.set_font(body_font, style, 11)
+                pdf.write(text=safe_text(r["text"]))
+            pdf.ln(4)
+        elif t == "li":
+            n = b["ordered"]
+            if n:
+                li_count += 1
+                prefix = f"{li_count}. "
+            else:
+                li_count = 0
+                prefix = "• " if unicode else "- "
+            pdf.set_font(body_font, "", 11)
+            pdf.write(text=prefix)
+            for r in b["runs"]:
+                style = ""
+                if r["b"]:
+                    style = "B"
+                elif r["i"]:
+                    style = "I"
+                pdf.set_font(body_font, style, 11)
+                pdf.write(text=safe_text(r["text"]))
+            pdf.ln(4)
+        elif t == "code":
+            pdf.set_font(mono_font, "", 9.5)
+            pdf.multi_cell(w=0, h=5, text=safe_text(b["text"]))
+            pdf.ln(2)
+        elif t == "table":
+            rows_data = []
+            for row in b["rows"]:
+                rows_data.append([safe_text(_runs_text(cell)) for cell in row])
+            pdf.table(
+                table_width=0,
+                header_row=rows_data[0] if rows_data else [],
+                rows=rows_data[1:] if len(rows_data) > 1 else [],
+                default_col=dict(min_width=40),
+                default_row=dict(padding=2),
+                align_thead="L",
+                align_th_body="L",
+                align_tbody="L",
+            )
+            pdf.ln(2)
+        elif t == "hr":
+            y = pdf.get_y()
+            pdf.line(18, y, 18 + pdf.w - 36, y)
+            pdf.ln(4)
+        elif t == "empty":
+            pass
+
+    return pdf.output()
+
+
+def _runs_text(run_list):
+    """Join run texts without formatting."""
+    return "".join(r["text"] for r in run_list)
+
+
+
 
 
 def render(name: str, fmt: str, content: str) -> tuple[bytes, str, str]:
@@ -817,10 +929,28 @@ def render(name: str, fmt: str, content: str) -> tuple[bytes, str, str]:
       content = str(content); len > MAX_TEXT -> FileError(413, "That file is too long.")
       filename = safe_name(name, fmt); title = filename without its extension
       md/txt -> content.encode("utf-8"); csv -> render_csv; xlsx -> render_xlsx; html -> render_html(title, content);
-      docx -> render_docx; pdf -> render_pdf(title, content); mime = MIME[fmt]
+      docx -> render_docx(content); pdf -> render_pdf(title, content); mime = MIME[fmt]
     Tests: test_step_files.py::test_render
     """
-    raise NotImplementedError
+    fmt = str(fmt).lower().lstrip(".")
+    if fmt not in FORMATS:
+        raise FileError(400, "Unknown format.")
+    content = str(content)
+    if len(content) > MAX_TEXT:
+        raise FileError(413, "That file is too long.")
+    filename = safe_name(name, fmt)
+    title = filename.rsplit(".", 1)[0] if "." in filename else filename
+    fmt_map = {
+        "md": (content.encode("utf-8"), ),
+        "txt": (content.encode("utf-8"), ),
+        "csv": (render_csv(content), ),
+        "xlsx": (render_xlsx(content), ),
+        "html": (render_html(title, content), ),
+        "docx": (render_docx(content), ),
+        "pdf": (render_pdf(title, content), ),
+    }
+    data = fmt_map[fmt][0]
+    return data, MIME[fmt], f"{filename}.{fmt}" if not filename.endswith(f".{fmt}") else filename
 
 
 # ------------------------------------------------------------------ the make_file tool (SPEC §16.3)

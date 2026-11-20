@@ -28,7 +28,7 @@ Rules for every task:
   accept: make chat-test K="test_step_files and (safe_name or csv_and_xlsx)"
 - [x] D05: In chat/coder/files.py fill in `render_html` (every text escaped, only http(s) links; use `_html_runs`)
   accept: make chat-test K="test_step_files and render_html"
-- [ ] D06: In chat/coder/files.py fill in `render_docx`, `render_pdf` and `render`
+- [x] D06: In chat/coder/files.py fill in `render_docx`, `render_pdf` and `render`
   accept: make chat-test K="test_step_files and not (make_file or split_files or file_sources)"
 - [ ] D07: In chat/coder/app.py fill in the routes `api_upload_file` and `api_export_message` (`TODO (task D07)`)
   accept: make chat-test K="upload_download_and_attach or limits_and_isolation or upload_kinds or download_headers or attached_file_text or export_an_answer or export_lists"
