@@ -74,3 +74,24 @@ def test_static_files_are_revalidated(tmp_path):
     c = TestClient(appmod.create_app({"DATA_DIR": str(tmp_path), "ADMIN_USER": "a", "ADMIN_PASSWORD": "pw-long-enough-1"}))
     r = c.get("/static/css/chat.css")
     assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", "a deploy reaches the browser at once"
+
+
+# ---------------------------------------------------------------- a profile seeded with an older list gets the new one once
+def test_old_clear_source_profile_gets_the_dutch_list_once(tmp_path):
+    d = dbm.DB(str(tmp_path))
+    d.init_schema()
+    d.create_user("lisa", "x", [])
+    d.add_source("lisa", "evidence", "pubmed", "PubMed", note="")
+    d.add_source("lisa", "evidence", "website", "rivm.nl", domain="rivm.nl", note="")
+    d.set_profile_settings("lisa", "evidence", seeded=True, web=True)        # what an older version left behind
+    cfg = profiles.config(d, "lisa", "evidence")
+    seed_domains = {c.get("domain") for c in profiles.SEED["evidence"] if c["kind"] == "website"}
+    have = {s["domain"] for s in cfg["sources"] if s["kind"] == "website"}
+    assert seed_domains <= have, "the Dutch defaults were added"
+    assert sum(s["kind"] == "pubmed" for s in cfg["sources"]) == 1, "PubMed not doubled"
+    assert cfg["web"] is False and d.get_profile_settings("lisa", "evidence")["seeded"] is True
+    gone = next(s for s in cfg["sources"] if s["kind"] == "website" and s["domain"] != "rivm.nl")
+    d.delete_source(gone["id"], "lisa")
+    d.set_profile_settings("lisa", "evidence", instructions="Kort.")         # saving settings keeps the list version
+    again = profiles.config(d, "lisa", "evidence")
+    assert gone["domain"] not in {s["domain"] for s in again["sources"]}, "a removed default stays removed"
