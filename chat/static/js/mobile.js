@@ -35,8 +35,8 @@
       if (theme) slot.appendChild(theme);
     } else {
       open(false);
-      if (model && home) home.insertBefore(model, theme || null);
-      if (theme && home) home.appendChild(theme);
+      if (theme && home) home.appendChild(theme);              // theme first: the model goes back in front of it
+      if (model && home) home.insertBefore(model, theme && theme.parentNode === home ? theme : null);
     }
   };
   place();

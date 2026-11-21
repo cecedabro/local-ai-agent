@@ -575,8 +575,10 @@ strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4). A
 - A checked quote is a link to its source (`.q-link[data-qn]`, opens the source card like `[n]`); a quote the model
   wrote inside a paragraph (`text. > "quote" [1] more`) is put on its own line as a blockquote before rendering.
 - `[n]` pills take the theme colour; source-type badges are soft tints with the text colour.
-- While an answer is made, a drop blobs out above the send button (`.send-drop`) with the phase in a word and the same
-  phase animation as the big drop; it sinks back when the answer ends.
+- While an answer is made, the stop button is a dewdrop (`#send.has-drop` with `.sd-orb` inside): the drop fills the
+  button with the same phase animation as the big drop and the stop square sits on top. A glass label beside it
+  (`.cbar .sd-label`) names the phase in a word that shimmers and rolls in when the phase changes. Both go away when
+  the answer ends. The working drop in the thread keeps some air above the composer.
 - The page glides down (`Follow.glide`) as the research trail grows.
 - What you type is kept per chat in the browser (`localStorage "dewdrop-draft:<chat id | new>"`) until you send it.
 - Profiles page: a top bar (← Chat, title, profile switch); a profile card, instructions and context on the left, sources

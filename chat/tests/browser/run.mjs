@@ -232,9 +232,9 @@ async function main() {
     await ev(`${last("blockquote.q-ok.q-link")}.click()`);
     await waitFor(() => ev(`!!${last("details.src[open]")}`), 3000, "the quote opens its source card");
     await sendText("Helpt paracetamol bij hoofdpijn?");
-    await waitFor(() => ev(`!!document.querySelector('.dock .send-drop .orb')`), 5000, "a drop out of the send button");
+    await waitFor(() => ev(`!!document.querySelector('#send.has-drop .sd-orb') && !!document.querySelector('.cbar .sd-label b')`), 5000, "the stop button is a drop with a phase label");
     await idle();
-    await waitFor(() => ev(`!document.querySelector('.dock .send-drop')`), 3000, "the drop goes back when the answer is done");
+    await waitFor(() => ev(`!document.querySelector('#send .sd-orb') && !document.querySelector('.cbar .sd-label')`), 3000, "the drop and label go when the answer is done");
     await ev(`(()=>{const i=document.getElementById('input');i.value='a draft for later';i.dispatchEvent(new Event('input'))})()`);
     await go("/");
     await waitFor(() => ev(`document.getElementById('input').value==='a draft for later'`), 5000, "the draft is back after a reload");

@@ -590,41 +590,48 @@ async function streamAnswer(chatId, open, retryText) {
 const DROP_WORDS = { thinking: "Thinking", searching: "Searching", reading: "Reading", writing: "Writing",
   waiting: "Waiting", compressing: "Compressing" };
 /**
- * A dewdrop that blobs out of the send button while an answer is made and shows what it is doing (the same phase
- * animations as the big drop: clouds while thinking, radar while searching, lines while reading, water while writing).
- * Returns {phase(name), done()}; done() lets it sink back into the button.
+ * While an answer is made the stop button *is* a dewdrop: the drop fills the button and shows what it is doing (the
+ * same phase animations as the big drop: clouds while thinking, radar while searching, lines while reading, water
+ * while writing), the stop square sits on top, and a small label beside it names the phase.
+ * Returns {phase(name), done()}; done() lets the drop sink away and the button turn back into send.
  */
 function sendDrop() {
-  const dock = document.querySelector(".dock"), btn = $("#send");
-  if (!dock || !btn) return { phase() {}, done() {} };
-  dock.querySelector(".send-drop")?.remove();
-  const el = document.createElement("div");
-  el.className = "send-drop";
-  el.innerHTML = `<span class="sd-label">Thinking</span>${orbHtml("", "thinking")}`;
-  const place = () => {
-    const d = dock.getBoundingClientRect(), b = btn.getBoundingClientRect();
-    const top = ($("#composer") || btn).getBoundingClientRect().top;     // just above the composer, in line with the button
-    el.style.left = `${b.left - d.left + b.width / 2}px`;
-    el.style.bottom = `${d.bottom - top + 10}px`;
-  };
-  place();
-  dock.appendChild(el);
-  const o = el.querySelector(".orb");
+  const btn = $("#send");
+  if (!btn) return { phase() {}, done() {} };
+  btn.querySelector(".sd-orb")?.remove();
+  btn.parentElement.querySelector(".sd-label")?.remove();
+  const tmp = document.createElement("span");
+  tmp.innerHTML = orbHtml("", "thinking");
+  const o = tmp.firstElementChild;
+  o.classList.add("sd-orb");
+  o.setAttribute("aria-hidden", "true");
+  btn.prepend(o);
+  btn.classList.add("has-drop");
+  const label = document.createElement("span");
+  label.className = "sd-label";
+  label.setAttribute("aria-live", "polite");
+  label.innerHTML = `<b>${DROP_WORDS.thinking}</b>`;
+  btn.before(label);
+  const word = label.firstElementChild;
   const motion = startOrb(o);
-  window.addEventListener("resize", place);
   let gone = false;
   return {
     phase(name) {
       if (gone) return;
       o.dataset.phase = name;
-      el.querySelector(".sd-label").textContent = DROP_WORDS[name] || name;
+      const w = DROP_WORDS[name] || name;
+      if (word.textContent === w) return;
+      word.textContent = w;                                   // the new word rolls in (restart the animation)
+      word.classList.remove("roll");
+      void word.offsetWidth;
+      word.classList.add("roll");
     },
     done() {
       if (gone) return;
       gone = true;
-      window.removeEventListener("resize", place);
-      el.classList.add("back");
-      setTimeout(() => { motion.stop(); el.remove(); }, 450);
+      btn.classList.add("drop-out");
+      label.classList.add("out");
+      setTimeout(() => { motion.stop(); o.remove(); label.remove(); btn.classList.remove("has-drop", "drop-out"); }, 380);
     },
   };
 }
