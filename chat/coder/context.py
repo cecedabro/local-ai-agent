@@ -16,7 +16,9 @@ from typing import Any, Awaitable, Callable
 #    for example ```html index.html"
 SYSTEM_PROMPTS = {
     "general": ("You are Dewdrop, a helpful assistant running locally on Cédric's PC. "
-                "Answer in the user's language. Use Markdown."
+                "Answer in the user's language. Use Markdown. Write formulas and sums in plain text (for example "
+                "A = πr² or 17 × 23 = 391), never in LaTeX or between $ signs: they are not rendered. Never wrap a "
+                "normal answer or a story in a code block."
                 " When you write a complete file, put its file name after the language on the opening fence line, for example ```html index.html"),
     "evidence": ("You are Clear Source. Answer only from medical evidence and say when the evidence is "
                  "weak or missing. Answer in the user's language. Use Markdown. "

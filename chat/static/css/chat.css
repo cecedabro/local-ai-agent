@@ -795,3 +795,40 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
 /* table cell alignment from Markdown (a class: the CSP refuses style attributes) */
 .bub .al-left{text-align:left}.bub .al-center{text-align:center}.bub .al-right{text-align:right}
 .pf-list .src-card .more>summary[data-saved]::after{content:"  " attr(data-saved);color:var(--ok);font-weight:600}
+
+/* ---- UX review polish (PR C) ---- */
+/* a glass dialog instead of prompt() / confirm() (dialog.js) */
+dialog.gdialog{padding:0;border:1px solid var(--stroke);border-radius:22px;background:var(--glass);color:var(--ink);
+  width:min(420px,calc(100vw - 32px));box-shadow:inset 0 1px 0 var(--hi),0 24px 60px rgba(0,30,60,.25);
+  backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5)}
+:root[data-theme=dark] dialog.gdialog{background:color-mix(in srgb,#0b1a2a 88%,transparent)}
+dialog.gdialog::backdrop{background:rgba(10,25,45,.28);backdrop-filter:blur(2px)}
+dialog.gdialog form{display:grid;gap:12px;padding:20px}
+dialog.gdialog h3{margin:0;font-size:17px}
+dialog.gdialog p{margin:0;color:var(--muted)}
+dialog.gdialog .gd-fields{display:grid;gap:6px}
+dialog.gdialog label{font-size:12.5px;font-weight:650;color:var(--muted);margin-top:4px}
+dialog.gdialog input,dialog.gdialog select{width:100%}
+dialog.gdialog .gd-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+dialog.gdialog button.danger{color:#fff;background:var(--bad);border-color:transparent}
+/* a Clear Source chat in the sidebar: a small teal drop instead of a code */
+.tag-cs{flex:none;width:10px;height:12px;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;
+  background:radial-gradient(circle at 40% 35%,#fff 0 18%,#5fe0c8 45%,#139b88 100%);box-shadow:0 1px 3px rgba(0,80,70,.3)}
+/* the settings gear and the theme switch's "auto" icon */
+.iconbtn.gear svg{width:18px;height:18px}
+.seg.theme label .auto-ic{width:15px;height:15px;vertical-align:-2px}
+/* "↓ Latest" on glass, clear of the stats line */
+.jump{background:var(--glass);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
+  border:1px solid var(--stroke);color:var(--ink);top:-54px}
+/* the profiles page: a quiet trash button; the note under the name */
+.pf-list .src-card .trash{width:30px;height:30px;padding:0;display:grid;place-items:center;color:var(--muted);background:none;
+  border:0;box-shadow:none;opacity:.7}
+.pf-list .src-card .trash:hover{color:var(--bad);opacity:1}
+.pf-list .src-card .trash svg{width:17px;height:17px}
+.pf-list .src-card .who small.sub{margin-top:1px;color:var(--muted);opacity:.85}
+@media (max-width:760px){
+  .m-who{display:none}                                   /* the stats line: "558 tokens · 38 tok/s" fits */
+  .trail .rows .step{grid-template-columns:minmax(0,1fr) auto}
+  .trail .rows .where{grid-column:1/-1;font-size:11.5px}
+  .trail .rows .what{min-width:0}
+}

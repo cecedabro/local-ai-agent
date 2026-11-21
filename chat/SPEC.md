@@ -611,6 +611,15 @@ read gives its search summary as the source text ("· search summary").
   medicines, studies, patient information, web pages (only web pages: one group "Sources"). Its labels, the short
   answer's label and the checker's note follow the answer's language (`langOf`: Dutch or English).
 - A source's note on the profiles page shows "Saved ✓" after it is stored. The PubMed years include 15 (Balanced).
+- Polish (UX review): new, rename and delete of chats and folders, removing a source and adding a website use a glass
+  dialog (`static/js/dialog.js` `ask()`), not prompt()/confirm(). Adding a website asks its address, name, group and
+  note; PATCH …/sources/ID takes `title` and, for websites, `group` (stored in its filters, used by `group_of`). A
+  Clear Source chat in the sidebar has a small teal drop (`.tag-cs`), the user line shows "Admin" / "Clear Source"
+  (not the right slugs), settings is a gear, People an icon. Example chips fill the box instead of sending ("Summarise
+  a file" also opens the file picker); Clear Source's examples follow the browser language. An answer that is one
+  ```markdown block renders as Markdown. The general prompt asks for plain-text formulas. The sources page shows a
+  source's note under its name and a quiet trash button; the budget's first part is "Built-in rules (+ your
+  instructions)". The footer links to the explainer and the source code. The CSP allows Cloudflare's analytics beacon.
 - What you type is kept per chat in the browser (`localStorage "dewdrop-draft:<chat id | new>"`) until you send it.
 - Profiles page: a top bar (← Chat, title, profile switch); a profile card, instructions and context on the left, sources
   on the right (sources right after the profile card on phones).

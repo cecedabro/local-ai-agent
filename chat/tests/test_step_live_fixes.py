@@ -169,3 +169,10 @@ def test_rank_patient_info_after_studies():
     page = lambda site: {"kind": "page", "site": site}                        # noqa: E731
     assert research.rank(page("richtlijnen.nhg.org")) < research.rank(page("farmacotherapeutischkompas.nl")) \
         < research.rank({"kind": "pubmed", "type": "RCT"}) < research.rank(page("thuisarts.nl")) < research.rank(page(None))
+
+
+def test_a_website_the_user_named_and_grouped():
+    src = {"kind": "website", "domain": "nhg.example", "title": "NHG", "filters": {"group": "guidelines"}}
+    assert profiles.group_of(src) == "guidelines" and profiles.label_of(src) == "NHG"
+    assert profiles.group_of({**src, "filters": {"group": "bogus"}}) == "websites"
+    assert profiles.label_of({"kind": "website", "domain": "lareb.nl", "title": "lareb.nl"}) == "Lareb"
