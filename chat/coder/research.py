@@ -1078,7 +1078,8 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     yield _sse("verify", {"report": report})
 
     tokens = usage["completion_tokens"] if usage else tokens
-    tps = round(tokens / (clock() - t0), 1) if t0 else None
+    first = th0 if th0 is not None else t0                  # the thinking counts in the tokens, so in the time too
+    tps = round(tokens / max(clock() - first, 0.001), 1) if first is not None else None
 
     msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped,
                             sources=public_sources(sources), trail=trail, verify=report,

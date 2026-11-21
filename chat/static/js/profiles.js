@@ -88,7 +88,7 @@ function round(n) { return Math.round(n); }
  *     <label class="switch" title="On or off"><input type="checkbox" data-enabled[ checked]><span class="track"></span></label>
  *     <button type="button" class="link danger" data-delete>Remove</button></header>
  *   for pubmed: <div class="filters"> per TYPES <label><input type="checkbox" data-type="KEY"[ checked]> LABEL</label>,
- *     <label>Last <select data-years> options "" (any), 5, 10, 20 (selected = filters.years) </select> years</label>,
+ *     <label>Last <select data-years> options "" (any), 5, 10, 15, 20 (selected = filters.years) </select> years</label>,
  *     <label><input type="checkbox" data-humans[ checked]> Humans only</label>,
  *     per LANGS <label><input type="checkbox" data-lang="KEY"[ checked]> LABEL</label> </div>
  *   <textarea data-note rows="2" maxlength="1000" placeholder="Note for the model, e.g. …">NOTE</textarea>
@@ -132,7 +132,7 @@ function cardHtml(s) {
     }
     const yr = f.years;
     h += `<label>Last <select data-years>`;
-    for (const y of ["", 5, 10, 20]) {
+    for (const y of ["", 5, 10, 15, 20]) {         // 15: the Balanced preset (PR-3)
       h += `<option value="${y}"${String(y) === String(yr ?? "") ? " selected" : ""}>${y || "any"}</option>`;
     }
     h += `</select> years</label>`;
@@ -249,8 +249,17 @@ async function start() {
       const card = target.closest("[data-source]");
       const id = card.dataset.source;
       later("note" + id, async () => {
-        try { await sourceApi(id, { note: target.value }); } catch { /* ignore */ }
-        refresh();
+        let ok = true;
+        try { ok = (await sourceApi(id, { note: target.value })).ok; } catch { ok = false; }
+        const sum = card.querySelector(".more > summary");       // a short "Saved ✓" next to Note (PR-1)
+        if (sum) {
+          sum.dataset.saved = ok ? "Saved ✓" : "Not saved";
+          clearTimeout(sum._t);
+          sum._t = setTimeout(() => { delete sum.dataset.saved; }, 1600);
+        }
+        const res = await api(`/api/profiles/${state.profile}`);      // only the budget changes: keep the cards
+        state.data = await res.json();
+        drawBudget(state.data.budget);
       });
     } else if (target.matches("[data-enabled]") && target.closest("[data-source]")) {
       const card = target.closest("[data-source]");
