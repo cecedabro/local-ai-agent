@@ -111,19 +111,11 @@ $("#sg-drop-btn").addEventListener("click", () => {
   o.classList.add("sd-orb");
   btn.prepend(o);
   btn.classList.add("stop", "has-drop");
-  const label = document.createElement("span");
-  label.className = "sd-label";
-  label.innerHTML = `<b>${WORDS[0]}</b>`;
-  btn.before(label);
-  const word = label.firstElementChild, motion = startOrb(o);
-  WORDS.forEach((w, i) => i && setTimeout(() => {
-    o.dataset.phase = w.toLowerCase();
-    word.textContent = w;
-    word.classList.remove("roll"); void word.offsetWidth; word.classList.add("roll");
-  }, i * 1600));
+  const motion = startOrb(o);
+  WORDS.forEach((w, i) => i && setTimeout(() => { o.dataset.phase = w.toLowerCase(); btn.title = `Stop · ${w}`; }, i * 1600));
   setTimeout(() => {
-    btn.classList.add("drop-out"); label.classList.add("out");
-    setTimeout(() => { motion.stop(); o.remove(); label.remove(); btn.classList.remove("stop", "has-drop", "drop-out"); }, 380);
+    btn.classList.add("drop-out");
+    setTimeout(() => { motion.stop(); o.remove(); btn.classList.remove("stop", "has-drop", "drop-out"); btn.title = "Send"; }, 380);
   }, WORDS.length * 1600);
 });
 

@@ -690,28 +690,16 @@ a.cite{cursor:pointer;margin:0 1px}
 .ai .bub blockquote.q-link:hover{background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:0 10px 10px 0}
 .ai .bub .q-inline.q-link:hover{text-decoration-color:var(--accent)}
 
-/* while an answer is made, the stop button is a dewdrop: the drop fills the button, the stop square sits on top,
-   and a small glass label beside it names the phase */
+/* while an answer is made, the stop button is a dewdrop: the drop fills the button, the stop square sits on top */
 .send{flex:none}
 .send.has-drop,.send.has-drop:hover{background:transparent;animation:none;box-shadow:0 4px 16px var(--glow)}
 .send.has-drop::after{z-index:2}
 .send .sd-orb{position:absolute;inset:0;width:auto;height:auto;transition:none;z-index:0;animation:sd-in .45s cubic-bezier(.3,1.5,.5,1) both}
 .send.has-drop .sq{z-index:3;width:12px;height:12px;margin:-6px;background:var(--primary);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 1px 4px rgba(0,40,80,.35)}
 .send.drop-out .sd-orb{animation:sd-gone .35s ease-in both}
-.cbar .sd-label{align-self:center;overflow:hidden;margin-right:8px;padding:5px 11px;border-radius:999px;white-space:nowrap;font-size:12.5px;
-  font-weight:650;color:var(--ink);background:var(--glass);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi);
-  animation:sd-label .35s .1s both}
-.cbar .sd-label.out{animation:sd-label-out .3s both}
-/* the word shimmers like the phase label in the thread, and a new phase rolls in from below */
-.cbar .sd-label b{display:inline-block;font-weight:inherit;background:linear-gradient(90deg,var(--ink) 30%,var(--accent) 50%,var(--ink) 70%);
-  background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
-.cbar .sd-label b.roll{animation:sd-roll .4s cubic-bezier(.3,1.4,.5,1),sweep 2s linear infinite}
-@keyframes sd-roll{from{opacity:0;transform:translateY(70%)}to{opacity:1;transform:none}}
 @keyframes sd-in{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
 @keyframes sd-gone{to{transform:scale(.3);opacity:0}}
-@keyframes sd-label{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
-@keyframes sd-label-out{to{opacity:0;transform:translateX(8px)}}
-@media (prefers-reduced-motion:reduce){.send .sd-orb,.send.drop-out .sd-orb,.cbar .sd-label,.cbar .sd-label.out,.cbar .sd-label b{animation:none}}
+@media (prefers-reduced-motion:reduce){.send .sd-orb,.send.drop-out .sd-orb{animation:none}}
 /* the working drop in the thread keeps some air above the composer */
 .thread{padding-bottom:36px}
 @media (max-width:760px){.thread{padding-bottom:30px}}
@@ -795,3 +783,40 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
 /* table cell alignment from Markdown (a class: the CSP refuses style attributes) */
 .bub .al-left{text-align:left}.bub .al-center{text-align:center}.bub .al-right{text-align:right}
 .pf-list .src-card .more>summary[data-saved]::after{content:"  " attr(data-saved);color:var(--ok);font-weight:600}
+
+/* ---- UX review polish (PR C) ---- */
+/* a glass dialog instead of prompt() / confirm() (dialog.js) */
+dialog.gdialog{padding:0;border:1px solid var(--stroke);border-radius:22px;background:var(--glass);color:var(--ink);
+  width:min(420px,calc(100vw - 32px));box-shadow:inset 0 1px 0 var(--hi),0 24px 60px rgba(0,30,60,.25);
+  backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5)}
+:root[data-theme=dark] dialog.gdialog{background:color-mix(in srgb,#0b1a2a 88%,transparent)}
+dialog.gdialog::backdrop{background:rgba(10,25,45,.28);backdrop-filter:blur(2px)}
+dialog.gdialog form{display:grid;gap:12px;padding:20px}
+dialog.gdialog h3{margin:0;font-size:17px}
+dialog.gdialog p{margin:0;color:var(--muted)}
+dialog.gdialog .gd-fields{display:grid;gap:6px}
+dialog.gdialog label{font-size:12.5px;font-weight:650;color:var(--muted);margin-top:4px}
+dialog.gdialog input,dialog.gdialog select{width:100%}
+dialog.gdialog .gd-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+dialog.gdialog button.danger{color:#fff;background:var(--bad);border-color:transparent}
+/* a Clear Source chat in the sidebar: a small teal drop instead of a code */
+.tag-cs{flex:none;width:10px;height:12px;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;
+  background:radial-gradient(circle at 40% 35%,#fff 0 18%,#5fe0c8 45%,#139b88 100%);box-shadow:0 1px 3px rgba(0,80,70,.3)}
+/* the settings gear and the theme switch's "auto" icon */
+.iconbtn.gear svg{width:18px;height:18px}
+.seg.theme label .auto-ic{width:15px;height:15px;vertical-align:-2px}
+/* "↓ Latest" on glass, clear of the stats line */
+.jump{background:var(--glass);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
+  border:1px solid var(--stroke);color:var(--ink);top:-54px}
+/* the profiles page: a quiet trash button; the note under the name */
+.pf-list .src-card .trash{width:30px;height:30px;padding:0;display:grid;place-items:center;color:var(--muted);background:none;
+  border:0;box-shadow:none;opacity:.7}
+.pf-list .src-card .trash:hover{color:var(--bad);opacity:1}
+.pf-list .src-card .trash svg{width:17px;height:17px}
+.pf-list .src-card .who small.sub{margin-top:1px;color:var(--muted);opacity:.85}
+@media (max-width:760px){
+  .m-who{display:none}                                   /* the stats line: "558 tokens · 38 tok/s" fits */
+  .trail .rows .step{grid-template-columns:minmax(0,1fr) auto}
+  .trail .rows .where{grid-column:1/-1;font-size:11.5px}
+  .trail .rows .what{min-width:0}
+}

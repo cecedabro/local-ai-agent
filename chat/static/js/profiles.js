@@ -2,6 +2,7 @@
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variable --w on the budget segments.
 
+import { ask } from "./dialog.js";
 const $ = (sel) => document.querySelector(sel);
 const state = { profile: null, data: null, timers: {} };
 const TYPES = [["systematic_review", "Systematic reviews"], ["meta_analysis", "Meta-analyses"], ["rct", "Randomised trials"],
@@ -70,7 +71,10 @@ function drawBudget(budget) {
   const pct = round(100 * used / max);
   $("#budget-text").textContent = `${fmt(used)} of ${fmt(max)} tokens (${pct}%)`;
   const legend = $("#budget-legend");
-  legend.innerHTML = parts.map((p) => `<li><b>${esc(p.label)}</b> ${fmt(p.tokens)}</li>`).join("");
+  // "Instructions" is the built-in rules plus yours: say so, so an empty box with 761 tokens makes sense (UI-5)
+  const own = (state.data?.instructions || "").trim();
+  const name = (p) => (p.label === "Instructions" ? (own ? "Built-in rules + your instructions" : "Built-in rules") : p.label);
+  legend.innerHTML = parts.map((p) => `<li><b>${esc(name(p))}</b> ${fmt(p.tokens)}</li>`).join("");
   const hint = $("#budget-hint");
   if (used > max / 2) {
     hint.textContent = "This profile takes more than half of the context: remove a document or shorten the notes so there is room for the conversation.";
@@ -111,9 +115,11 @@ function cardHtml(s) {
     desc = s.domain || "";
   }
   const bubble = s.kind === "file" ? "\uD83D\uDCD4" : esc(name.charAt(0).toUpperCase());
-  h += `<header><span class="bubble">${bubble}</span><div class="who"><b>${esc(name)}</b><small>${esc(desc)}</small></div>`;
+  const note = (s.note || "").trim();                 // the note under the name: what the source is for (UI-5)
+  h += `<header><span class="bubble">${bubble}</span><div class="who"><b>${esc(name)}</b><small>${esc(desc)}</small>` +
+    `${note ? `<small class="sub" title="${esc(note)}">${esc(note)}</small>` : ""}</div>`;
   h += `<label class="switch" title="${s.enabled ? "On" : "Off"}"><input type="checkbox" data-enabled${enabled}><span class="track"></span></label>`;
-  h += `<button type="button" class="link danger" data-delete>Remove</button></header>`;
+  h += `<button type="button" class="iconbtn trash" data-delete title="Remove" aria-label="Remove ${esc(name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button></header>`;
   const isPubmed = s.kind === "pubmed";
   h += `<details class="more"${isPubmed ? " open" : ""}><summary>${isPubmed ? "Strictness and note" : "Note"}</summary>`;
   if (isPubmed) {
@@ -278,7 +284,7 @@ async function start() {
       }, 0);
     }
   });
-  $("#pf-sources").addEventListener("click", (ev) => {
+  $("#pf-sources").addEventListener("click", async (ev) => {
     const presetBtn = ev.target.closest("[data-preset]");
     if (presetBtn) {
       const card = presetBtn.closest("[data-source]");
@@ -294,7 +300,7 @@ async function start() {
     if (del) {
       const card = del.closest("[data-source]");
       const id = card.dataset.source;
-      if (confirm("Remove this source?")) {
+      if (await ask({ title: "Remove this source?", text: "You can add it again later.", ok: "Remove", danger: true })) {
         const removeCard = () => card.remove();
         const restoreCard = () => {
           const container = $("#pf-sources");
@@ -340,7 +346,12 @@ async function start() {
     refresh();
   });
   $("#add-website").addEventListener("click", async () => {
-    const url = prompt("Website address (for example rivm.nl):");
+    const got = await ask({ title: "Add a website", ok: "Add", fields: [
+      { name: "url", label: "Address", placeholder: "richtlijnen.nhg.org" },
+      { name: "title", label: "Name (optional)", placeholder: "NHG-Standaarden" },
+      { name: "group", label: "Group", value: "websites", options: GROUPS.filter(([g]) => !["research", "documents"].includes(g)) },
+      { name: "note", label: "When to use it (optional)", placeholder: "First choice for primary care" }] });
+    const url = got?.url;
     if (!url) return;
     try {
       const res = await api(`/api/profiles/${state.profile}/sources`, { method: "POST", json: { kind: "website", url } });
@@ -349,6 +360,10 @@ async function start() {
         say(err.error || "Failed to add website", true);
         return;
       }
+      const made = await res.json();                     // its name, group and note (PR-2)
+      const extra = { ...(got.title ? { title: got.title } : {}), ...(got.group && got.group !== "websites" ? { group: got.group } : {}),
+        ...(got.note ? { note: got.note } : {}) };
+      if (Object.keys(extra).length) await api(`/api/profiles/${state.profile}/sources/${made.id}`, { method: "PATCH", json: extra });
     } catch (e) {
       say(String(e), true);
       return;

@@ -11,9 +11,9 @@
   <nav class="convs" id="convs" aria-label="Chats"></nav>
   <div class="me">
     <span class="avatar">{{ me.username[:1] | upper }}</span>
-    <div><b>{{ me.username }}</b><br><small>{{ me.rights | join(' · ') }}</small></div>
-    {% if 'admin' in me.rights %}<a class="iconbtn" href="/admin" title="People">⚙</a>{% endif %}
-    <a class="iconbtn" href="/account" title="Settings: icon, passkeys, how Dewdrop works">🔑</a>
+    <div><b>{{ me.username }}</b><br><small>{{ me.rights | reject('equalto', 'chat') | map('replace', 'evidence', 'Clear Source') | map('replace', 'admin', 'Admin') | join(' · ') }}</small></div>
+    {% if 'admin' in me.rights %}<a class="iconbtn gear" href="/admin" title="People" aria-label="People"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.7c2.4.3 4 1.9 4.5 4.6"/></svg></a>{% endif %}
+    <a class="iconbtn gear" href="/account" title="Settings: icon, passkeys, how Dewdrop works" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
     <button class="iconbtn" id="logout" title="Sign out">⎋</button>
   </div>
 </aside>
@@ -24,7 +24,7 @@
     <button class="profile gen" id="profile" data-profile="general"><span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span><span id="profile-name">General</span></button>
     <span id="model" class="badge ok">model ready</span>
     <div class="seg four icons theme" role="radiogroup" aria-label="Theme">
-      <input type="radio" name="theme" id="th-auto" value="auto"><label for="th-auto" title="Auto">◐</label>
+      <input type="radio" name="theme" id="th-auto" value="auto"><label for="th-auto" title="Auto"><svg class="auto-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></label>
       <input type="radio" name="theme" id="th-light" value="light"><label for="th-light" title="Light">☀</label>
       <input type="radio" name="theme" id="th-dark" value="dark"><label for="th-dark" title="Dark">☾</label>
       <input type="radio" name="theme" id="th-blossom" value="blossom"><label for="th-blossom" title="Blossom">✿</label>
@@ -59,7 +59,7 @@
     <div class="ctx"><span id="ctx-text">Context 0 / 0</span>
       <div class="bar" title="At the line, older messages are summarised automatically"><i></i><span class="line"></span></div>
       <button type="button" id="compress">Compress now</button></div>
-    <div class="hint">{{ settings.MODEL_LABEL }} {{ settings.HARDWARE_LABEL }} · <a href="{{ settings.REPO_URL }}" target="_blank" rel="noopener">how it works ↗</a></div>
+    <div class="hint">{{ settings.MODEL_LABEL }} {{ settings.HARDWARE_LABEL }} · <a href="/static/clear-source.html">how it works</a> · <a href="{{ settings.REPO_URL }}" target="_blank" rel="noopener">source code ↗</a></div>
   </div>
 </div>
 <div class="cmenu" id="cmenu" role="menu" hidden></div>

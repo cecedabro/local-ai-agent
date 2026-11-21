@@ -60,6 +60,13 @@ async function main() {
     .then((j) => { if (j.error) throw new Error(method + ": " + j.error.message); return j.result; });
   const ev = async (expr) => (await cmd("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })).result.value;
   const go = async (path) => { await cmd("Page.navigate", { url: BASE + path }); await sleep(700); };
+  /** Answer the app's glass dialog (dialog.js): fill its fields in order with `values`, then press its main button. */
+  async function answerDialog(values = []) {
+    await waitFor(() => ev(`!!document.querySelector('dialog.gdialog[open]')`), 3000, "the dialog");
+    await ev(`(()=>{const d=document.querySelector('dialog.gdialog[open]');const f=[...d.querySelectorAll('input,select')];
+      ${JSON.stringify(values)}.forEach((v,i)=>{if(f[i]) f[i].value=v;});
+      d.querySelector('.gd-actions button:last-child').click();})()`);
+  }
   await cmd("Runtime.enable"); await cmd("Page.enable"); await cmd("Network.enable");
 
   async function check(name, fn) {
@@ -155,6 +162,7 @@ async function main() {
 
   await check("round 2: folders: new folder, move a chat with the menu, delete a chat", async () => {
     await ev(`document.getElementById('new-folder').click()`);
+    await answerDialog(["Work"]);
     await waitFor(() => ev(`[...document.querySelectorAll('.folder summary span')].some(s=>s.textContent==='Work')`), 5000, "the folder Work");
     const before = await ev(`document.querySelectorAll('#convs .conv').length`);
     await ev(`document.querySelector('#convs .conv [data-chat-menu]').click()`);
@@ -164,6 +172,7 @@ async function main() {
     await ev(`document.querySelector('.folder .conv [data-chat-menu]').click()`);
     await waitFor(() => ev(`!document.getElementById('cmenu').hidden`), 3000, "the ⋯ menu");
     await ev(`document.querySelector('#cmenu button[data-act=delete]').click()`);
+    await answerDialog();
     await waitFor(() => ev(`document.querySelectorAll('#convs .conv').length===${before - 1}`), 5000, "the chat deleted");
   });
 
@@ -182,6 +191,7 @@ async function main() {
     if (pub.note !== "Alleen RCTs en reviews") throw new Error("the note was not saved: " + JSON.stringify(pub.note));
     if (!pub.filters.types.includes("review")) throw new Error("the filter was not saved: " + JSON.stringify(pub.filters));
     await ev(`document.getElementById('add-website').click()`);
+    await answerDialog(["nvk.nl"]);
     await waitFor(() => ev(`[...document.querySelectorAll('.src-card b')].some(b=>b.textContent==='nvk.nl')`), 5000, "the nvk.nl card");
     const doc = join(data, "richtlijn.md");
     (await import("node:fs")).writeFileSync(doc, "# Richtlijn\n" + "Vitamine D advies. ".repeat(300));
@@ -237,9 +247,9 @@ async function main() {
     await ev(`${last("blockquote.q-ok.q-link")}.click()`);
     await waitFor(() => ev(`!!${last("details.src[open]")}`), 3000, "the quote opens its source card");
     await sendText("Helpt paracetamol bij hoofdpijn?");
-    await waitFor(() => ev(`!!document.querySelector('#send.has-drop .sd-orb') && !!document.querySelector('.cbar .sd-label b')`), 5000, "the stop button is a drop with a phase label");
+    await waitFor(() => ev(`!!document.querySelector('#send.has-drop .sd-orb') && /^Stop/.test(document.querySelector('#send').title) && !document.querySelector('.sd-label')`), 5000, "the stop button is a drop that names the phase in its title");
     await idle();
-    await waitFor(() => ev(`!document.querySelector('#send .sd-orb') && !document.querySelector('.cbar .sd-label')`), 3000, "the drop and label go when the answer is done");
+    await waitFor(() => ev(`!document.querySelector('#send .sd-orb')`), 3000, "the drop goes when the answer is done");
     await ev(`(()=>{const i=document.getElementById('input');i.value='a draft for later';i.dispatchEvent(new Event('input'))})()`);
     await go("/");
     await waitFor(() => ev(`document.getElementById('input').value==='a draft for later'`), 5000, "the draft is back after a reload");

@@ -4,10 +4,17 @@
 import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions,
   orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify, animateTrail, langOf } from "./stream.js";
 
+import { ask } from "./dialog.js";
+
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
 /** The model sometimes writes a quote inside a paragraph: `… text. > "quote" [1] More text.` Put it on its own line as a
  * blockquote, and end the blockquote after its [n], so it renders (and is checked and clickable) like the others. */
+/** An answer that is only one ```markdown (or md) block is prose the model wrapped by mistake: show it as Markdown (CH-8). */
+export function unwrapMarkdown(text) {
+  const m = /^\s*```(?:markdown|md)[ \t]*\n([\s\S]*?)\n```\s*$/i.exec(String(text));
+  return m && !/```/.test(m[1]) ? m[1] : text;
+}
 export function fixQuotes(text) {
   return String(text).split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/).map((part, i) => (i % 2 ? part : part   // code stays as is
     .replace(/([^\n])[ \t]+>[ \t]*(["“])/g, "$1\n\n> $2")
@@ -26,7 +33,7 @@ for (const rule of ["th_open", "td_open"]) {
   };
 }
 const mdRender = md.render.bind(md);
-md.render = (src, env) => mdRender(fixQuotes(src), env);
+md.render = (src, env) => mdRender(fixQuotes(unwrapMarkdown(src)), env);
 
 // A prompt you are typing stays with its chat: kept per chat in this browser, so switching chats, apps or tabs (or a
 // reload) doesn't lose it.
@@ -59,10 +66,14 @@ const state = { chats: [], folders: [], chatId: null, profile: "general", files:
 const ORB = '<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
 const MARBLE = '<span class="orb marble" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
 const TINY = '<span class="orb tiny" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
+// Clear Source's examples follow the browser's language (UI-12): Dutch on a Dutch phone, else English.
+const DUTCH = /^nl\b/i.test(navigator.language || "");
 const EXAMPLES = {
   general: ["Explain a bug in my code", "Plan my week", "Summarise a file"],
-  evidence: ["Helpt vitamine D tegen winterdepressie?", "Is ibuprofen veilig tijdens de zwangerschap?",
-             "Wat zegt het RIVM over griepprik bij 60-plussers?"],
+  evidence: DUTCH ? ["Helpt vitamine D tegen winterdepressie?", "Is ibuprofen veilig tijdens de zwangerschap?",
+                     "Wat zegt het RIVM over griepprik bij 60-plussers?"]
+    : ["Does vitamin D help against winter depression?", "Is ibuprofen safe during pregnancy?",
+       "What does the RIVM advise on the flu shot for people over 60?"],
 };
 
 /** fetch() for /api with the CSRF header; on 401 go to /login. Returns the Response. (done) */
@@ -88,7 +99,7 @@ function convHtml(c) {
   const on = c.id === state.chatId ? " on" : "";
   let tag = "";
   if (c.profile === "evidence") {
-    tag = '<em class="tag">EH</em>';
+    tag = '<i class="tag-cs" title="Clear Source" aria-label="Clear Source"></i>';
   }
   return `<div class="conv${on}" data-id="${c.id}" draggable="true"><span>${esc(c.title)}</span>${tag}<button class="more" data-chat-menu="${c.id}" title="More" aria-label="More">⋯</button></div>`;
 }
@@ -175,13 +186,20 @@ let welcomeOrb = null;
 function drawWelcome() {
   const $messages = $("#messages");
   const username = document.body.dataset.username;
-  const chips = EXAMPLES[state.profile].map((ex) => `<button data-example="${esc(ex)}">${esc(ex)}</button>`).join("");
+  const chips = EXAMPLES[state.profile].map((ex) => `<button data-example="${esc(ex)}"${/file/i.test(ex) ? " data-file" : ""}>${esc(ex)}</button>`).join("");
   $messages.innerHTML =
     `<div class="welcome">${orbHtml("marble", "welcome")}<h2>Hi ${esc(username)}, what's up?</h2><div class="chips">${chips}</div></div>`;
   welcomeOrb?.stop();
   welcomeOrb = startOrb($messages.querySelector(".welcome .orb"), { range: 30, min: 3500, max: 6000 });
   $messages.querySelectorAll("button[data-example]").forEach((btn) => {
-    btn.addEventListener("click", () => { $("#input").value = btn.dataset.example; send(); });
+    btn.addEventListener("click", () => {                 // fill the box so you can add details (CH-9)
+      if (btn.dataset.file) { $("#file-input").click(); }
+      const input = $("#input");
+      input.value = btn.dataset.example + (btn.dataset.example.endsWith("?") ? "" : " ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
   });
 }
 
@@ -193,7 +211,8 @@ function drawWelcome() {
  *   if stopped: insert <div class="note stopped">Stopped</div> right after meta (meta.insertAdjacentHTML("afterend", ...)).
  */
 function doneMeta(meta, content, tokens, tps, stopped, retryText, msgId) {
-  meta.innerHTML = TINY + `<span>${metaText(tokens, tps)}</span><button data-copy>Copy</button><button data-retry>Retry</button>`;
+  meta.innerHTML = TINY + `<span>${esc(metaText(tokens, tps)).replace(/^Dewdrop · /, '<span class="m-who">Dewdrop · </span>')}</span>` +
+    "<button data-copy>Copy</button><button data-retry>Retry</button>";
   dlMenu(meta, msgId);
   const copy = meta.querySelector("[data-copy]");
   copy.addEventListener("click", async () => {
@@ -631,14 +650,13 @@ const DROP_WORDS = { thinking: "Thinking", searching: "Searching", reading: "Rea
 /**
  * While an answer is made the stop button *is* a dewdrop: the drop fills the button and shows what it is doing (the
  * same phase animations as the big drop: clouds while thinking, radar while searching, lines while reading, water
- * while writing), the stop square sits on top, and a small label beside it names the phase.
+ * while writing) and the stop square sits on top. The phase is named only in the button's title and aria-label.
  * Returns {phase(name), done()}; done() lets the drop sink away and the button turn back into send.
  */
 function sendDrop() {
   const btn = $("#send");
   if (!btn) return { phase() {}, done() {} };
   btn.querySelector(".sd-orb")?.remove();
-  btn.parentElement.querySelector(".sd-label")?.remove();
   const tmp = document.createElement("span");
   tmp.innerHTML = orbHtml("", "thinking");
   const o = tmp.firstElementChild;
@@ -646,31 +664,24 @@ function sendDrop() {
   o.setAttribute("aria-hidden", "true");
   btn.prepend(o);
   btn.classList.add("has-drop");
-  const label = document.createElement("span");
-  label.className = "sd-label";
-  label.setAttribute("aria-live", "polite");
-  label.innerHTML = `<b>${DROP_WORDS.thinking}</b>`;
-  btn.before(label);
-  const word = label.firstElementChild;
+  const name = (w) => { btn.title = `Stop · ${w}`; btn.setAttribute("aria-label", `Stop (${w.toLowerCase()})`); };
+  name(DROP_WORDS.thinking);
   const motion = startOrb(o);
   let gone = false;
   return {
-    phase(name) {
+    phase(phase) {
       if (gone) return;
-      o.dataset.phase = name;
-      const w = DROP_WORDS[name] || name;
-      if (word.textContent === w) return;
-      word.textContent = w;                                   // the new word rolls in (restart the animation)
-      word.classList.remove("roll");
-      void word.offsetWidth;
-      word.classList.add("roll");
+      o.dataset.phase = phase;
+      name(DROP_WORDS[phase] || phase);
     },
     done() {
       if (gone) return;
       gone = true;
       btn.classList.add("drop-out");
-      label.classList.add("out");
-      setTimeout(() => { motion.stop(); o.remove(); label.remove(); btn.classList.remove("has-drop", "drop-out"); }, 380);
+      const plain = state.busy ? "Stop" : "Send";
+      btn.title = plain;
+      btn.setAttribute("aria-label", plain);
+      setTimeout(() => { motion.stop(); o.remove(); btn.classList.remove("has-drop", "drop-out"); }, 380);
     },
   };
 }
@@ -827,12 +838,11 @@ async function moveChat(chatId, folderId) {
  * not ok -> alert("A folder name needs 1 to 60 characters."), return null; else return the new folder's id.
  */
 async function newFolder() {
-  const name = prompt("Folder name:");
-  if (name === null) return null;
-  const trimmed = name.trim();
-  if (!trimmed) { alert("A folder name needs 1 to 60 characters."); return null; }
-  const res = await api("/api/folders", { method: "POST", json: { name: trimmed } });
-  if (!res.ok) { alert("A folder name needs 1 to 60 characters."); return null; }
+  const got = await ask({ title: "New folder", fields: [{ name: "name", label: "Name", placeholder: "Work" }], ok: "Create" });
+  const trimmed = got?.name || "";
+  if (!trimmed) return null;
+  const res = await api("/api/folders", { method: "POST", json: { name: trimmed.slice(0, 60) } });
+  if (!res.ok) return null;
   return (await res.json()).id;
 }
 
@@ -905,7 +915,7 @@ async function menuAction(act, btn) {
 
   if (act === "rename" && chatId) {
     const chat = state.chats.find((c) => c.id === chatId);
-    const title = prompt("Rename chat:", chat?.title || "");
+    const title = (await ask({ title: "Rename chat", fields: [{ name: "t", label: "Name", value: chat?.title || "" }], ok: "Rename" }))?.t;
     if (!title) return;
     await api(`/api/chats/${encodeURIComponent(chatId)}`, { method: "PATCH", json: { title } });
     if (state.chatId === chatId) $("#chat-title").textContent = title;
@@ -917,7 +927,7 @@ async function menuAction(act, btn) {
     const id = await newFolder();
     if (id) await moveChat(chatId, id);
   } else if (act === "delete" && chatId) {
-    if (!confirm("Delete this chat? This cannot be undone.")) return;
+    if (!(await ask({ title: "Delete this chat?", text: "It can't be brought back.", ok: "Delete", danger: true }))) return;
     const wasOpen = state.chatId === chatId;
     await api(`/api/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
     if (wasOpen) {
@@ -928,12 +938,12 @@ async function menuAction(act, btn) {
     await loadChats();
   } else if (act === "rename-folder" && folderId) {
     const folder = state.folders.find((f) => f.id === folderId);
-    const name = prompt("Rename folder:", folder?.name || "");
+    const name = (await ask({ title: "Rename folder", fields: [{ name: "n", label: "Name", value: folder?.name || "" }], ok: "Rename" }))?.n;
     if (!name) return;
     await api(`/api/folders/${encodeURIComponent(folderId)}`, { method: "PATCH", json: { name } });
     await loadChats();
   } else if (act === "delete-folder" && folderId) {
-    if (!confirm("Delete this folder? Its chats are kept.")) return;
+    if (!(await ask({ title: "Delete this folder?", text: "Its chats are kept.", ok: "Delete", danger: true }))) return;
     await api(`/api/folders/${encodeURIComponent(folderId)}`, { method: "DELETE" });
     await loadChats();
   }
@@ -1061,7 +1071,8 @@ async function start() {
   });
   $("#chat-title").addEventListener("dblclick", async () => {
     if (!state.chatId) return;
-    const newTitle = (prompt("Rename chat:", $("#chat-title").textContent) || "").trim();
+    const newTitle = ((await ask({ title: "Rename chat", fields: [{ name: "t", label: "Name", value: $("#chat-title").textContent }],
+      ok: "Rename" }))?.t || "").trim();
     if (!newTitle) return;
     await api(`/api/chats/${encodeURIComponent(state.chatId)}`, { method: "PATCH", json: { title: newTitle } });
     $("#chat-title").textContent = newTitle;

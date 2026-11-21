@@ -143,6 +143,9 @@ def group_of(src: dict) -> str:
     if kind == "file":
         return "documents"
     if kind == "website":
+        chosen = (src.get("filters") or {}).get("group") if isinstance(src.get("filters"), dict) else None
+        if chosen in GROUPS:
+            return chosen                                  # the user put it in a group themselves (PR-2)
         domain = src.get("domain", "")
         for card in SEED.get("evidence", []):
             if card.get("domain") == domain:
@@ -158,6 +161,8 @@ def label_of(src: dict) -> str:
     kind = src.get("kind", "")
     if kind == "website":
         domain = src.get("domain", "")
+        if src.get("title") and src["title"] != domain:
+            return src["title"]                            # a name the user gave it
         for card in SEED.get("evidence", []):
             if card.get("domain") == domain and card.get("label"):
                 return card["label"]

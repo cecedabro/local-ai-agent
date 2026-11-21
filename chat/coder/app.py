@@ -106,7 +106,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     #  Security middleware (CSRF + headers)                               #
     # ------------------------------------------------------------------ #
-    CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+    # Cloudflare's Web Analytics beacon (switched on in the Cloudflare dashboard) is allowed, so it doesn't fill the
+    # console with CSP errors on every page (UX review UI-13); turn it off there to drop it.
+    CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; "
+           "connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'")
 
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
@@ -578,7 +581,7 @@ def create_app(settings: dict | None = None) -> FastAPI:
         body = await request.json()
         if not body:
             return JSONResponse({"error": "Nothing to change"}, status_code=400)
-        updatable = {"note", "enabled", "filters"} & set(body.keys())
+        updatable = {"note", "enabled", "filters", "title", "group"} & set(body.keys())
         if not updatable:
             return JSONResponse({"error": "Nothing to change"}, status_code=400)
         src = app.state.db.get_source(source_id, username)
@@ -596,6 +599,16 @@ def create_app(settings: dict | None = None) -> FastAPI:
                 return JSONResponse({"error": "Filters only for pubmed"}, status_code=400)
             clean = profiles.clean_filters(body["filters"])
             body = {**body, "filters": clean}
+        if "title" in body:                                    # a website's or document's own name (PR-2)
+            title = body["title"]
+            if not isinstance(title, str) or not title.strip() or len(title) > 120:
+                return JSONResponse({"error": "Invalid name"}, status_code=400)
+            body = {**body, "title": title.strip()}
+        if "group" in body:                                    # where a website shows on the sources page (PR-2)
+            if src.get("kind") != "website" or body["group"] not in profiles.GROUPS:
+                return JSONResponse({"error": "Invalid group"}, status_code=400)
+            body = {**body, "filters": {**(src.get("filters") or {}), "group": body["group"]}}
+            updatable = (updatable - {"group"}) | {"filters"}
         if app.state.db.update_source(source_id, username,
                                         **{k: v for k, v in body.items() if k in updatable}):
             return JSONResponse(_source_json(app.state.db.get_source(source_id, username)))
