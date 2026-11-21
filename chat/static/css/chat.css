@@ -786,3 +786,7 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
   html.kb-open .dock{padding-bottom:8px}
   html.kb-open .dock .ctx,html.kb-open .dock .hint{display:none}   /* the composer sits right on the keyboard */
 }
+
+/* Clear Source: "⚠ Sources differ" when two sources say different things */
+.ai .bub p.differ{padding:10px 14px;border-radius:14px;border:1px solid color-mix(in srgb,var(--warn,#d98a00) 45%,transparent);
+  background:color-mix(in srgb,var(--warn,#d98a00) 10%,transparent)}

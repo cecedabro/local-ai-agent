@@ -139,16 +139,19 @@ AND "last 10 years"[dp] AND humans[mh]</pre>
     <blockquote class="fl-prompt">“Copy, word for word, up to 4 passages of the source that help answer the question:
     whole sentences, exactly as written, in the source's own language; change nothing.”</blockquote>
     <div class="fl-io">
-      <div><h4>The app checks every passage</h4><p>A passage counts only if it appears <b>word for word</b> in that source
-      (spaces and quote marks aside). Anything the model paraphrased or made up is dropped right here.</p></div>
-      <div><h4>Result per source</h4><p><span class="fl-pill ok">2 quotes</span> useful, or
-      <span class="fl-pill">not relevant</span> when no real passage is left, or
+      <div><h4>The app checks every passage</h4><p>A passage counts only if it is <b>word for word</b> in that source.
+      A near miss (a changed space, quote mark or a lost "²") is swapped for the source's exact words; a passage cut off
+      mid-word runs on to the end of its sentence. A title is never a passage. Whatever is kept is word for word in the source.</p></div>
+      <div><h4>Result per source</h4><p><span class="fl-pill ok">2 quotes</span> useful,
+      <span class="fl-pill">nothing on this question</span>,
+      <span class="fl-pill">quotes didn't match the text</span>,
+      <span class="fl-pill">off topic, skipped</span> (a broad PubMed hit that shares no search word), or
       <span class="fl-pill bad">could not read</span>.</p></div>
     </div>
     <div class="fl-round"><b>Round 2.</b> Fewer than 3 useful sources? One more model call (<code>FOLLOWUP_PROMPT</code>)
     plans new searches with other words (synonyms, Dutch and English, broader terms, other sites), and steps 2 and 3
     run once more.</div>
-    <p class="fl-see"><b>You see</b> each source appear with its result: "1 quote", "not relevant".</p>
+    <p class="fl-see"><b>You see</b> each source appear with its result: "1 quote", "nothing on this question".</p>
   </div>
 </li>
 
@@ -191,7 +194,10 @@ middel; de dosering staat in het Kompas [2].</pre></div>
     <p>The finished answer goes through the checker (<code>verify.py</code>), which knows nothing about the model:</p>
     <div class="fl-checks">
       <div><span class="fl-pill ok">✓</span><p>The quote is found word for word in the source it cites.</p></div>
-      <div><span class="fl-pill bad">⚠ not in source 4</span><p>A quote that isn't there, shown in red.</p></div>
+      <div><span class="fl-pill bad">removed</span><p>Before that, a quote that is in none of its sources is taken out of
+      the answer (a near miss is first swapped for the source's exact words); a note says how many.</p></div>
+      <div><span class="fl-pill">⚠ Bronnen verschillen</span><p>When two sources disagree, the answer says so in a box,
+      and follows the guideline.</p></div>
       <div><span class="fl-pill">1 sentence has no source</span><p>A claim without a <code>[n]</code>.</p></div>
     </div>
     <p>Then the answer is stored with its sources, the research trail and the check, so it looks the same when you open it later.

@@ -223,7 +223,8 @@ def test_run_evidence_flags_a_changed_quote(db):
         yield ("content", '> "Abstract 3 shows a benefit" [1]\n\nThe evidence is weak.')
     evs = run(db, chat, stream, FakeTools())
     report = [d for e, d in evs if e == "verify"][0]["report"]
-    assert report["ok"] is False and report["quotes"][0]["why"] == "not in source 1"
+    assert report["removed"] == 1 and report["quotes"] == [], "a quote that is in no source is taken out of the answer"
+    assert [d["text"] for e, d in evs if e == "replace"] == ["The evidence is weak."]
 
 
 # ---------------------------------------------------------------- E06 tools.trail_step

@@ -20,6 +20,9 @@ SEED = {
          "note": "Prefer systematic reviews, meta-analyses, randomised trials and guidelines. Say how strong the evidence is.",
          "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 10, "humans": True,
                      "languages": [], "preset": "balanced"}},
+        {"kind": "website", "title": "richtlijnen.nhg.org", "domain": "richtlijnen.nhg.org", "group": "guidelines",
+         "label": "NHG-Standaarden",
+         "note": "Dutch GP guidelines (NHG-Standaarden): first choice for primary care, common complaints and first-line treatment."},
         {"kind": "website", "title": "richtlijnendatabase.nl", "domain": "richtlijnendatabase.nl", "group": "guidelines", "label": "Richtlijnendatabase",
          "note": "Dutch guidelines of the medical specialists (Federatie Medisch Specialisten)."},
         {"kind": "website", "title": "farmacotherapeutischkompas.nl", "domain": "farmacotherapeutischkompas.nl", "group": "medicines",
@@ -33,7 +36,7 @@ SEED = {
          "note": "The Dutch side effects centre: reported adverse reactions."},
         {"kind": "website", "title": "ge-bu.nl", "domain": "ge-bu.nl", "group": "medicines", "label": "Geneesmiddelenbulletin",
          "note": "Geneesmiddelenbulletin: independent Dutch reviews of medicines."},
-        {"kind": "website", "title": "apotheek.nl", "domain": "apotheek.nl", "group": "medicines", "label": "Apotheek.nl",
+        {"kind": "website", "title": "apotheek.nl", "domain": "apotheek.nl", "group": "patients", "label": "Apotheek.nl",
          "note": "The Dutch pharmacists' (KNMP) medicine information: use, side effects, interactions, pregnancy."},
         {"kind": "website", "title": "ema.europa.eu", "domain": "ema.europa.eu", "group": "medicines", "label": "EMA",
          "note": "European Medicines Agency (in English): approved uses, safety reviews and warnings for medicines in the EU."},
@@ -50,7 +53,7 @@ SEED = {
          "note": "World Health Organization (in English): international guidelines and fact sheets, infections, public health."},
         {"kind": "website", "title": "cdc.gov", "domain": "cdc.gov", "group": "guidelines", "label": "CDC",
          "note": "US public health agency (in English): infectious diseases, vaccination, travel; not Dutch policy."},
-        {"kind": "website", "title": "thuisarts.nl", "domain": "thuisarts.nl", "group": "guidelines", "label": "Thuisarts",
+        {"kind": "website", "title": "thuisarts.nl", "domain": "thuisarts.nl", "group": "patients", "label": "Thuisarts",
          "note": "The NHG's information for patients, based on the GP guidelines. Prefer professional sources."},
     ],
 }
@@ -126,7 +129,7 @@ def clean_filters(f: Any) -> dict:
 
 
 WEB_OFF = ("evidence",)   # profiles that start without general web search: open web pages let advocacy sites in
-GROUPS = ("guidelines", "medicines", "research", "documents", "websites")   # the sources page's sections, in order
+GROUPS = ("guidelines", "medicines", "research", "patients", "documents", "websites")   # the sources page's sections, in order
 
 
 def group_of(src: dict) -> str:
@@ -187,7 +190,7 @@ def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
 
 # Bump a profile's number when its default list grows: every profile that got an older list gets the missing cards
 # once (and, for WEB_OFF profiles, web search off). Sources the user removes afterwards stay removed.
-SEED_VERSION = {"evidence": 2}
+SEED_VERSION = {"evidence": 3}     # 2: the Dutch list; 3: NHG-Standaarden
 
 
 def config(db: Any, username: str, profile: str) -> dict:

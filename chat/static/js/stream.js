@@ -507,7 +507,7 @@ export function trailHtml(steps, open = false) {
     }).join("")}</ol>` : "",
     reads.length ? `<ol class="rows">${reads.map((s) => {
       const res = s.status === "used" ? `<b>${Number(s.quotes)}</b> quote${s.quotes === 1 ? "" : "s"}`
-        : s.status === "error" ? "could not read" : "not relevant";
+        : READ_STATUS[s.status] || "nothing on this question";
       return `<li class="step readone ${s.status === "used" ? "used" : "skip"}"><span class="where">${escHtml(host(s.url) || "")}</span>` +
         `${link(s.url, escHtml(s.title || s.url || ""), "what")}<span class="res">${res}</span></li>`;
     }).join("")}</ol>` : "",
@@ -568,8 +568,15 @@ const norm = (t) => String(t || "").replace(/[‘’]/g, "'").replace(/[“”�
  * gets class q-ok (✓, "Found word for word in source n") or q-bad (⚠ + the reason); sentences without a source and
  * references to sources that don't exist are listed in <div class="verify-note"> after `bub`.
  */
+// What a source's read step ended in (SPEC §15.4); "used" shows its number of quotes.
+const READ_STATUS = { error: "could not read", "not relevant": "nothing on this question",
+  unchecked: "quotes didn't match the text", unreadable: "the model's reply was unreadable", "off topic": "off topic, skipped" };
+
 export function markVerify(bub, report) {
   if (!bub || !report) return;
+  bub.querySelectorAll("p").forEach((p) => {        // the model's "sources disagree" line becomes a box (SPEC §15.5)
+    if (/^\s*⚠\s*(Sources differ|Bronnen verschillen)/i.test(p.textContent)) p.classList.add("differ");
+  });
   shortBox(bub);
   const qs = report.quotes || [];
   const find = (text) => qs.find((q) => {
@@ -607,6 +614,7 @@ export function markVerify(bub, report) {
   if ((report.bad_refs || []).length) bits.push(`source ${report.bad_refs.join(", ")} does not exist`);
   const bad = qs.filter((q) => !q.ok).length;
   if (bad) bits.unshift(`${bad} quote${bad === 1 ? " was" : "s were"} not found in the source`);
+  if (report.removed) bits.push(`${report.removed} quote${report.removed === 1 ? " that wasn't" : "s that weren't"} in the source removed`);
   if (!bits.length) return;
   const list = (report.uncited || []).map((u) => `<li>${escHtml(u)}</li>`).join("");
   bub.insertAdjacentHTML("afterend", `<details class="verify-note"><summary>⚠ ${escHtml(bits.join(" · "))}</summary>` +

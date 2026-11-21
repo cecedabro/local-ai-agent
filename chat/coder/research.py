@@ -36,12 +36,14 @@ PLAN_PROMPT = (
     "out drugs too new for MeSH. Websites: choose the 1 to 3 sites that fit the question best (any question about a "
     "medicine, its dose, combining it or using it while pregnant: always farmacotherapeutischkompas.nl; "
     "drugs: "
-    "farmacotherapeutischkompas.nl; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
+    "farmacotherapeutischkompas.nl; general practice, primary care and common complaints: richtlijnen.nhg.org; children's doses: kinderformularium.nl; infections and vaccination: rivm.nl; "
     "specialist care: richtlijnendatabase.nl; side effects: lareb.nl; children's growth, feeding and development (youth health care): jgzrichtlijnen.nl; palliative and end-of-life care: palliaweb.nl; pregnancy, birth and gynaecology: nvog.nl; "
     "what a medicine is for and its side effects in plain words: apotheek.nl; EU approval and safety warnings: ema.europa.eu; "
     "when the Dutch sites may be silent: nice.org.uk (UK guidelines), who.int (international), cdc.gov (infections); "
     "patient advice: thuisarts.nl) and search them with 2 to 4 key words, no mesh: Dutch sites in Dutch, nice.org.uk, "
-    "who.int, cdc.gov and ema.europa.eu in English. Use only these sources: {sources}.")
+    "who.int, cdc.gov and ema.europa.eu in English. Use only these sources: {sources}. "
+    "The user's notes on their sources are below; a source whose note fits the question must be searched (for "
+    "example a site the user added for primary care, when the question is about primary care).{notes}")
 FOLLOWUP_PROMPT = (
     "The searches below found too little for this medical question. Plan new searches with other words: synonyms, "
     "broader or related terms, the Dutch and the English word, fewer words per search, other sites. Do not repeat a "
@@ -51,7 +53,8 @@ FOLLOWUP_PROMPT = (
     "Use only these sources: {sources}.")
 EXTRACT_PROMPT = (
     "You read one source for a medical question. Copy, word for word, up to 4 passages of the source that help "
-    "answer the question: whole sentences, exactly as written, in the source's own language; change nothing. Answer "
+    "answer the question: whole sentences, exactly as written, in the source's own language; change nothing, not even "
+    "a space, a bracket or a symbol, and never copy the title, the journal or the year. Answer "
     'with JSON only: {"quotes": ["...", "..."]}, or {"quotes": []} when nothing in the source helps.')
 NO_EVIDENCE = {
     "nl": "Ik heb in de bronnen die ik doorzocht geen betrouwbaar bewijs gevonden voor deze vraag. Ik geef daarom "
@@ -78,23 +81,29 @@ def answer_language(question: str) -> str:
     return "Dutch (Nederlands)" if hits >= 2 or (hits and len(words) <= 4) else "English"
 RULES = (
     "You are Clear Source. Answer ONLY from the passages of the numbered sources below; never use your own knowledge. "
-    "Answer in the language of the question, in Markdown. Write a long, detailed answer under these ## headings "
-    "(in Dutch: Kort antwoord, Nederlandse richtlijnen, Onderzoek, Dosering en bijzondere groepen, Sterkte van het "
-    "bewijs), and leave out a part the sources do not cover:\n"
-    "## Short answer: two or three sentences.\n"
-    "## Dutch guidelines: what the guideline sources say.\n"
-    "## Studies: what the studies show, with their numbers (effects, doses, groups, follow-up).\n"
-    "## Dosing and special groups: children, pregnancy, kidney or liver function, the elderly, interactions.\n"
-    "## Strength of the evidence: the study types, their size and limitations.\n"
-    "Build every part from verbatim quotes of the sources as Markdown blockquotes followed by their number, like "
-    '> "exact words from the source" [2] (one quote per blockquote, in the source\'s own language, never translated), '
-    "and explain each quote in your own words in a normal paragraph below it, not inside the blockquote; every claim "
-    "ends with its [n]. "
-    "Quote exactly, never change numbers or words, never add facts that are not in the sources. "
-    "Use every quote only once: the short answer has no blockquotes, and each later part adds quotes and facts the "
-    "earlier parts did not use. In Dutch, write correct Dutch spelling and give the sources their own names (for "
-    "example Farmacotherapeutisch Kompas, Richtlijnendatabase). If the sources do "
-    "not answer the question, say so plainly instead of answering.")
+    "Answer in Markdown: clear and complete, but no filler. Use these sections, each as a ## heading that is ONLY the "
+    "section's name (no colon, no description after it), in this order, and leave a section out when no passage fits "
+    "it; never fill a section with general statements or with passages about something else:\n"
+    "- Short answer (in Dutch: Kort antwoord): two or three sentences with the practical answer, no blockquotes. Base "
+    "it on the strongest sources: guidelines and medicine information (such as the Farmacotherapeutisch Kompas) "
+    "before studies, studies before patient information.\n"
+    "- Dutch guidelines (Nederlandse richtlijnen): what the guideline and medicine sources say.\n"
+    "- Studies (Onderzoek): what the studies show, with their numbers (effects, doses, groups, follow-up).\n"
+    "- Dosing and special groups (Dosering en bijzondere groepen): children, pregnancy, kidney or liver function, the "
+    "elderly, interactions.\n"
+    "- Strength of the evidence (Sterkte van het bewijs): the study types, their size and limitations.\n"
+    "When sources disagree (another dose, week, threshold or advice), do not pick one silently: say so in the short "
+    "answer and add a line starting with \"⚠ Sources differ:\" (in Dutch \"⚠ Bronnen verschillen:\") that names both "
+    "sources and what each says; follow the guideline or medicine source.\n"
+    "Build the sections after the short answer from verbatim quotes as Markdown blockquotes followed by their number, "
+    'like > "exact words from the source" [2] (one quote per blockquote, a whole sentence, in the source\'s own '
+    "language, never translated), and explain each quote in your own words in a normal paragraph below it, not inside "
+    "the blockquote; every claim ends with its [n]. Quote only the passages listed under a source, exactly: never "
+    "change or shorten numbers, units, names or words, never quote a title. In your own words, keep every number, unit, "
+    "week and name exactly as the quote says it, and never add facts that are not in the sources. Use every quote only "
+    "once. Call each source by the name it has in the list (for example Farmacotherapeutisch Kompas, "
+    "Richtlijnendatabase, NHG-Standaarden, Thuisarts); never mix two names. In Dutch, write correct Dutch spelling. If "
+    "the sources do not answer the question, say so plainly instead of answering.")
 
 
 def looks_dutch(text: str) -> bool:
@@ -121,13 +130,26 @@ def enabled_sources(cfg: dict) -> list[str]:
     return result
 
 
+def source_notes(cfg: dict) -> str:
+    """One line per enabled website or PubMed card with a note: "- site:<domain> (<title>): <note>"."""
+    lines = []
+    for s in cfg.get("sources", []):
+        if not s.get("enabled", True) or not (s.get("note") or "").strip():
+            continue
+        if s["kind"] == "website":
+            lines.append(f"- site:{s['domain']} ({s.get('title') or s['domain']}): {s['note'].strip()}")
+        elif s["kind"] == "pubmed":
+            lines.append(f"- pubmed: {s['note'].strip()}")
+    return ("\n" + "\n".join(lines)) if lines else ""
+
+
 def plan_messages(question: str, cfg: dict) -> list[dict]:
     r"""The planning call's messages: [{"role": "system", "content": PLAN_PROMPT with "{sources}" replaced by
-    ", ".join(enabled_sources(cfg)) (or "none")}, {"role": "user", "content": question}].
+    ", ".join(enabled_sources(cfg)) (or "none") and "{notes}" by source_notes(cfg)}, {"role": "user", "content": question}].
     """
     src = ", ".join(enabled_sources(cfg)) if enabled_sources(cfg) else "none"
     return [
-        {"role": "system", "content": PLAN_PROMPT.replace("{sources}", src)},
+        {"role": "system", "content": PLAN_PROMPT.replace("{sources}", src).replace("{notes}", source_notes(cfg))},
         {"role": "user", "content": question},
     ]
 
@@ -328,11 +350,13 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
             "site": site,
         })
 
-    def articles(res: list[dict]) -> None:
+    def articles(res: list[dict], broad: bool = False) -> None:
         for a in res:
             parts = [p for p in (a.get("type"), a.get("journal"), a.get("year")) if p]
             meta = " · ".join(parts)
             add(a["title"], a["url"], "pubmed", meta, a.get("abstract", ""), type_=a.get("type"))
+            if broad and sources and sources[-1]["url"] == a["url"]:
+                sources[-1]["broad"] = True     # from the search without filters and MeSH: checked by on_topic
 
     for item in plan:
         source = item["source"]
@@ -369,7 +393,7 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                 await step({"kind": "search", "source": "PubMed", "query": q, "found": len(res2),
                       "url": PUBMED_WEB + quote_plus(term_or_q),
                       "mesh": [], "translation": info2.get("translation", ""), "broader": True})
-                articles(res2)
+                articles(res2, broad=True)
 
         else:
             # site:<d> or web
@@ -400,6 +424,10 @@ async def gather(plan: list[dict], cfg: dict, client: Any, searxng_url: str, t: 
                         page = await t.fetch_page(client, r["url"], allowed=allowed)
                     except tools.ToolError as e:
                         await step({"kind": "open", "title": r.get("title") or r["url"], "url": r["url"], "error": str(e)})
+                        snip = (r.get("snippet") or "").strip()
+                        if domain and len(snip) >= 80:      # a site that refuses readers: the search's own summary of it
+                            add(r.get("title") or r["url"], r["url"], "page",
+                                (urlsplit(r["url"]).hostname or "") + " · search summary", snip, site=domain)
                         continue
 
                 await step({"kind": "open", "title": page["title"], "url": page["url"]})
@@ -458,6 +486,11 @@ def extract_messages(question: str, src: dict) -> list[dict]:
 
 
 def parse_quotes(text: str) -> list[str]:
+    """The passages in the model's reply (see parse_reply), [] when it has none or could not be read."""
+    return parse_reply(text)[0]
+
+
+def parse_reply(text: str) -> tuple[list[str], bool]:
     r"""The passages in the model's reply (SPEC §15.4), [] when it has none.
       t = text stripped; a ``` fence -> its inside, stripped
       then t = from the first "{" to the last "}" when a "{" comes before any "[", else from the first "[" to the last "]"
@@ -486,19 +519,19 @@ def parse_quotes(text: str) -> list[str]:
     try:
         obj = json.loads(t)
     except ValueError:
-        return []
+        return [], False
     if isinstance(obj, dict):
         items = obj.get("quotes", obj)
     else:
         items = obj
     if not isinstance(items, list):
-        return []
+        return [], False
     result = []
     seen = set()
     for item in items:
         if not isinstance(item, str):
             continue
-        q = item.strip().strip('"“”').strip()
+        q = re.sub(r"\s+", " ", item.replace("\\n", " ")).strip().strip('"“”').strip()
         if len(re.findall(r"\w+", q)) < 4:
             continue
         if q in seen:
@@ -507,25 +540,64 @@ def parse_quotes(text: str) -> list[str]:
         result.append(q)
         if len(result) >= MAX_PASSAGES:
             break
-    return result
+    return result, True
 
 
 async def read_one(question: str, src: dict, settings: Any, complete: Callable) -> tuple[list[str], dict]:
     r"""Read one source: (passages, trail step), SPEC §15.4.
-      step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
-      reply = await complete(settings, extract_messages(question, src)); gateway.Busy or gateway.GatewayError ->
-        return [], {**step, "quotes": 0, "status": "error"}
-      found = [q for q in parse_quotes(reply) if verify.find_quote(q, src["text"])]   (only word-for-word passages count)
-      return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
-    Tests: test_step_flow.py::test_read_one
+      step = {"kind": "read", "n", "title", "url"}; the model's reply is parsed (parse_reply; a reply that is no JSON is
+      asked once more). Each passage that is not the source's title is made word for word with verify.fix_quote (exact,
+      extended to the end of a cut word's sentence, or swapped for the near-identical span of the source).
+      status: "used" (passages left), "unchecked" (passages came back but none is in the source), "not relevant" (the
+      model found nothing), "unreadable" (no JSON twice), "error" (the model did not answer). "fixed" = how many
+      passages were repaired.
+    Tests: test_step_flow.py::test_read_one, test_step_live_fixes.py
     """
     step = {"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"]}
+    msgs = extract_messages(question, src)
     try:
-        reply = await complete(settings, extract_messages(question, src))
+        reply = await complete(settings, msgs)
+        got, ok = parse_reply(reply)
+        if not ok:
+            reply = await complete(settings, msgs + [{"role": "assistant", "content": reply},
+                                                     {"role": "user", "content": 'Answer with JSON only: {"quotes": [...]}.'}])
+            got, ok = parse_reply(reply)
     except (gateway.Busy, gateway.GatewayError):
         return [], {**step, "quotes": 0, "status": "error"}
-    found = [q for q in parse_quotes(reply) if verify.find_quote(q, src["text"])]
-    return found, {**step, "quotes": len(found), "status": "used" if found else "not relevant"}
+    found: list[str] = []
+    fixed = 0
+    for q in got:
+        if verify.is_title(q, src.get("title") or "") and verify.normalize(src["text"]) != verify.normalize(src["title"]):
+            continue
+        f, how = verify.fix_quote(q, src["text"])
+        if f and f not in found and len(re.findall(r"\w+", f)) >= 4:
+            found.append(f)
+            fixed += how != "exact"
+    status = "used" if found else "unchecked" if got else "not relevant" if ok else "unreadable"
+    out = {**step, "quotes": len(found), "status": status}
+    if fixed:
+        out["fixed"] = fixed
+    return found, out
+
+
+_STOP = {"with", "from", "that", "this", "what", "when", "which", "their", "there", "about", "into", "after", "before",
+         "voor", "tijdens", "zijn", "wordt", "welke", "wanneer", "therapy", "treatment", "patients", "effect", "effects"}
+
+
+def on_topic(src: dict, item: dict) -> bool:
+    """A cheap check before the model reads a PubMed hit from the broader search (no filters, no MeSH), where unrelated
+    papers come from (SPEC §15.4): does its title or abstract share at least one of
+    the search's own words (4+ letters, compared on their first 5 letters, common words left out)? A hit that shares
+    none (a Vibrio cholerae paper for a bladder infection question) is skipped as "off topic". Websites and files
+    always pass: their search chose them."""
+    if src.get("kind") != "pubmed" or not src.get("broad"):
+        return True
+    words = re.findall(r"[a-zà-ÿ0-9]{4,}", (item.get("query") or "").lower())
+    stems = {w[:5] for w in words if w not in _STOP}
+    if not stems:
+        return True
+    hay = (src.get("title", "") + " " + (src.get("text") or "")[:3000]).lower()
+    return any(st in hay for st in stems)
 
 
 def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]:
@@ -541,7 +613,7 @@ def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]
     done = [f"- {s['source']}: {s['query']} ({s['found']} found)" for s in trail if s.get("kind") == "search"]
     used = sum(1 for s in trail if s.get("kind") == "read" and s.get("status") == "used")
     return [
-        {"role": "system", "content": FOLLOWUP_PROMPT.replace("{sources}", src)},
+        {"role": "system", "content": FOLLOWUP_PROMPT.replace("{sources}", src) + source_notes(cfg)},
         {"role": "user", "content": f"Question: {question}\n\nSearches so far:\n" + "\n".join(done) + f"\n\nUseful sources found: {used}"},
     ]
 
@@ -549,14 +621,19 @@ def followup_messages(question: str, cfg: dict, trail: list[dict]) -> list[dict]
 RANKS = {"Guideline": 1, "Meta-analysis": 2, "Systematic review": 2, "RCT": 3}
 
 
-def rank(src: dict) -> int:
-    r"""A source's group for `order` (SPEC §14.2), lower comes first:
-      kind "page" -> 0 when src.get("site") (a page of a guideline website card), else 5 (a web page)
-      anything else (PubMed) -> RANKS.get(src.get("type") or "", 4)
+def rank(src: dict) -> float:
+    r"""A source's group for `order` (SPEC §14.2), lower comes first: the user's own files and guideline sites 0,
+    medicine sites 0.5, then PubMed by type (RANKS: guidelines 1, reviews 2, RCTs 3, other 4), patient information
+    sites 4.5, other web pages 5.
     Tests: test_step_clear.py::test_order
     """
+    if src.get("kind") == "file":
+        return 0
     if src.get("kind") == "page":
-        return 0 if src.get("site") else 5
+        if not src.get("site"):
+            return 5
+        g = profiles.group_of({"kind": "website", "domain": src["site"]})
+        return {"medicines": 0.5, "patients": 4.5}.get(g, 0)
     return RANKS.get(src.get("type") or "", 4)
 
 
@@ -576,19 +653,101 @@ def evidence_messages(question: str, sources: list[dict], cfg: dict) -> list[dic
     """
     def src_block(s: dict) -> str:
         meta_or_url = s.get("meta") or s["url"]
+        head = f"[{s['n']}] {s['title']} ({meta_or_url})"
         if s.get("passages"):
             passage_lines = "\n".join(f'- "{p}"' for p in s["passages"])
-            return f"[{s['n']}] {s['title']} ({meta_or_url})\n{passage_lines}"
-        return f"[{s['n']}] {s['title']} ({meta_or_url})\n{s['text']}"
+            return f"{head}\n{passage_lines}"
+        return f"{head}\n{s['text']}"
 
     pack = "\n\n".join(src_block(s) for s in sources)
     extra = cfg.get("instructions", "")
     lang = answer_language(question)
     system = RULES + f"\n\nThe question is in {lang}: write the whole answer, headings included, in {lang}, " \
                      "even when the sources are in another language (only the quotes stay in the source's language)."
+    system += "\n\nWhat each source is: " + "; ".join(f"[{s['n']}] {source_kind(s)}" for s in sources) + "."
     if extra and extra.strip():
         system += "\n\nExtra instructions from the user:\n" + extra.strip()
     return [{"role": "system", "content": system}, {"role": "user", "content": f"Sources:\n\n{pack}\n\nQuestion: {question}"}]
+
+
+def source_kind(s: dict) -> str:
+    """What a source is, in words for the model: guideline, medicine information, study, patient information, the
+    user's file, web page."""
+    if s.get("kind") == "file":
+        return "the user's own document"
+    if s.get("kind") == "page":
+        if not s.get("site"):
+            return "web page"
+        g = profiles.group_of({"kind": "website", "domain": s["site"]})
+        return {"guidelines": "guideline", "medicines": "medicine information",
+                "patients": "patient information"}.get(g, "website")
+    return f"study ({s['type']})" if s.get("type") else "study"
+
+
+_BQ_QUOTE = re.compile(r'^\s*["“„](.+?)["”]\s*(\[\d+(?:\s*[,;]\s*\d+)*\])\s*\.?\s*$', re.S)
+_HEAD_COLON = re.compile(r"^(#{1,6})\s*([^:\n]{2,60}?)\s*:.*$", re.M)
+
+
+def tidy(answer_text: str, sources: list[dict]) -> tuple[str, int]:
+    """The written answer made true to its sources before it is stored (SPEC §15.5): (text, removed).
+    - A heading the model wrote with its instruction after a colon ("## Short answer: two or three sentences.") keeps
+      only its name.
+    - Each blockquote that is one quote and its [n]: the quote is made word for word with verify.fix_quote against the
+      cited sources (cut words run on to the end of the sentence, near-identical quotes become the exact span). A
+      quote that is in none of them, or is a source's title, is taken out; `removed` counts them.
+    Code blocks are left alone."""
+    text = _HEAD_COLON.sub(lambda m: f"{m.group(1)} {m.group(2).strip()}", answer_text)
+    by_n = {int(s["n"]): s for s in sources}
+    lines = text.split("\n")
+    out: list[str] = []
+    removed = 0
+    i, in_code = 0, False
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            in_code = not in_code
+        if in_code or not line.lstrip().startswith(">"):
+            out.append(line)
+            i += 1
+            continue
+        block = []
+        while i < len(lines) and lines[i].lstrip().startswith(">"):
+            block.append(lines[i])
+            i += 1
+        inner = " ".join(b.lstrip()[1:].strip() for b in block).strip()
+        m = _BQ_QUOTE.match(inner)
+        if not m:
+            out.extend(block)
+            continue
+        quote, cites = m.group(1), m.group(2)
+        fixed = None
+        for n in verify.cites_in(cites):
+            src = by_n.get(n)
+            if not src or verify.is_title(quote, src.get("title") or ""):
+                continue
+            f, _ = verify.fix_quote(quote, src.get("text") or "")
+            if f:
+                fixed = f
+                break
+        if fixed is None:
+            removed += 1
+            if (not out or not out[-1].strip()) and i < len(lines) and not lines[i].strip():
+                i += 1                                       # no double blank line where the quote was
+            continue
+        out.append(f'> "{fixed}" {cites}')
+    return "\n".join(out), removed
+
+
+FILE_RULES = ("Answer the question about the user's file below only from that file, in the language of the question, "
+              "in Markdown. Cite it with its number, like [1]; when exact words matter, quote them in a blockquote "
+              'like > "exact words" [1]. Do not add facts that are not in the file.')
+
+
+def file_messages(question: str, sources: list[dict]) -> list[dict]:
+    """The answer call when the question is about the attached file itself: the file is the only source."""
+    pack = "\n\n".join(f"[{s['n']}] {s['title']}\n{s['text']}" for s in sources)
+    return [{"role": "system", "content": FILE_RULES},
+            {"role": "user", "content": f"File:\n\n{pack}\n\nQuestion: {question}"}]
 
 
 def public_sources(sources: list[dict]) -> list[dict]:
@@ -636,6 +795,15 @@ def split_files(content: str) -> tuple[str, list[dict]]:
     typed = content[:blocks[0].start()].strip()
     files = [{"name": m.group(1), "text": m.group(3)} for m in blocks]
     return (typed, files)
+
+
+_ABOUT_FILE = re.compile(r"\b(this|the|attached|my|deze|dit|het|bijgevoegde|mijn)\s+(file|document|text|notes|pdf|bestand|"
+                         r"tekst|aantekeningen|verslag)\b|\b(summari[sz]e|samenvat\w*|vat\b.*\bsamen)", re.I)
+
+
+def about_the_file(question: str) -> bool:
+    """True when a question asks about the attached file itself ("Summarise this file", "Vat dit document samen")."""
+    return bool(_ABOUT_FILE.search(question or ""))
 
 
 def file_sources(files: list[dict]) -> list[dict]:
@@ -732,7 +900,7 @@ async def investigate(question: str, cfg: dict, settings: Any, complete: Callabl
             break
         src = {**src, "n": len(candidates) + 1}
         candidates.append(src)
-        yield _phase("reading", f"Reading your file {src['title'][:60]}…")
+        yield _phase("reading", f"Reading {'your document' if src.get('meta') == 'Your document' else 'your file'} {src['title'][:60]}…")
         quotes, st = await read_one(question, src, settings, complete)
         yield note(st)
         if quotes:
@@ -754,12 +922,18 @@ async def investigate(question: str, cfg: dict, settings: Any, complete: Callabl
                     yield note(s)
                 for src in got:
                     if len(candidates) < MAX_SOURCES and src.get("url") not in {c["url"] for c in candidates}:
-                        src = {**src, "n": len(candidates) + 1}
+                        src = {**src, "n": len(candidates) + 1, "text": (src.get("text") or "").replace("\\n", "\n"),
+                               "_item": item}
                         candidates.append(src)
                         new.append(src)
             for i, src in enumerate(new, 1):
                 if stop and stop.is_set():
                     break
+                item = src.pop("_item", {})
+                if not on_topic(src, item):
+                    yield note({"kind": "read", "n": src["n"], "title": src["title"], "url": src["url"],
+                                "quotes": 0, "status": "off topic"})
+                    continue
                 yield _phase("reading", f"Reading {i} of {len(new)}: {src['title'][:60]}…")
                 quotes, st = await read_one(question, src, settings, complete)
                 yield note(st)
@@ -814,9 +988,21 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     msgs = db.get_messages(chat["id"], chat["username"])
     question, attached = split_files(msgs[-1]["content"])          # SPEC §16.2
     cfg = profiles.config(db, chat["username"], chat["profile"])
+    docs = [{"name": s["title"], "text": s.get("content") or ""} for s in cfg.get("sources", [])
+            if s.get("enabled", True) and s["kind"] == "file" and (s.get("content") or "").strip()]
+    own = [{**f, "meta": "Your document"} for f in file_sources(docs)] + file_sources(attached)
     out: dict = {}
-    async for ev in investigate(question, cfg, settings, complete, t, stop, out, files=file_sources(attached)):
-        yield ev
+    if attached and about_the_file(question):
+        # a question about the attached file ("summarise this file"): the file is the only source, no search
+        out["file_only"] = True
+        out["used"] = [{**f, "n": i, "passages": []} for i, f in enumerate(file_sources(attached), 1)]
+        out["trail"] = [{"kind": "read", "n": f["n"], "title": f["title"], "url": "", "quotes": 0, "status": "used"}
+                        for f in out["used"]]
+        for st in out["trail"]:
+            yield _sse("trail", {"step": st})
+    else:
+        async for ev in investigate(question, cfg, settings, complete, t, stop, out, files=own):
+            yield ev
     sources = out.get("used", [])
     trail = out.get("trail", [])
 
@@ -853,7 +1039,8 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
     agen = None
 
     try:
-        agen = stream(settings, evidence_messages(question, sources, cfg), think)
+        msgs = file_messages(question, sources) if out.get("file_only") else evidence_messages(question, sources, cfg)
+        agen = stream(settings, msgs, think)
         async for tag, val in agen:
             if stop and stop.is_set():
                 stopped = True
@@ -881,7 +1068,13 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
             except Exception:
                 pass
 
+    clean, removed = tidy(text, sources)
+    if clean != text:
+        text = clean
+        yield _sse("replace", {"text": text})
     report = verify.check(text, sources)
+    if removed:
+        report["removed"] = removed
     yield _sse("verify", {"report": report})
 
     tokens = usage["completion_tokens"] if usage else tokens
