@@ -650,14 +650,13 @@ const DROP_WORDS = { thinking: "Thinking", searching: "Searching", reading: "Rea
 /**
  * While an answer is made the stop button *is* a dewdrop: the drop fills the button and shows what it is doing (the
  * same phase animations as the big drop: clouds while thinking, radar while searching, lines while reading, water
- * while writing), the stop square sits on top, and a small label beside it names the phase.
+ * while writing) and the stop square sits on top. The phase is named only in the button's title and aria-label.
  * Returns {phase(name), done()}; done() lets the drop sink away and the button turn back into send.
  */
 function sendDrop() {
   const btn = $("#send");
   if (!btn) return { phase() {}, done() {} };
   btn.querySelector(".sd-orb")?.remove();
-  btn.parentElement.querySelector(".sd-label")?.remove();
   const tmp = document.createElement("span");
   tmp.innerHTML = orbHtml("", "thinking");
   const o = tmp.firstElementChild;
@@ -665,31 +664,24 @@ function sendDrop() {
   o.setAttribute("aria-hidden", "true");
   btn.prepend(o);
   btn.classList.add("has-drop");
-  const label = document.createElement("span");
-  label.className = "sd-label";
-  label.setAttribute("aria-live", "polite");
-  label.innerHTML = `<b>${DROP_WORDS.thinking}</b>`;
-  btn.before(label);
-  const word = label.firstElementChild;
+  const name = (w) => { btn.title = `Stop · ${w}`; btn.setAttribute("aria-label", `Stop (${w.toLowerCase()})`); };
+  name(DROP_WORDS.thinking);
   const motion = startOrb(o);
   let gone = false;
   return {
-    phase(name) {
+    phase(phase) {
       if (gone) return;
-      o.dataset.phase = name;
-      const w = DROP_WORDS[name] || name;
-      if (word.textContent === w) return;
-      word.textContent = w;                                   // the new word rolls in (restart the animation)
-      word.classList.remove("roll");
-      void word.offsetWidth;
-      word.classList.add("roll");
+      o.dataset.phase = phase;
+      name(DROP_WORDS[phase] || phase);
     },
     done() {
       if (gone) return;
       gone = true;
       btn.classList.add("drop-out");
-      label.classList.add("out");
-      setTimeout(() => { motion.stop(); o.remove(); label.remove(); btn.classList.remove("has-drop", "drop-out"); }, 380);
+      const plain = state.busy ? "Stop" : "Send";
+      btn.title = plain;
+      btn.setAttribute("aria-label", plain);
+      setTimeout(() => { motion.stop(); o.remove(); btn.classList.remove("has-drop", "drop-out"); }, 380);
     },
   };
 }

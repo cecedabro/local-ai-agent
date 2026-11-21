@@ -596,9 +596,8 @@ read gives its search summary as the source text ("· search summary").
   wrote inside a paragraph (`text. > "quote" [1] more`) is put on its own line as a blockquote before rendering.
 - `[n]` pills take the theme colour; source-type badges are soft tints with the text colour.
 - While an answer is made, the stop button is a dewdrop (`#send.has-drop` with `.sd-orb` inside): the drop fills the
-  button with the same phase animation as the big drop and the stop square sits on top. A glass label beside it
-  (`.cbar .sd-label`) names the phase in a word that shimmers and rolls in when the phase changes. Both go away when
-  the answer ends. The working drop in the thread keeps some air above the composer.
+  button with the same phase animation as the big drop and the stop square sits on top. There is no text label; the
+  phase is named in the button's title and aria-label. The drop goes away when the answer ends. The working drop in the thread keeps some air above the composer.
 - The page glides down (`Follow.glide`) as the research trail grows.
 - UX review fixes (chat): a chat, New chat or a profile picked while the page loads is kept (the start does not open
   the latest chat over it); Retry only on the last answer; "Copied ✓"; Escape stops an answer; "Compressed ✓ a → b";

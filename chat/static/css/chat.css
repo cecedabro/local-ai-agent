@@ -690,28 +690,16 @@ a.cite{cursor:pointer;margin:0 1px}
 .ai .bub blockquote.q-link:hover{background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:0 10px 10px 0}
 .ai .bub .q-inline.q-link:hover{text-decoration-color:var(--accent)}
 
-/* while an answer is made, the stop button is a dewdrop: the drop fills the button, the stop square sits on top,
-   and a small glass label beside it names the phase */
+/* while an answer is made, the stop button is a dewdrop: the drop fills the button, the stop square sits on top */
 .send{flex:none}
 .send.has-drop,.send.has-drop:hover{background:transparent;animation:none;box-shadow:0 4px 16px var(--glow)}
 .send.has-drop::after{z-index:2}
 .send .sd-orb{position:absolute;inset:0;width:auto;height:auto;transition:none;z-index:0;animation:sd-in .45s cubic-bezier(.3,1.5,.5,1) both}
 .send.has-drop .sq{z-index:3;width:12px;height:12px;margin:-6px;background:var(--primary);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 1px 4px rgba(0,40,80,.35)}
 .send.drop-out .sd-orb{animation:sd-gone .35s ease-in both}
-.cbar .sd-label{align-self:center;overflow:hidden;margin-right:8px;padding:5px 11px;border-radius:999px;white-space:nowrap;font-size:12.5px;
-  font-weight:650;color:var(--ink);background:var(--glass);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 var(--hi);
-  animation:sd-label .35s .1s both}
-.cbar .sd-label.out{animation:sd-label-out .3s both}
-/* the word shimmers like the phase label in the thread, and a new phase rolls in from below */
-.cbar .sd-label b{display:inline-block;font-weight:inherit;background:linear-gradient(90deg,var(--ink) 30%,var(--accent) 50%,var(--ink) 70%);
-  background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2s linear infinite}
-.cbar .sd-label b.roll{animation:sd-roll .4s cubic-bezier(.3,1.4,.5,1),sweep 2s linear infinite}
-@keyframes sd-roll{from{opacity:0;transform:translateY(70%)}to{opacity:1;transform:none}}
 @keyframes sd-in{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
 @keyframes sd-gone{to{transform:scale(.3);opacity:0}}
-@keyframes sd-label{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
-@keyframes sd-label-out{to{opacity:0;transform:translateX(8px)}}
-@media (prefers-reduced-motion:reduce){.send .sd-orb,.send.drop-out .sd-orb,.cbar .sd-label,.cbar .sd-label.out,.cbar .sd-label b{animation:none}}
+@media (prefers-reduced-motion:reduce){.send .sd-orb,.send.drop-out .sd-orb{animation:none}}
 /* the working drop in the thread keeps some air above the composer */
 .thread{padding-bottom:36px}
 @media (max-width:760px){.thread{padding-bottom:30px}}
