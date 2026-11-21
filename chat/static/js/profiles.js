@@ -10,7 +10,7 @@ const LANGS = [["english", "English"], ["dutch", "Dutch"]];
 const PRESETS = [["strict", "Strict", "Reviews, meta-analyses and guidelines · last 10 years · humans"],
   ["balanced", "Balanced", "+ randomised trials · last 15 years · humans"], ["broad", "Broad", "All study types · any year"]];
 const KIND = { pubmed: "PubMed", website: "Website", file: "Document" };
-const GROUPS = [["guidelines", "Guidelines"], ["medicines", "Medicines"], ["research", "Research"], ["documents", "Your documents"],
+const GROUPS = [["guidelines", "Guidelines"], ["medicines", "Medicines"], ["research", "Research"], ["patients", "Patient information"], ["documents", "Your documents"],
   ["websites", "Other websites"]];
 
 /** fetch() for /api with the CSRF header; on 401 go to /login. (done) */

@@ -5,6 +5,7 @@ Pure functions, no I/O. Tests: chat/tests/test_step_verify.py
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "„": '"', "–": "-", "—": "-", "−": "-", "­": None})
 _ELLIPSIS = re.compile(r"\.\.\.|…|\[\s*(?:\.\.\.|…)\s*\]")
@@ -19,7 +20,7 @@ def normalize(text: str) -> str:
            return re.sub(r"\s+", " ", t).strip()
     Tests: test_step_verify.py::test_normalize
     """
-    t = (text or "").translate(_QUOTES).lower()
+    t = (text or "").replace("\\n", " ").translate(_QUOTES).lower()
     return re.sub(r"\s+", " ", t).strip()
 
 
@@ -44,6 +45,83 @@ def find_quote(quote: str, text: str) -> bool:
             return False
         pos = i + len(part)
     return True
+
+
+def _soft(text: str) -> str:
+    """normalize() without the lower case: the same characters at the same places, so a span found in
+    _soft(text).lower() can be cut out of _soft(text) with its capitals."""
+    return re.sub(r"\s+", " ", (text or "").replace("\\n", " ").translate(_QUOTES)).strip()
+
+
+ALIGN_MIN = 0.88          # how close a quote must be to a span of the source to be swapped for that span
+
+
+def fix_quote(quote: str, text: str) -> tuple[str | None, str]:
+    """A quote the model copied, made exactly true to the source (SPEC §15.4): (quote, how).
+      "exact"    it is in the source as it is (find_quote), and does not stop or start inside a word;
+      "extended" it is, but cut inside a word ("antibiotics are not indi"): it runs on to the end of that sentence;
+      "aligned"  it is not, but a span of the source is at least ALIGN_MIN alike (a changed space, quote mark, a lost
+                 "²", a dropped bracket): that span, word for word, replaces it;
+      (None, "") nothing in the source is close enough.
+    The promise stays: whatever comes back is word for word in the source."""
+    q = normalize(quote).strip(" '\".,;:")
+    if len(q) < 3:
+        return None, ""
+    src = _soft(text)
+    low = src.lower()
+    if _ELLIPSIS.search(quote or ""):
+        return (quote, "exact") if find_quote(quote, text) else (None, "")
+    i = low.find(q)
+    if i >= 0:
+        start, end = i, i + len(q)
+        cut_end = end < len(low) and low[end].isalnum() and q[-1].isalnum()
+        cut_start = start > 0 and low[start - 1].isalnum() and q[0].isalnum()
+        if not cut_end and not cut_start:
+            return quote, "exact"
+        while start > 0 and low[start - 1].isalnum():
+            start -= 1
+        m = re.compile(r"[.!?](?=\s|$)").search(low, end)
+        end = m.end() if m else len(low)
+        return src[start:end].strip(), "extended"
+    if len(q.split()) < 4:
+        return None, ""
+    bounds = [0] + [m.end() for m in re.finditer(r"[.!?;:](?=\s)\s*", low)] + [len(low)]
+    best, best_r = None, 0.0
+    for a in range(len(bounds) - 1):
+        for k in (1, 2, 3):
+            if a + k >= len(bounds):
+                break
+            s0, s1 = bounds[a], bounds[a + k]
+            win = low[s0:s1]
+            if len(win) < len(q) * 0.6:
+                continue
+            sm = SequenceMatcher(None, q, win, autojunk=False)
+            if sm.real_quick_ratio() < ALIGN_MIN * 0.5:
+                continue
+            blocks = [b for b in sm.get_matching_blocks() if b.size >= 3]
+            if not blocks:
+                continue
+            b0, b1 = blocks[0].b, blocks[-1].b + blocks[-1].size
+            while b0 > 0 and win[b0 - 1].isalnum():
+                b0 -= 1
+            while b1 < len(win) and win[b1].isalnum():
+                b1 += 1
+            r = SequenceMatcher(None, q, win[b0:b1], autojunk=False).ratio()
+            if r > best_r:
+                best, best_r = (s0 + b0, s0 + b1), r
+    if best and best_r >= ALIGN_MIN:
+        return src[best[0]:best[1]].strip(" ,;:"), "aligned"
+    return None, ""
+
+
+def is_title(quote: str, title: str) -> bool:
+    """A "quote" that is really the source's title (with its journal and year): never a passage."""
+    q, t = normalize(quote).strip(" '\".,;:"), normalize(title).strip(" .")
+    if not t or len(t) < 12:
+        return False
+    if q.startswith(t) and re.fullmatch(r"[\s.:]*(\(.*\)|.*\b(19|20)\d\d\b.*)?[\s.)]*", q[len(t):]):
+        return True                                      # the title, maybe with "(Meta-analysis · Journal · 2023)"
+    return SequenceMatcher(None, q, t, autojunk=False).ratio() >= 0.85
 
 
 def cites_in(text: str) -> list[int]:

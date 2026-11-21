@@ -154,9 +154,9 @@ class FakeTools:
         if info is not None:
             info.update({"term": f"(({mesh}) OR ({q}))", "translation": "TRANSLATED", "count": 9})
         return [{"pmid": "1", "title": "A review", "journal": "BMJ", "year": "2021", "type": "Systematic review",
-                 "abstract": "Abs 1 reports fewer bleeds overall.", "url": "https://pubmed.ncbi.nlm.nih.gov/1/"},
+                 "abstract": "Abs 1 reports fewer bleeds overall with apixaban.", "url": "https://pubmed.ncbi.nlm.nih.gov/1/"},
                 {"pmid": "2", "title": "A trial", "journal": "", "year": "2020", "type": None,
-                 "abstract": "Abs 2 reports no difference at all.", "url": "https://pubmed.ncbi.nlm.nih.gov/2/"}]
+                 "abstract": "Abs 2 reports no difference at all for apixaban.", "url": "https://pubmed.ncbi.nlm.nih.gov/2/"}]
 
     async def web_search(self, client, searxng_url, q, site=None):
         self.calls.append(("web", q, site))

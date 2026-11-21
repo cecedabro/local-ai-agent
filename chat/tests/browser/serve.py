@@ -84,7 +84,7 @@ def main() -> None:
                   "types": ["Journal Article", "Meta-Analysis"],
                   "abstract": "In patients with eGFR 15-29, apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin."},
                  {"pmid": "102", "title": "DOACs in dialysis", "journal": "BMJ", "year": "2021",
-                  "abstract": "Evidence in patients on dialysis is limited to observational studies."}]
+                  "abstract": "Evidence for apixaban in patients on dialysis is limited to observational studies."}]
     gw.search_results = [{"title": "Griepprik", "url": "https://www.rivm.nl/griepprik", "content": "Wie krijgt hem"}]
     gw.start()
     app = create_app({"DATA_DIR": data, "GATEWAY_URL": gw.url + "/v1", "GATEWAY_KEY": "k", "STATUS_URL": gw.url,

@@ -493,6 +493,7 @@ async function streamAnswer(chatId, open, retryText) {
 
   // 6. await readEvents(res, (event, data) => ...)
   let finished = null;
+  let replaced = null;
   // A phase that takes a while shows how long it has been, so a slow step doesn't look stuck.
   let phaseLabel = "", phaseAt = 0;
   const drawPhase = () => {
@@ -522,6 +523,8 @@ async function streamAnswer(chatId, open, retryText) {
       drawPre(true);
     } else if (event === "sources") {
       liveSources = data.sources;
+    } else if (event === "replace") {
+      replaced = data.text;                     // the answer made true to its sources (quotes fixed or taken out)
     } else if (event === "verify") {
       report = data.report;
     } else if (event === "file") {
@@ -552,6 +555,10 @@ async function streamAnswer(chatId, open, retryText) {
 
   if (finished && finished.event === "done") {
     const data = finished.data;
+    if (replaced != null) {
+      full = replaced;
+      bub.innerHTML = md.render(full);
+    }
     if (!full && data.stopped) {
       meta.innerHTML = "";
     } else {

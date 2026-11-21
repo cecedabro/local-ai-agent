@@ -95,3 +95,77 @@ def test_old_clear_source_profile_gets_the_dutch_list_once(tmp_path):
     d.set_profile_settings("lisa", "evidence", instructions="Kort.")         # saving settings keeps the list version
     again = profiles.config(d, "lisa", "evidence")
     assert gone["domain"] not in {s["domain"] for s in again["sources"]}, "a removed default stays removed"
+
+
+# ---------------------------------------------------------------- Clear Source quality (UX review CS-1 … CS-8)
+from coder import verify  # noqa: E402
+
+SRC = ("Bij een ongecompliceerde cystitis is nitrofurantoïne de eerste keus. Geef 2 dd 100 mg MR gedurende 5 dagen. "
+       "If the risk is low (<3 points), antibiotics are not indicated. Heterogeneity was high (I²=78%) across trials.")
+
+
+def test_fix_quote_keeps_the_promise():
+    assert verify.fix_quote("Geef 2 dd 100 mg MR gedurende 5 dagen.", SRC) == ("Geef 2 dd 100 mg MR gedurende 5 dagen.", "exact")
+    assert verify.fix_quote("antibiotics are not indi", SRC) == ("antibiotics are not indicated.", "extended")
+    assert verify.fix_quote("Heterogeneity was high (I=78%) across trials", SRC) == \
+        ("Heterogeneity was high (I²=78%) across trials", "aligned")
+    assert verify.fix_quote("Paracetamol is the first choice for fever in children", SRC) == (None, "")
+    for q in ("antibiotics are not indicated.", "Heterogeneity was high (I²=78%) across trials"):
+        assert verify.find_quote(q, SRC)
+    assert verify.find_quote("Niet vanaf 27 weken zwanger", "Niet vanaf 27 weken zwanger\\n\\nDeze pijnstillers")
+
+
+def test_is_title():
+    t = "Vitamin D and bone health in adults: a systematic review"
+    assert verify.is_title(t + ". (Systematic review · BMJ · 2023)", t)
+    assert not verify.is_title(t + " showed fewer fractures in women over 70", t)
+
+
+def test_tidy_headings_and_quotes():
+    sources = [{"n": 1, "title": "NHG", "text": SRC}]
+    text = ('## Short answer: two or three sentences.\n\nNitrofurantoïne [1].\n\n'
+            '> "antibiotics are not indi" [1]\n\nUitleg [1].\n\n> "Made up words that are nowhere at all" [1]\n\nEinde [1].')
+    out, removed = research.tidy(text, sources)
+    assert out.startswith("## Short answer\n") and '> "antibiotics are not indicated." [1]' in out
+    assert "Made up" not in out and removed == 1 and "\n\n\n" not in out
+
+
+def test_read_one_statuses():
+    src = {"n": 1, "title": "Cystitis", "url": "u", "text": SRC}
+
+    def run_with(*replies):
+        it = iter(replies)
+
+        async def complete(settings, messages):
+            return next(it)
+        return asyncio.run(research.read_one("Q", src, SimpleNamespace(), complete))
+    q, st = run_with('{"quotes": ["Heterogeneity was high (I=78%) across trials"]}')
+    assert q == ["Heterogeneity was high (I²=78%) across trials"] and st["status"] == "used" and st["fixed"] == 1
+    assert run_with('{"quotes": []}')[1]["status"] == "not relevant"
+    assert run_with('{"quotes": ["Totally different words that are not there"]}')[1]["status"] == "unchecked"
+    assert run_with("Sorry, I cannot.", "still not json")[1]["status"] == "unreadable"
+    assert run_with("Sorry.", '{"quotes": ["Geef 2 dd 100 mg MR gedurende 5 dagen."]}')[1]["status"] == "used"
+
+
+def test_on_topic_only_checks_broad_hits():
+    item = {"query": "cystitis nitrofurantoin women"}
+    junk = {"kind": "pubmed", "title": "Vibrio cholerae in coastal water", "text": "Cholera outbreaks.", "broad": True}
+    assert not research.on_topic(junk, item)
+    assert research.on_topic({**junk, "broad": False}, item), "a filtered PubMed search chose it: it is read"
+    assert research.on_topic({**junk, "title": "Nitrofurantoin for cystitis"}, item)
+
+
+def test_plan_gets_the_notes_and_file_questions():
+    cfg = {"sources": [{"kind": "website", "domain": "richtlijnen.nhg.org", "title": "NHG", "enabled": True,
+                        "note": "Gebruik dit eerst bij de eerste lijn"}], "web": False}
+    m = research.plan_messages("Q", cfg)[0]["content"]
+    assert "site:richtlijnen.nhg.org (NHG): Gebruik dit eerst bij de eerste lijn" in m and "{notes}" not in m
+    assert research.about_the_file("Summarise this file in one sentence.")
+    assert research.about_the_file("Vat dit document samen")
+    assert not research.about_the_file("Mag ik ibuprofen in de zwangerschap?")
+
+
+def test_rank_patient_info_after_studies():
+    page = lambda site: {"kind": "page", "site": site}                        # noqa: E731
+    assert research.rank(page("richtlijnen.nhg.org")) < research.rank(page("farmacotherapeutischkompas.nl")) \
+        < research.rank({"kind": "pubmed", "type": "RCT"}) < research.rank(page("thuisarts.nl")) < research.rank(page(None))

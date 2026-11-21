@@ -544,17 +544,34 @@ NHG's "Beveiligingscontrole") makes `fetch_page` fail with "blocked by a bot che
 ### 15.4 Read one by one (reading)
 Each new candidate is read on its own: `read_one(question, src, settings, complete)` sends `extract_messages` (the
 `EXTRACT_PROMPT`, the question, the source) and reads the reply with `parse_quotes` (`{"quotes": [...]}` or a list;
-strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4). A passage counts only when
-`verify.find_quote` finds it in the source. The trail step: `{"kind": "read", "n", "title", "url", "quotes": k,
-"status": "used" | "not relevant" | "error"}`. Used sources keep their `"passages"`.
+strings of 4+ words, quote marks stripped, each once, max `MAX_PASSAGES` = 4); a reply that is no JSON is asked
+once more. A passage that is the source's title (`verify.is_title`) is dropped; the others go through
+`verify.fix_quote`: exact, or cut inside a word and run on to the end of that sentence, or (≥ `ALIGN_MIN` = 0.88 alike:
+a changed space, quote mark, a lost "²") swapped for the exact span of the source. What is kept is always word for
+word in the source. The trail step: `{"kind": "read", "n", "title", "url", "quotes": k, "status": "used" |
+"not relevant" (the model found nothing) | "unchecked" (passages came back, none is in the source) | "unreadable" |
+"error" | "off topic", "fixed"?}`. Used sources keep their `"passages"`.
+A PubMed hit from the broader search (no filters, no MeSH) that shares none of its search's words with its title or
+abstract (`on_topic`) is not read: status "off topic".
+The planner gets the user's notes on their sources (`source_notes`); the user's enabled profile documents are read
+first, like attached files ("Your document"). A question about the attached file itself (`about_the_file`:
+"Summarise this file") is answered from that file only (`file_messages`), without searching. A site that refuses to be
+read gives its search summary as the source text ("· search summary").
 
 ### 15.5 More rounds, writing and checking (writing)
 - `investigate(question, cfg, settings, complete, t, stop, out)` runs the stages and yields their events; fewer than
   `MIN_USED` (3) useful sources after a round → one more round (`MAX_ROUNDS` = 2): `followup_messages` shows the model
   the searches so far and asks for new ones; searches already done are skipped. `out["used"]` = the useful sources,
   ordered (§14.2), max `MAX_USED` (10), numbered from 1; `out["trail"]` = every step.
-- The answer is written from the passages only (`evidence_messages` lists them under each source) and checked against
-  the full source texts. `public_sources` shows the first passage as the source's quote.
+- The answer is written from the passages only (`evidence_messages` lists them under each source, and tells the model
+  what each source is: guideline, medicine information, study, patient information, the user's document) and checked
+  against the full source texts. Order (§14.2): the user's documents and guideline sites, medicine sites, PubMed by
+  type, patient information sites (Thuisarts, Apotheek.nl), other web pages. The model names disagreements in a line
+  "⚠ Sources differ:" / "⚠ Bronnen verschillen:" (shown as a box, `p.differ`).
+- Before the check, `tidy(answer, sources)` strips instruction text after a colon from headings and runs every
+  blockquote quote through `verify.fix_quote` against its cited sources; a quote that is in none of them (or is a
+  title) is taken out. When the text changed, an SSE `replace` event `{"text"}` gives the page the final text, and
+  the report gets `"removed": k` ("k quotes that weren't in the source removed"). `public_sources` shows the first passage as the source's quote.
 - `verify.summary_sentences(answer)`: in an answer with headings, the sentences before the first heading and under a
   summary heading (short answer, kort antwoord, summary, samenvatting, conclusion, strength, sterkte…) summarise the
   quotes and are not listed as uncited.

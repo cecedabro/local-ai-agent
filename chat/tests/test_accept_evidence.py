@@ -14,7 +14,7 @@ ARTICLES = [
     {"pmid": "101", "title": "Apixaban in chronic kidney disease", "journal": "Kidney Int", "year": "2022",
      "abstract": "In patients with eGFR 15-29, apixaban 2.5 mg twice daily caused fewer major bleeds than warfarin."},
     {"pmid": "102", "title": "DOACs in dialysis", "journal": "BMJ", "year": "2021",
-     "abstract": "Evidence in patients on dialysis is limited to observational studies."},
+     "abstract": "Evidence for apixaban in patients on dialysis is limited to observational studies."},
 ]
 
 
@@ -44,13 +44,15 @@ class TestEvidenceV2:
         assert "tools" not in answer_call and "[1] Apixaban in chronic kidney disease" in answer_call["messages"][1]["content"]
         assert any(r["path"].startswith("/esearch.fcgi") for r in pubmed.requests)
         done = evs[-1][1]
-        assert [q["ok"] for q in done["verify"]["quotes"]] == [True, False], "the made-up quote is caught"
+        assert [q["ok"] for q in done["verify"]["quotes"]] == [True] and done["verify"]["removed"] == 1, \
+            "the made-up quote is caught and taken out"
         step = [s for s in done["trail"] if s["kind"] == "search"][0]
         assert {k: step[k] for k in ("kind", "source", "query", "found", "mesh")} == \
             {"kind": "search", "source": "PubMed", "query": "apixaban renal", "found": 2, "mesh": []}
         assert step["url"].startswith("https://pubmed.ncbi.nlm.nih.gov/?term=%28apixaban+renal%29+AND+"), "the exact search (§14.1)"
         msg = client.get(f"/api/chats/{cid}").json()["messages"][-1]
-        assert msg["verify"]["ok"] is False and msg["trail"] == done["trail"] and msg["thinking"] == "eerst zoeken"
+        assert msg["verify"]["ok"] is True and msg["verify"]["removed"] == 1 and "no bleeds at all" not in msg["content"]
+        assert msg["trail"] == done["trail"] and msg["thinking"] == "eerst zoeken"
         assert [s["n"] for s in msg["sources"]] == [1, 2] and "text" not in msg["sources"][0]
 
     def test_nothing_found_means_no_answer(self, client, pubmed):

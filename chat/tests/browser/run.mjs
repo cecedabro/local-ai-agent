@@ -171,7 +171,7 @@ async function main() {
     await go("/profiles");
     await waitFor(() => ev(`document.querySelectorAll('.pf-tab').length===2`), 5000, "two profile tabs");
     await ev(`document.querySelector('.pf-tab[data-profile=evidence]').click()`);
-    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===16`), 5000, "the seeded PubMed and 15 guideline and medicine cards");
+    await waitFor(() => ev(`document.querySelectorAll('.src-card').length===17`), 5000, "the seeded PubMed and 16 guideline, medicine and patient cards");
     if (!(await ev(`document.querySelector('.pf-tab[data-profile=evidence]').getAttribute('aria-selected')==='true'`))) throw new Error("the open tab is not aria-selected");
     if (!(await ev(`document.querySelectorAll('#budget-bar i').length>=1 && /tokens/.test(document.getElementById('budget-text').textContent)`))) throw new Error("no budget bar");
     await ev(`(()=>{const t=document.querySelector('.src-card[data-kind=pubmed] [data-note]');t.value='Alleen RCTs en reviews';t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
@@ -189,6 +189,9 @@ async function main() {
     await cmd("DOM.setFileInputFiles", { nodeId: node.nodeId, files: [doc] });
     await waitFor(() => ev(`!!document.querySelector('.src-card[data-kind=file]')`), 8000, "the document card");
     await waitFor(() => ev(`/richtlijn\.md/.test(document.getElementById('budget-legend').textContent)`), 5000, "the document in the budget legend");
+    // a profile document is read first in every Clear Source answer (SPEC §15.4): take it out again for the later rounds
+    await ev(`fetch('/api/profiles/evidence').then(r=>r.json()).then(p=>Promise.all(p.sources.filter(s=>s.kind==='file')
+      .map(s=>fetch('/api/profiles/evidence/sources/'+s.id,{method:'DELETE',headers:{'X-Coder':'1'}}))))`);
   });
 
   await check("round 3: a searched answer shows numbered sources and citation links", async () => {
@@ -222,8 +225,10 @@ async function main() {
     if (!(await ev(`!!${last('.trail a[href^="https://pubmed.ncbi.nlm.nih.gov/?term="]')}`))) throw new Error("the PubMed search is not a link");
     if (!/Thought/.test(await ev(`${last(".thought summary")}?.textContent||''`))) throw new Error("no thinking block");
     if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
-    if (!(await ev(`!!${last("blockquote.q-bad")}`))) throw new Error("the made-up quote is not flagged");
-    if (!/no source/.test(await ev(`${last(".verify-note summary")}?.textContent||''`))) throw new Error("no note about sentences without a source");
+    if (await ev(`!!${last("blockquote.q-bad")}`)) throw new Error("the made-up quote is still in the answer (SPEC §15.5 tidy)");
+    const note = await ev(`${last(".verify-note summary")}?.textContent||''`);
+    if (!/no source/.test(note)) throw new Error("no note about sentences without a source");
+    if (!/removed/.test(note)) throw new Error("no note about the removed quote: " + note);
   });
 
   await check("round 14: no Quick/Think in Clear Source, the quote opens its source, the send drop, a draft stays", async () => {
