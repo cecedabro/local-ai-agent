@@ -185,6 +185,11 @@ def missing_defaults(profile: str, sources: list[dict]) -> list[dict]:
     return result
 
 
+# Bump a profile's number when its default list grows: every profile that got an older list gets the missing cards
+# once (and, for WEB_OFF profiles, web search off). Sources the user removes afterwards stay removed.
+SEED_VERSION = {"evidence": 2}
+
+
 def config(db: Any, username: str, profile: str) -> dict:
     """{"profile", "instructions", "web", "sources": [...]} for one user's profile; seeds the default cards once.
 
@@ -204,6 +209,17 @@ def config(db: Any, username: str, profile: str) -> dict:
             st = {**st, "web": False}
         else:
             db.set_profile_settings(username, profile, seeded=True)
+        st = {**st, "seeded": True}
+    want = SEED_VERSION.get(profile, 1)
+    if want > 1 and db.seed_version(username, profile) < want:
+        for card in missing_defaults(profile, db.list_sources(username, profile)):
+            db.add_source(username, profile, card["kind"], card["title"],
+                          domain=card.get("domain", ""), note=card["note"], filters=card.get("filters"))
+        fields: dict[str, Any] = {"seeded": want}
+        if profile in WEB_OFF:
+            fields["web"] = False
+            st = {**st, "web": False}
+        db.set_profile_settings(username, profile, **fields)
     return {"profile": profile, "instructions": st["instructions"], "web": st["web"],
             "sources": db.list_sources(username, profile)}
 
