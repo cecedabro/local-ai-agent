@@ -187,7 +187,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
             async for tag, val in events():
                 if tag == "reasoning":
                     if shown != "thinking":
-                        yield phase("thinking")
+                        # after a search the model reads what it found: say that, not "Thinking…" (UX review CH-5)
+                        yield phase("thinking") if not rounds else sse("phase", {"phase": "thinking",
+                                                                                "label": "Reading the results…"})
                         shown = "thinking"
                     if val:
                         th0 = th0 or clock()
@@ -314,7 +316,9 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
 
     # Step 5
     tokens = usage["completion_tokens"] if usage else count
-    tps = round(tokens / (clock() - t0), 1) if t0 else None
+    # the completion tokens include the thinking: count them over the time since the first token of either kind
+    t_first = min((x for x in (th0, t0) if x is not None), default=None)
+    tps = round(tokens / max(clock() - t_first, 0.001), 1) if t_first is not None else None
 
     if text or made or not stopped:
         msg_id = db.add_message(chat["id"], "assistant", text, tokens=tokens, tps=tps, stopped=stopped, sources=sources, trail=trail, thinking=thinking_text,

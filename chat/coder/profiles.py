@@ -18,8 +18,8 @@ SEED = {
     "evidence": [
         {"kind": "pubmed", "title": "PubMed",
          "note": "Prefer systematic reviews, meta-analyses, randomised trials and guidelines. Say how strong the evidence is.",
-         "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 10, "humans": True,
-                     "languages": [], "preset": "balanced"}},
+         "filters": {"types": ["systematic_review", "meta_analysis", "rct", "guideline"], "years": 15, "humans": True,
+                     "languages": [], "preset": "balanced"}},    # = PRESETS["balanced"], what its label says
         {"kind": "website", "title": "richtlijnen.nhg.org", "domain": "richtlijnen.nhg.org", "group": "guidelines",
          "label": "NHG-Standaarden",
          "note": "Dutch GP guidelines (NHG-Standaarden): first choice for primary care, common complaints and first-line treatment."},

@@ -114,7 +114,7 @@ test("sourcesHtml: cards that open to a quote and an Open link; escaped", async 
   assert.equal(sourcesHtml([]), "");
   const html = sourcesHtml([{ n: 1, title: "A <b>", url: "https://www.rivm.nl/x", kind: "web", quote: "Wie <krijgt> hem" },
     { n: 2, title: "T", url: "https://pubmed.ncbi.nlm.nih.gov/1/", meta: "BMJ · 2021" }]);
-  assert.match(html, /^<div class="sources"><div class="src-group" data-group="other"><h4>Other sources<\/h4><div class="src-list"><details class="src" data-n="1"><summary><span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
+  assert.match(html, /^<div class="sources"><div class="src-group" data-group="other"><h4>Sources<\/h4><div class="src-list"><details class="src" data-n="1"><summary><span class="n">1<\/span><div><b>A &lt;b&gt;<\/b><small>rivm\.nl<\/small>/);
   assert.match(html, /<blockquote>Wie &lt;krijgt&gt; hem<\/blockquote><a class="src-open" href="https:\/\/www\.rivm\.nl\/x" target="_blank" rel="noopener noreferrer">Open on rivm\.nl ↗<\/a>/);
   assert.match(html, /<small>BMJ · 2021<\/small><\/div><\/summary><div class="src-body"><a class="src-open"/);
 });
@@ -145,7 +145,7 @@ test("trailHtml: a Clear Source trail in four stages; other trails stay a list",
   assert.match(live, /<summary>Searching…<\/summary>/);
   assert.match(live, /class="stage now"><span class="orb live" data-phase="searching">/);
   assert.equal((live.match(/<li class="stage/g) || []).length, 2, "stages appear as they start");
-  assert.match(trailHtml([{ kind: "search", source: "the web", query: "x", found: 1, url: null }]), /<summary>Searched 1 time<\/summary><ol><li class="step search">/);
+  assert.match(trailHtml([{ kind: "search", source: "the web", query: "x", found: 1, url: null }]), /<summary>Searched 1 time · 1 result<\/summary><ol><li class="step search">/);
 });
 
 test("orbHtml: a live drop with every phase layer", async () => {
@@ -163,10 +163,25 @@ test("trailHtml / thoughtHtml: the search trail and the thinking block, escaped"
   const h = trailHtml([{ kind: "search", source: "PubMed", query: "apixaban <renal>", found: 5, url: "https://pubmed.ncbi.nlm.nih.gov/?term=a" },
     { kind: "search", source: "rivm.nl", query: "griep", found: 0, url: null, error: "search answered 500" },
     { kind: "read", title: "Griepprik", url: "https://www.rivm.nl/griepprik" }], true);
-  assert.match(h, /^<details class="trail" open><summary>Searched 2 times · read 1 page<\/summary><ol>/);
+  assert.match(h, /^<details class="trail" open><summary>Searched 2 times · 5 results · read 1 page<\/summary><ol>/);
   assert.match(h, /Searched PubMed for <b>"apixaban &lt;renal&gt;"<\/b> · <a href="https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/\?term=a" target="_blank" rel="noopener noreferrer">5 found ↗<\/a>/);
   assert.match(h, /<span class="err">search answered 500<\/span>/);
   assert.match(h, /<li class="step read">Read <a href="https:\/\/www\.rivm\.nl\/griepprik"[^>]*>Griepprik ↗<\/a><\/li>/);
   assert.equal(thoughtHtml("", 3), "");
   assert.equal(thoughtHtml("a < b", 2.4), '<details class="thought"><summary>Thought for 2 s</summary><div class="thought-text">a &lt; b</div></details>');
+});
+
+test("sourcesHtml: real groups and Dutch labels for a Dutch answer (UX review CS-10, CS-12)", async () => {
+  const { sourcesHtml, langOf } = await import("../../static/js/stream.js");
+  const src = [{ n: 1, title: "Ibuprofen", url: "https://www.farmacotherapeutischkompas.nl/x", kind: "page", site: "farmacotherapeutischkompas.nl" },
+    { n: 2, title: "Pijnstillers", url: "https://www.thuisarts.nl/y", kind: "page", site: "thuisarts.nl" },
+    { n: 3, title: "NHG", url: "https://richtlijnen.nhg.org/z", kind: "page", site: "richtlijnen.nhg.org" }];
+  const html = sourcesHtml(src, "nl");
+  assert.ok(html.indexOf('data-group="guide"') < html.indexOf('data-group="drug"') && html.indexOf('data-group="drug"') < html.indexOf('data-group="patient"'));
+  assert.match(html, /<h4>Richtlijnen<\/h4>/);
+  assert.match(html, /<h4>Geneesmiddelen<\/h4>/);
+  assert.match(html, /<h4>Patiënteninformatie<\/h4>/);
+  assert.match(html, /Openen op thuisarts\.nl ↗/);
+  assert.equal(langOf("Ibuprofen is in het derde trimester niet toegestaan en de dosis is laag."), "nl");
+  assert.equal(langOf("Ibuprofen is not allowed in the third trimester and the dose is low."), "en");
 });

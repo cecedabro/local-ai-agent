@@ -284,39 +284,81 @@ export function codeActions(root) {
  * <a class="src-open" href=URL target=_blank rel=noopener noreferrer>Open on HOST ↗</a></div></details>…</div>
  * "" when there are none.
  */
-export function sourcesHtml(sources) {
+// Labels around an answer follow the answer's language (SPEC §15.6): English, or Dutch for a Dutch answer.
+const WORDS = {
+  en: { file: "Your documents", guide: "Guidelines", drug: "Medicines", study: "Studies", patient: "Patient information",
+    other: "Web pages", all: "Sources", open: "Open on", short: "Short answer", shortSub: "summary of the sources below",
+    notFound: (n) => `${n} quote${n === 1 ? " was" : "s were"} not found in the source`,
+    noSource: (n) => `${n} sentence${n === 1 ? " has" : "s have"} no source`, badRef: (l) => `source ${l} does not exist`,
+    removed: (n) => `${n} quote${n === 1 ? " that wasn't" : "s that weren't"} in the source removed`,
+    kinds: { Guideline: "Guideline", "Public health": "Public health", "Drug information": "Drug information",
+      "Drug review": "Drug review", "Side effects": "Side effects", "Patient information": "Patient information",
+      Website: "Website", "Your file": "Your file", "Your document": "Your document" } },
+  nl: { file: "Jouw documenten", guide: "Richtlijnen", drug: "Geneesmiddelen", study: "Onderzoek",
+    patient: "Patiënteninformatie", other: "Webpagina's", all: "Bronnen", open: "Openen op", short: "Kort antwoord",
+    shortSub: "samenvatting van de bronnen hieronder",
+    notFound: (n) => `${n} citaat${n === 1 ? " is" : "en zijn"} niet in de bron gevonden`,
+    noSource: (n) => `${n} zin${n === 1 ? " heeft" : "nen hebben"} geen bron`, badRef: (l) => `bron ${l} bestaat niet`,
+    removed: (n) => `${n} citaat${n === 1 ? "" : "en"} dat niet in de bron stond verwijderd`,
+    kinds: { Guideline: "Richtlijn", "Public health": "Volksgezondheid", "Drug information": "Geneesmiddeleninformatie",
+      "Drug review": "Geneesmiddelenbeoordeling", "Side effects": "Bijwerkingen", "Patient information": "Patiënteninformatie",
+      Website: "Website", "Your file": "Jouw bestand", "Your document": "Jouw document", "Meta-analysis": "Meta-analyse",
+      "Systematic review": "Systematische review", Review: "Review" } },
+};
+const NL_WORDS = /\b(de|het|een|van|en|niet|bij|voor|zijn|wordt|geen|ook|dat|deze|wordt|met|naar|bij)\b/g;
+const EN_WORDS = /\b(the|and|of|is|are|for|with|not|this|that|from|be)\b/g;
+/** "nl" when a text reads as Dutch (more Dutch than English function words), else "en". */
+export function langOf(text) {
+  const t = String(text || "").toLowerCase().slice(0, 3000);
+  return (t.match(NL_WORDS) || []).length > (t.match(EN_WORDS) || []).length ? "nl" : "en";
+}
+const W = (lang) => WORDS[lang] || WORDS.en;
+
+export function sourcesHtml(sources, lang = "en") {
   if (!sources || !sources.length) return "";
+  const w = W(lang);
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
-  const groups = [["file", "Your files"], ["guide", "Guidelines"], ["study", "Studies"], ["other", "Other sources"]];
-  const groupOf = (s) => (s.kind === "file" ? "file" : s.site || s.type === "Guideline" ? "guide" : s.kind === "pubmed" ? "study" : "other");
+  const groups = ["file", "guide", "drug", "study", "patient", "other"];
+  const groupOf = (s) => {
+    if (s.kind === "file") return "file";
+    if (s.site) return { "Drug information": "drug", "Drug review": "drug", "Side effects": "drug",
+      "Patient information": "patient" }[SITE_KINDS[s.site]] || "guide";
+    if (s.type === "Guideline") return "guide";
+    return s.kind === "pubmed" ? "study" : "other";
+  };
   const item = (s) => {
     const kind = sourceKind(s);
     const meta = (s.type ? String(s.meta || "").replace(s.type, "").replace(/^\s*·\s*/, "") : s.meta) || host(s.url);
     return `<details class="src" data-n="${Number(s.n)}"><summary><span class="n">${Number(s.n)}</span>` +
-      `<div><b>${escHtml(s.title || s.url)}</b><small>${kind ? `<span class="stype" data-kind="${escHtml(kind[0])}">${escHtml(kind[1])}</span> · ` : ""}` +
+      `<div><b>${escHtml(s.title || s.url)}</b><small>${kind ? `<span class="stype" data-kind="${escHtml(kind[0])}">${escHtml(w.kinds[kind[1]] || kind[1])}</span> · ` : ""}` +
       `${escHtml(meta)}</small></div></summary>` +
       `<div class="src-body">${s.quote ? `<blockquote>${escHtml(s.quote)}</blockquote>` : ""}` +
-      (s.url ? `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Open on ${escHtml(host(s.url) || "the site")} ↗</a>` : "") +
+      (s.url ? `<a class="src-open" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">${w.open} ${escHtml(host(s.url) || "the site")} ↗</a>` : "") +
       "</div></details>";
   };
-  const parts = groups.map(([g, name]) => {
+  const used = groups.filter((g) => sources.some((s) => groupOf(s) === g));
+  const parts = used.map((g) => {
     const list = sources.filter((s) => groupOf(s) === g);
-    return list.length ? `<div class="src-group" data-group="${g}"><h4>${name}</h4><div class="src-list">${list.map(item).join("")}</div></div>` : "";
+    const name = used.length === 1 && g === "other" ? w.all : w[g];      // a plain web answer: just "Sources"
+    return `<div class="src-group" data-group="${g}"><h4>${name}</h4><div class="src-list">${list.map(item).join("")}</div></div>`;
   });
   return '<div class="sources">' + parts.join("") + "</div>";
 }
 
-const SITE_KINDS = { "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Guideline", "thuisarts.nl": "Patient information",
+const SITE_KINDS = { "richtlijnen.nhg.org": "Guideline", "richtlijnendatabase.nl": "Guideline", "rivm.nl": "Public health",
+  "lci.rivm.nl": "Guideline", "thuisarts.nl": "Patient information", "apotheek.nl": "Patient information",
   "farmacotherapeutischkompas.nl": "Drug information", "kinderformularium.nl": "Drug information", "ge-bu.nl": "Drug review",
   "lareb.nl": "Side effects", "jgzrichtlijnen.nl": "Guideline", "palliaweb.nl": "Guideline", "nvog.nl": "Guideline",
-  "nice.org.uk": "Guideline", "who.int": "Guideline", "cdc.gov": "Guideline", "apotheek.nl": "Drug information",
-  "ema.europa.eu": "Drug information" };
+  "nice.org.uk": "Guideline", "who.int": "Public health", "cdc.gov": "Public health", "ema.europa.eu": "Drug information" };
 
 /** A source's kind for the list under an answer: [css key, label] or null. */
 export function sourceKind(s) {
-  if (s.kind === "file") return ["file", "Your file"];
+  if (s.kind === "file") return ["file", s.meta === "Your document" ? "Your document" : "Your file"];
   if (s.type) return [{ Guideline: "guide", "Meta-analysis": "review", "Systematic review": "review", RCT: "rct" }[s.type] || "study", s.type];
-  if (s.site) return ["guide", SITE_KINDS[s.site] || "Website"];
+  if (s.site) {
+    const k = SITE_KINDS[s.site] || "Website";
+    return [/^(Drug|Side)/.test(k) ? "drug" : k === "Patient information" ? "patient" : "guide", k];
+  }
   return null;
 }
 
@@ -481,7 +523,9 @@ export function trailHtml(steps, open = false) {
   if (!steps || !steps.length) return "";
   if (!steps.some((s) => s.kind === "plan")) {
     const n = steps.filter((s) => s.kind === "search").length, m = steps.filter((s) => s.kind === "read" || s.kind === "open").length;
-    const sum = `Searched ${n} time${n === 1 ? "" : "s"}` + (m ? ` · read ${m} page${m === 1 ? "" : "s"}` : "");
+    const found = steps.filter((s) => s.kind === "search").reduce((a, s) => a + (Number(s.found) || 0), 0);
+    const sum = `Searched ${n} time${n === 1 ? "" : "s"}` + (found ? ` · ${found} result${found === 1 ? "" : "s"}` : "") +
+      (m ? ` · read ${m} page${m === 1 ? "" : "s"}` : "");
     return `<details class="trail"${open ? " open" : ""}><summary>${sum}</summary><ol>${steps.map(trailStep).join("")}</ol></details>`;
   }
   const link = (url, text, cls) => (url ? `<a class="${cls}" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`
@@ -545,6 +589,7 @@ const SHORT = /short answer|kort antwoord|summary|samenvatting|in short|in het k
  *  <div class="short">: it summarises the quotes below it (SPEC §15.5). */
 export function shortBox(bub) {
   if (!bub || bub.querySelector(":scope > .short")) return;
+  const w = W(langOf(bub.textContent));
   const kids = [...bub.children], isH = (el) => /^H[1-4]$/.test(el.tagName);
   if (!kids.some(isH)) return;
   let from = 0;
@@ -554,7 +599,7 @@ export function shortBox(bub) {
   if (!part.length) return;
   const box = document.createElement("div");
   box.className = "short";
-  box.innerHTML = `<div class="lbl">${from ? escHtml(kids[0].textContent) : "Short answer"} <span>· summary of the sources below</span></div>`;
+  box.innerHTML = `<div class="lbl">${from ? escHtml(kids[0].textContent) : w.short} <span>· ${w.shortSub}</span></div>`;
   part[0].before(box);
   box.append(...part);
   if (from) kids[0].remove();
@@ -609,12 +654,12 @@ export function markVerify(bub, report) {
     span.append(mid);
     mark(span, q);
   }
-  const bits = [];
-  if ((report.uncited || []).length) bits.push(`${report.uncited.length} sentence${report.uncited.length === 1 ? " has" : "s have"} no source`);
-  if ((report.bad_refs || []).length) bits.push(`source ${report.bad_refs.join(", ")} does not exist`);
+  const bits = [], w = W(langOf(bub.textContent));
+  if ((report.uncited || []).length) bits.push(w.noSource(report.uncited.length));
+  if ((report.bad_refs || []).length) bits.push(w.badRef(report.bad_refs.join(", ")));
   const bad = qs.filter((q) => !q.ok).length;
-  if (bad) bits.unshift(`${bad} quote${bad === 1 ? " was" : "s were"} not found in the source`);
-  if (report.removed) bits.push(`${report.removed} quote${report.removed === 1 ? " that wasn't" : "s that weren't"} in the source removed`);
+  if (bad) bits.unshift(w.notFound(bad));
+  if (report.removed) bits.push(w.removed(report.removed));
   if (!bits.length) return;
   const list = (report.uncited || []).map((u) => `<li>${escHtml(u)}</li>`).join("");
   bub.insertAdjacentHTML("afterend", `<details class="verify-note"><summary>⚠ ${escHtml(bits.join(" · "))}</summary>` +

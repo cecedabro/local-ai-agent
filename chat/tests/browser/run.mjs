@@ -227,8 +227,8 @@ async function main() {
     if (!(await ev(`!!${last("blockquote.q-ok .q-mark")}`))) throw new Error("the real quote has no ✓");
     if (await ev(`!!${last("blockquote.q-bad")}`)) throw new Error("the made-up quote is still in the answer (SPEC §15.5 tidy)");
     const note = await ev(`${last(".verify-note summary")}?.textContent||''`);
-    if (!/no source/.test(note)) throw new Error("no note about sentences without a source");
-    if (!/removed/.test(note)) throw new Error("no note about the removed quote: " + note);
+    if (!/no source|geen bron/.test(note)) throw new Error("no note about sentences without a source");
+    if (!/removed|verwijderd/.test(note)) throw new Error("no note about the removed quote: " + note);
   });
 
   await check("round 14: no Quick/Think in Clear Source, the quote opens its source, the send drop, a draft stays", async () => {
@@ -261,7 +261,7 @@ async function main() {
     const href = await ev(`${last('.trail a[href^="https://pubmed.ncbi.nlm.nih.gov/?term="]')}?.href||''`);
     if (!href.includes("MeSH")) throw new Error("the PubMed link is not the exact search: " + href);
     const badge = await ev(`${last(".sources details.src .stype")}?.textContent||''`);
-    if (badge !== "Meta-analysis") throw new Error("study type badge: " + JSON.stringify(badge));
+    if (!["Meta-analysis", "Meta-analyse"].includes(badge)) throw new Error("study type badge: " + JSON.stringify(badge));
   });
 
   await check("round 5: the Dutch guideline sources and the add-defaults button", async () => {

@@ -600,6 +600,17 @@ read gives its search summary as the source text ("· search summary").
   (`.cbar .sd-label`) names the phase in a word that shimmers and rolls in when the phase changes. Both go away when
   the answer ends. The working drop in the thread keeps some air above the composer.
 - The page glides down (`Follow.glide`) as the research trail grows.
+- UX review fixes (chat): a chat, New chat or a profile picked while the page loads is kept (the start does not open
+  the latest chat over it); Retry only on the last answer; "Copied ✓"; Escape stops an answer; "Compressed ✓ a → b";
+  a new chat is in the sidebar as soon as it is made; Markdown table alignment is a class (`al-left|center|right`),
+  not a style attribute (CSP); tok/s = completion tokens over the time since the first token, thinking included;
+  after a search the phase says "Reading the results…"; a non-Clear-Source trail says how many results it found.
+- Clear Source writing: the phase label keeps counting (min and s) until the text comes, with "this usually takes 2–4
+  minutes" after 15 s.
+- The source list under an answer is grouped by what the sources are: your documents, guidelines (and public health),
+  medicines, studies, patient information, web pages (only web pages: one group "Sources"). Its labels, the short
+  answer's label and the checker's note follow the answer's language (`langOf`: Dutch or English).
+- A source's note on the profiles page shows "Saved ✓" after it is stored. The PubMed years include 15 (Balanced).
 - What you type is kept per chat in the browser (`localStorage "dewdrop-draft:<chat id | new>"`) until you send it.
 - Profiles page: a top bar (← Chat, title, profile switch); a profile card, instructions and context on the left, sources
   on the right (sources right after the profile card on phones).

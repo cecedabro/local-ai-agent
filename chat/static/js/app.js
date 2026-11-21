@@ -2,7 +2,7 @@
 // Each function below is one task. Fill in only the one your task names; keep the others.
 // Never set inline styles except the CSS variables named in the SPEC (style.setProperty("--x", v)).
 import { readEvents, Typewriter, renderFade, placeTail, groupChats, metaText, Follow, codeBlocks, codeActions, sourcesHtml, citeLinks, sourceActions,
-  orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify, animateTrail } from "./stream.js";
+  orbHtml, startOrb, flyFrom, trailHtml, thoughtHtml, markVerify, animateTrail, langOf } from "./stream.js";
 
 const $ = (sel) => document.querySelector(sel);
 const md = window.markdownit({ html: false, linkify: true, breaks: false });
@@ -12,6 +12,18 @@ export function fixQuotes(text) {
   return String(text).split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/).map((part, i) => (i % 2 ? part : part   // code stays as is
     .replace(/([^\n])[ \t]+>[ \t]*(["“])/g, "$1\n\n> $2")
     .replace(/(^|\n)(>[ \t]*["“][^\n]*?["”][ \t]*(?:\[\d+(?:\s*[,;]\s*\d+)*\][ \t]*)+)[ \t]+(?=\S)/g, "$1$2\n\n"))).join("");
+}
+// markdown-it writes style="text-align:…" on table cells; the CSP (style-src 'self') refuses it, so it becomes a class
+for (const rule of ["th_open", "td_open"]) {
+  md.renderer.rules[rule] = (tokens, i, opts, env, self) => {
+    const st = tokens[i].attrGet("style");
+    if (st) {
+      tokens[i].attrs = tokens[i].attrs.filter(([k]) => k !== "style");
+      const m = /text-align:\s*(left|center|right)/.exec(st);
+      if (m) tokens[i].attrJoin("class", "al-" + m[1]);
+    }
+    return self.renderToken(tokens, i, opts);
+  };
 }
 const mdRender = md.render.bind(md);
 md.render = (src, env) => mdRender(fixQuotes(src), env);
@@ -42,7 +54,8 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 };
 codeBlocks(md);                       // coloured code with a file name, Copy and Download (stream.js)
 
-const state = { chats: [], folders: [], chatId: null, profile: "general", files: [], busy: false, follow: null };
+const state = { chats: [], folders: [], chatId: null, profile: "general", files: [], busy: false, follow: null,
+  userPicked: false };   // the user chose a chat, a new chat or a profile before the page finished loading (CH-1)
 const ORB = '<span class="orb" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
 const MARBLE = '<span class="orb marble" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
 const TINY = '<span class="orb tiny" data-phase="idle"><i></i><i></i><i></i><i></i></span>';
@@ -182,11 +195,23 @@ function drawWelcome() {
 function doneMeta(meta, content, tokens, tps, stopped, retryText, msgId) {
   meta.innerHTML = TINY + `<span>${metaText(tokens, tps)}</span><button data-copy>Copy</button><button data-retry>Retry</button>`;
   dlMenu(meta, msgId);
-  meta.querySelector("[data-copy]").addEventListener("click", () => { navigator.clipboard.writeText(content); });
+  const copy = meta.querySelector("[data-copy]");
+  copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(content); copy.textContent = "Copied ✓"; }
+    catch { copy.textContent = "Couldn't copy"; }
+    setTimeout(() => { copy.textContent = "Copy"; }, 1600);
+  });
   meta.querySelector("[data-retry]").addEventListener("click", () => { if (state.busy) return; $("#input").value = retryText(); send(); });
   if (stopped) {
     meta.insertAdjacentHTML("afterend", '<div class="note stopped">Stopped</div>');
   }
+  lastRetryOnly();
+}
+
+/** Retry sends the question again at the bottom, so it is only offered on the last answer (CH-2). */
+function lastRetryOnly() {
+  const all = [...document.querySelectorAll("#messages .ai [data-retry]")];
+  all.forEach((b, i) => { b.hidden = i !== all.length - 1; });
 }
 
 /*
@@ -308,7 +333,7 @@ function drawMessage(m) {
   // assistant
   const div = document.createElement("div");
   div.className = "ai";
-  div.innerHTML = ORB + `<div class="content"><div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div><div class="bub">${md.render(m.content)}</div>${filesOutHtml(m.files)}${sourcesHtml(m.sources)}<div class="meta2"></div></div>`;
+  div.innerHTML = ORB + `<div class="content"><div class="pre">${thoughtHtml(m.thinking, m.thought_s)}${trailHtml(m.trail)}</div><div class="bub">${md.render(m.content)}</div>${filesOutHtml(m.files)}${sourcesHtml(m.sources, langOf(m.content))}<div class="meta2"></div></div>`;
   $("#messages").appendChild(div);
   citeLinks(div.querySelector(".bub"), m.sources);
   markVerify(div.querySelector(".bub"), m.verify);
@@ -375,6 +400,7 @@ async function send() {
   const text = $("#input").value.trim();
   if (!text && !state.files.length) return;
   if (state.busy) return;
+  state.userPicked = true;
   try { localStorage.removeItem(draftKey()); } catch { /* private mode */ }
 
   // 1. setBusy(true); everything below in try { ... } finally { setBusy(false) }.
@@ -385,6 +411,7 @@ async function send() {
     if (!state.chatId) {
       const res = await api("/api/chats", { method: "POST", json: { profile: state.profile } });
       state.chatId = (await res.json()).id;
+      loadChats();                                         // the new chat shows in the sidebar straight away (CH-6)
     }
 
     // 3. Remove .welcome; draw user message; then a div.ai with ORB, bub, meta, orb, tiny.
@@ -495,11 +522,14 @@ async function streamAnswer(chatId, open, retryText) {
   let finished = null;
   let replaced = null;
   // A phase that takes a while shows how long it has been, so a slow step doesn't look stuck.
-  let phaseLabel = "", phaseAt = 0;
+  let phaseLabel = "", phaseAt = 0, phaseName = "";
+  const fmtSecs = (n) => (n < 90 ? `${n} s` : `${Math.floor(n / 60)} min ${String(n % 60).padStart(2, "0")} s`);
   const drawPhase = () => {
     const secs = Math.round((performance.now() - phaseAt) / 1000);
-    const slow = secs >= 25 && !full && !thinking && !steps.length ? " · the model may still be starting up" : "";
-    meta.innerHTML = `<span class="phase-label">${esc(phaseLabel)}${secs >= 5 ? ` · ${secs} s` : ""}${slow}</span>`;
+    const slow = secs >= 25 && !full && !thinking && !steps.length ? " · the model may still be starting up"
+      // Clear Source thinks for minutes before it writes: say so, so the wait doesn't look stuck (CS-9)
+      : phaseName === "writing" && !full && steps.length && secs >= 15 ? " · this usually takes 2–4 minutes" : "";
+    meta.innerHTML = `<span class="phase-label">${esc(phaseLabel)}${secs >= 5 ? ` · ${fmtSecs(secs)}` : ""}${slow}</span>`;
   };
   const ticker = setInterval(() => { if (phaseLabel && meta.querySelector(".phase-label")) drawPhase(); }, 1000);
   try {
@@ -508,11 +538,12 @@ async function streamAnswer(chatId, open, retryText) {
       orb.dataset.phase = data.phase;
       drop.phase(data.phase);
       phaseLabel = data.label || data.phase;
+      phaseName = data.phase;
       phaseAt = performance.now();
       drawPhase();
       if (data.phase === "writing") {
         writeStart = performance.now();
-        phaseLabel = "";
+        if (full || !steps.length) phaseLabel = "";        // Clear Source: the label keeps counting until the text comes
       }
     } else if (event === "thinking") {
       th0 = th0 ?? performance.now();
@@ -530,6 +561,7 @@ async function streamAnswer(chatId, open, retryText) {
     } else if (event === "file") {
       addFileCard(bub, data);
     } else if (event === "delta") {
+      if (!full && phaseName === "writing") phaseLabel = "";
       full += data.text;
       typewriter.push(data.text);
       if (th0 != null && thoughtSecs == null) {
@@ -565,7 +597,7 @@ async function streamAnswer(chatId, open, retryText) {
       if (data.sources && data.sources.length) {
         bub.innerHTML = md.render(full);
         citeLinks(bub, data.sources);
-        bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources));
+        bub.insertAdjacentHTML("afterend", sourcesHtml(data.sources, langOf(full)));
       }
       doneMeta(meta, full, data.tokens, data.tps, false, retryText, data.message_id);
     }
@@ -698,8 +730,18 @@ function drawContext(ctx) {
     compressBtn.onclick = async () => {
       const id = state.chatId;
       if (!id) return;
-      await api(`/api/chats/${id}/compress`, { method: "POST" });
-      openChat(id);
+      const before = state.ctx?.used;
+      compressBtn.disabled = true;
+      compressBtn.textContent = "Compressing…";
+      try {
+        await api(`/api/chats/${id}/compress`, { method: "POST" });
+        await openChat(id);
+        const after = state.ctx?.used;
+        compressBtn.textContent = before != null && after != null ? `Compressed ✓ ${fmt(before)} → ${fmt(after)}` : "Compressed ✓";
+      } catch {
+        compressBtn.textContent = "Couldn't compress";
+      }
+      setTimeout(() => { compressBtn.textContent = "Compress now"; compressBtn.disabled = false; }, 2500);
     };
   }
 }
@@ -931,7 +973,7 @@ function setupSidebar() {
     const conv = e.target.closest(".conv");
     if (conv) {
       const id = Number(conv.dataset.id);
-      if (!state.busy) openChat(id);
+      if (!state.busy) { state.userPicked = true; openChat(id); }
     }
   });
 
@@ -1004,8 +1046,12 @@ async function start() {
   $("#input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   });
+  document.addEventListener("keydown", (e) => {            // Escape stops the answer being written (CH-6)
+    if (e.key === "Escape" && state.busy && !document.querySelector(".menu:not(.hidden), dialog[open]")) stopAnswer();
+  });
   $("#new-chat").addEventListener("click", () => {
     if (state.busy) return;
+    state.userPicked = true;
     state.chatId = null;
     loadDraft();
     $("#chat-title").textContent = "New chat";
@@ -1025,6 +1071,7 @@ async function start() {
   $("#profile").addEventListener("click", () => $("#pmenu").classList.toggle("hidden"));
   $("#pmenu").querySelectorAll(".opt").forEach((opt) => {
     opt.addEventListener("click", () => {
+      state.userPicked = true;
       setProfile(opt.dataset.profile);
       $("#pmenu").classList.add("hidden");
       state.chatId = null;
@@ -1055,6 +1102,7 @@ async function start() {
   setupSidebar();
   setProfile(state.profile);
   await loadChats();
+  if (state.userPicked || state.chatId) return;            // the user already chose while the list was loading
   if (state.chats.length > 0) await openChat(state.chats[0].id);
   else { loadDraft(); drawWelcome(); }
 }

@@ -683,6 +683,7 @@ a.cite{cursor:pointer;margin:0 1px}
 .ai .src .stype::before{background:var(--k)}
 .ai .src .stype[data-kind=guide]{--k:#3fae6a}.ai .src .stype[data-kind=rct]{--k:#8b6cf0}.ai .src .stype[data-kind=study]{--k:#3d9be6}
 .ai .src .stype[data-kind=review]{--k:#e0913a}
+.ai .src .stype[data-kind=drug]{--k:#1f9e9a}.ai .src .stype[data-kind=patient]{--k:#9a7f95}.ai .src .stype[data-kind=file]{--k:#7c4dcc}
 
 /* a checked quote is a link to its source */
 .ai .bub .q-link{cursor:pointer;transition:background .15s,text-decoration-color .15s}
@@ -790,3 +791,7 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
 /* Clear Source: "⚠ Sources differ" when two sources say different things */
 .ai .bub p.differ{padding:10px 14px;border-radius:14px;border:1px solid color-mix(in srgb,var(--warn,#d98a00) 45%,transparent);
   background:color-mix(in srgb,var(--warn,#d98a00) 10%,transparent)}
+
+/* table cell alignment from Markdown (a class: the CSP refuses style attributes) */
+.bub .al-left{text-align:left}.bub .al-center{text-align:center}.bub .al-right{text-align:right}
+.pf-list .src-card .more>summary[data-saved]::after{content:"  " attr(data-saved);color:var(--ok);font-weight:600}
