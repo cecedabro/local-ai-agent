@@ -812,15 +812,23 @@ class DB:
             if row is None:
                 current = {"instructions": "", "web": True, "seeded": False}
             else:
-                current = {"instructions": row["instructions"], "web": bool(row["web"]), "seeded": bool(row["seeded"])}
+                current = {"instructions": row["instructions"], "web": bool(row["web"]), "seeded": int(row["seeded"])}
             for k in ("instructions", "web", "seeded"):
                 if k in fields:
                     current[k] = fields[k]
             conn.execute(
                 "INSERT OR REPLACE INTO profile_settings (username, profile, instructions, web, seeded) VALUES (?, ?, ?, ?, ?)",
-                (username, profile, current["instructions"], 1 if current["web"] else 0, 1 if current["seeded"] else 0),
+                (username, profile, current["instructions"], 1 if current["web"] else 0, int(current["seeded"])),
             )
             conn.commit()
+
+    def seed_version(self, username: str, profile: str) -> int:
+        """Which default list this profile last got (the raw `seeded` column: 0 never, 1 the first list, 2 ...)."""
+        with self._lock:
+            row = self._connect().execute(
+                "SELECT seeded FROM profile_settings WHERE username = ? AND profile = ?", (username, profile),
+            ).fetchone()
+            return int(row["seeded"]) if row else 0
 
     def add_source(self, username: str, profile: str, kind: str, title: str,
                    domain: str = "", note: str = "", filters: Any = None, content: str = "") -> dict[str, Any]:

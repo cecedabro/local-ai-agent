@@ -340,8 +340,11 @@ open pages when it helps) and a list of **source cards**:
 - `file`: a document (PDF via pypdf, text, Markdown, HTML; ≤ 5 MB, ≤ 200 000 characters of text,
   else **413**; unreadable **415**). Its whole text goes into the system prompt.
 Every card has a `note` (0–1000 characters: how the model should use it) and `enabled`.
-A user's Clear Source starts with two cards (seeded once, deletable): PubMed (reviews,
-meta-analyses, RCTs and guidelines, last 10 years, humans) and rivm.nl.
+A user's Clear Source starts with the Dutch default list, `profiles.SEED["evidence"]` (seeded once,
+deletable): PubMed (reviews, meta-analyses, RCTs and guidelines, last 10 years, humans) and the Dutch
+guideline and medicine sites (§14.3), with web search off. `profiles.SEED_VERSION` numbers the list:
+a profile that got an older list gets the missing cards once (and web search off) the next time it
+loads; cards the user removes afterwards stay removed.
 
 Endpoints (JSON; a source as `{"id", "kind", "title", "domain", "note", "filters", "enabled",
 "created", "tokens"}`, `tokens` = ceil(chars/4) of a document's text, else 0):
