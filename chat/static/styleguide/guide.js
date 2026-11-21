@@ -100,22 +100,31 @@ $("#sg-cs-live").innerHTML = aiHtml(`<div class="pre">${trailHtml(STEPS.slice(0,
 startOrb($("#sg-cs-live .ai>.orb"));
 animateTrail($("#sg-cs-live .pre"));
 
-// ---------------------------------------------------------------- the send drop (same markup and classes as app.js)
+// ---------------------------------------------------------------- the stop drop (same markup and classes as app.js)
 const WORDS = ["Thinking", "Searching", "Reading", "Writing"];
 $("#sg-drop-btn").addEventListener("click", () => {
-  const dock = $(".sg-dock"), btn = $("#sg-send");
-  dock.querySelector(".send-drop")?.remove();
-  const el = document.createElement("div");
-  el.className = "send-drop";
-  el.innerHTML = `<span class="sd-label">Thinking</span>${orbHtml("", "thinking")}`;
-  const d = dock.getBoundingClientRect(), b = btn.getBoundingClientRect(), top = dock.querySelector(".composer").getBoundingClientRect().top;
-  el.style.left = `${b.left - d.left + b.width / 2}px`;
-  el.style.bottom = `${d.bottom - top + 10}px`;
-  dock.appendChild(el);
-  const o = el.querySelector(".orb"), motion = startOrb(o);
-  btn.classList.add("stop");
-  WORDS.forEach((w, i) => setTimeout(() => { o.dataset.phase = w.toLowerCase(); el.querySelector(".sd-label").textContent = w; }, i * 1600));
-  setTimeout(() => { el.classList.add("back"); btn.classList.remove("stop"); setTimeout(() => { motion.stop(); el.remove(); }, 450); }, WORDS.length * 1600);
+  const btn = $("#sg-send");
+  if (btn.classList.contains("has-drop")) return;
+  const tmp = document.createElement("span");
+  tmp.innerHTML = orbHtml("", "thinking");
+  const o = tmp.firstElementChild;
+  o.classList.add("sd-orb");
+  btn.prepend(o);
+  btn.classList.add("stop", "has-drop");
+  const label = document.createElement("span");
+  label.className = "sd-label";
+  label.innerHTML = `<b>${WORDS[0]}</b>`;
+  btn.before(label);
+  const word = label.firstElementChild, motion = startOrb(o);
+  WORDS.forEach((w, i) => i && setTimeout(() => {
+    o.dataset.phase = w.toLowerCase();
+    word.textContent = w;
+    word.classList.remove("roll"); void word.offsetWidth; word.classList.add("roll");
+  }, i * 1600));
+  setTimeout(() => {
+    btn.classList.add("drop-out"); label.classList.add("out");
+    setTimeout(() => { motion.stop(); o.remove(); label.remove(); btn.classList.remove("stop", "has-drop", "drop-out"); }, 380);
+  }, WORDS.length * 1600);
 });
 
 // context bar sample

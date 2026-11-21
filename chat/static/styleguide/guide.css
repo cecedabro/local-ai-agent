@@ -29,7 +29,7 @@ body.sg{min-height:100dvh;margin:0}
 .sg-drops .orb{--s:64px}.sg-drops .orb.tiny{--s:18px;margin:23px 0}
 .sg-drops figcaption{font-size:12px;color:var(--muted)}
 .sg-thread{display:grid;gap:18px;max-width:780px;padding:18px;border-radius:22px;background:var(--glass);border:1px solid var(--stroke)}
-.sg-dock{position:relative;padding:60px 0 0;max-width:780px}
+.sg-dock{position:relative;padding:0;max-width:780px}
 .sg-strip{position:static;margin-top:10px}
 .sg-side{max-width:300px}
 .sg-sidebox{position:static;height:auto;width:100%;transform:none;display:flex;flex-direction:column;gap:10px}
