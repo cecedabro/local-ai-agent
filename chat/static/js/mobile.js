@@ -55,15 +55,27 @@
   // visible area (visualViewport) to keep the caret in view, so a full-height app slides down behind the
   // keyboard a bit with every letter. The app is pinned (CSS: position fixed) to the visible area instead:
   // its height and top follow visualViewport, so the composer always sits right on top of the keyboard.
+  // The app is pinned to the screen's edges (top/bottom, not a height: in the home-screen app 100vh and friends can
+  // be shorter than the screen). The keyboard's height is measured against a fixed, full-screen probe: the part of
+  // the screen below the visible area. --kb lifts the app's bottom edge onto the keyboard.
   const vv = window.visualViewport;
   const root = document.documentElement;
+  const probe = document.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  probe.className = "vv-probe";
+  document.body.appendChild(probe);
   let frame = 0;
   const fit = () => {
     if (!vv) return;
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
-      root.style.setProperty("--app-h", `${Math.round(vv.height)}px`);
-      root.style.setProperty("--app-top", `${Math.round(vv.offsetTop)}px`);
+      const full = probe.getBoundingClientRect().height || window.innerHeight;
+      const top = Math.max(0, Math.round(vv.offsetTop));
+      const kb = Math.max(0, Math.round(full - vv.height - vv.offsetTop));
+      root.style.setProperty("--app-top", `${top}px`);
+      root.style.setProperty("--kb", `${kb < 40 ? 0 : kb}px`);          // under 40 px is a toolbar wobble, not a keyboard
+      root.classList.toggle("kb-open", kb >= 40);
+      if (kb < 40 && window.scrollY) window.scrollTo(0, 0);              // iOS sometimes leaves the page scrolled after typing
     });
   };
   if (vv) {
@@ -71,7 +83,8 @@
     vv.addEventListener("scroll", fit);
     // iOS reports the keyboard's size late on focus; measure again once it has settled
     document.addEventListener("focusin", () => { fit(); setTimeout(fit, 300); });
-    document.addEventListener("focusout", () => setTimeout(fit, 300));
+    document.addEventListener("focusout", () => { setTimeout(fit, 100); setTimeout(fit, 400); });
+    window.addEventListener("orientationchange", () => setTimeout(fit, 400));
     fit();
   }
 

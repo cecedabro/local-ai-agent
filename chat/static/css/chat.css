@@ -408,13 +408,15 @@ body.admin>header{padding-top:max(12px,env(safe-area-inset-top));padding-left:ma
 .cbar{flex-wrap:nowrap}
 .cbar .seg label svg{width:14px;height:14px}
 @media (max-width:760px){
-  /* follows the visible area above the keyboard (mobile.js sets --app-h from visualViewport) */
+  /* pinned to the visible area above the keyboard (mobile.js sets --app-top and --kb from visualViewport) */
   html:has(body.app){overflow:hidden;overscroll-behavior:none}
   /* the stats line stays one line: the numbers shorten, Copy · Retry · Download stay on it */
   .meta2:has(.dl-wrap){flex-wrap:nowrap}
   .meta2:has(.dl-wrap)>span:not(.dl-wrap){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .meta2:has(.dl-wrap) button{flex:none}
-  body.app{position:fixed;left:0;right:0;top:var(--app-top,0);height:var(--app-h,100dvh);overscroll-behavior:none}
+  /* pinned to the screen's edges; while the keyboard is open the bottom edge sits on top of it (--kb, mobile.js).
+     No height or min-height from 100vh/dvh: in the home-screen app those can be shorter than the screen. */
+  body.app{position:fixed;left:0;right:0;top:var(--app-top,0);bottom:var(--kb,0);height:auto;min-height:0;overscroll-behavior:none}
   .composer textarea{max-height:30vh}
   .cbar .seg label{padding:6px 11px}
 }
@@ -755,3 +757,10 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
 .doc-link:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--hi),0 6px 18px var(--glow)}
 .doc-link b{font-size:15px}.doc-link b::after{content:" ↗";color:var(--link)}
 .doc-link small{font-size:12.5px;color:var(--muted)}
+/* mobile.js measures the screen with this (a fixed, full-screen, invisible box) */
+.vv-probe{position:fixed;top:0;bottom:0;left:0;width:0;visibility:hidden;pointer-events:none}
+@media (max-width:760px){
+  /* while typing the home-indicator gap under the composer is not needed: the keyboard is there */
+  html.kb-open .dock{padding-bottom:8px}
+  html.kb-open .dock .ctx,html.kb-open .dock .hint{display:none}   /* the composer sits right on the keyboard */
+}
