@@ -58,7 +58,12 @@ through External Secrets; nothing secret is in this repo.
    Fail → retry with the failure output, at most 3 attempts, then mark it `[~]` skipped.
    Changes to protected paths (`.agent-protected`, tests, specs) reject the attempt.
 5. Every step is reported to the status service (`/api/events`) and shows on the page. Pause (the
-   Now card) stops after the current task and frees the model and the PC; Stop ends it at once.
+   Now card) stops after the current task (also before a CI fix task and while waiting for CI) and
+   frees the model and the PC; Stop ends it at once. While paused you may push a hotfix to the
+   run's branch: before each task and each push the loop fetches the branch and rebases its own
+   unpushed commits on top, and after Resume it re-reads PLAN.md and checks CI again on the new
+   HEAD. A rebase conflict is aborted, reported (ntfy, status page, `REPORT.md`) and stops the run;
+   it never force-pushes.
 6. At the end the loop waits for CI, writes `REPORT.md`, opens a PR and releases the lease and the PC.
 
 Writing plans that the 48k-token model can finish: small tasks, one or two functions each, the
