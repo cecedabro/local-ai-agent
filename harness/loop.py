@@ -507,6 +507,7 @@ class Run:
     push_errors: list[str] = field(default_factory=list)
     results: list[Result] = field(default_factory=list)
     ci_notes: list[str] = field(default_factory=list)
+    sync_error: str = ""                                  # set when a human's pushed commits conflict with ours
     started: float = field(default_factory=time.monotonic)
 
     @property
@@ -514,6 +515,8 @@ class Run:
         return self.repo / STATE_DIR
 
     def stop_reason(self) -> str | None:
+        if self.sync_error:
+            return self.sync_error
         if (self.state / "STOP").exists():
             return "STOP file present"
         if time.monotonic() - self.started > self.args.max_hours * 3600:
@@ -611,11 +614,44 @@ class Run:
         git(self.repo, "reset", "--hard", head)
         git(self.repo, "clean", "-fd")                    # .agent/ survives via exclude
 
-    def push(self) -> bool:
-        """Push the branch. A failure is loud (ntfy, status page, report), never silent:
-        unpushed work only exists on the devbox."""
+    def sync(self) -> bool:
+        """Take in commits a human pushed to the branch (say, a hotfix during a pause): fetch it and rebase our
+        unpushed commits on top, so the next push is a fast-forward. An unreachable remote or a branch that is not
+        on the remote yet is fine (the push reports it). A conflict aborts the rebase, is loud (ntfy, status page,
+        report) and stops the run: never force-push over a human's work. Returns False once that happened."""
+        if self.sync_error:
+            return False
         if not self.args.push:
             return True
+        remote = f"refs/remotes/origin/{self.branch}"
+        res = sh(["git", "fetch", "-q", "origin", f"+refs/heads/{self.branch}:{remote}"], cwd=self.repo, timeout=120)
+        if res.returncode != 0:
+            return True
+        if sh(["git", "merge-base", "--is-ancestor", remote, "HEAD"], cwd=self.repo).returncode == 0:
+            return True                                   # nothing new on the remote
+        theirs = git(self.repo, "log", "--format=%h %s", f"HEAD..{remote}", check=False).splitlines()
+        res = sh(["git", "rebase", "-q", remote], cwd=self.repo, timeout=120)
+        if res.returncode == 0:
+            msg = f"took in {len(theirs)} pushed commit(s) on {self.branch}: " + "; ".join(theirs[:3])
+            print(f"[{now()}] {msg}")
+            self.status.event("ci", detail=msg[:300])     # the status service only knows its own kinds
+            return True
+        sh(["git", "rebase", "--abort"], cwd=self.repo)
+        err = tail(res.stdout, 10)
+        self.sync_error = f"commits pushed to {self.branch} conflict with the run's own; stopped (nothing force-pushed)"
+        print(f"[sync failed] {err}", file=sys.stderr)
+        notify("Branch conflict", f"{self.repo.name} {self.branch}: pushed commits conflict with the run's; "
+               "stopped. Rebase by hand on the devbox.", "rotating_light")
+        self.status.event("push_failed", detail="branch conflict: " + tail(err, 5))
+        return False
+
+    def push(self) -> bool:
+        """Push the branch (after taking in commits pushed by someone else). A failure is loud (ntfy, status page,
+        report), never silent: unpushed work only exists on the devbox."""
+        if not self.args.push:
+            return True
+        if not self.sync():
+            return False
         res = sh(["git", "push", "-u", "origin", self.branch], cwd=self.repo, timeout=120)
         if res.returncode == 0:
             return True
@@ -666,11 +702,12 @@ class Run:
         return Result(task, "skipped", self.args.retries, reason, seconds)
 
     # -- pause (status page)
-    def pause_point(self) -> None:
-        """Between tasks: if Pause is pressed on the status page, let go of the model and the PC
-        and wait for Resume (or a STOP). Paused time does not count toward --max-hours."""
+    def pause_point(self) -> bool:
+        """Between tasks, before a CI fix task and while waiting for CI: if Pause is pressed on the status page,
+        let go of the model and the PC and wait for Resume (or a STOP). Paused time does not count toward
+        --max-hours. Returns True if it paused; then the caller takes in what a human pushed meanwhile (sync)."""
         if not self.status.pause_wanted():
-            return
+            return False
         t0 = time.monotonic()
         print(f"[{now()}] paused from the status page; waiting for Resume")
         notify("Agent run paused", f"{self.repo.name}: press Resume on the status page", "pause_button")
@@ -681,12 +718,13 @@ class Run:
             time.sleep(self.status.poll)
         self.started += time.monotonic() - t0
         if (self.state / "STOP").exists():
-            return
+            return True
         print(f"[{now()}] resumed")
         self.status.acquire(self.stop_reason)
         self.pc.up()
         self.pc.hold()
         self.status.event("resumed")
+        return True
 
     # -- whole run
     def loop(self) -> str:
@@ -695,13 +733,14 @@ class Run:
             reason = self.stop_reason()
             if reason:
                 return reason
-            tasks = parse_plan((self.repo / "PLAN.md").read_text())
-            if not tasks:
-                return "plan complete"
             self.pause_point()
+            self.sync()                                   # a human may have pushed (and edited PLAN.md)
             reason = self.stop_reason()
             if reason:
                 return reason
+            tasks = parse_plan((self.repo / "PLAN.md").read_text())
+            if not tasks:
+                return "plan complete"
             result = self.run_task(tasks[0])
             self.results.append(result)
             consecutive_skips = consecutive_skips + 1 if result.status == "skipped" else 0
@@ -713,14 +752,29 @@ class Run:
         self.ci_notes.append(note)
         self.status.event("ci", detail=note)
 
+    def resumed(self) -> bool:
+        """A pause point for the CI round: True if it paused, a STOP is not set and the branch was brought up to
+        date with what a human pushed meanwhile (so CI is checked again on the new HEAD)."""
+        if not self.pause_point() or self.stop_reason():
+            return False
+        if not self.push():                               # sync + push: CI runs on the new HEAD
+            return False
+        self.note_ci(f"Resumed; checking CI again on {git(self.repo, 'rev-parse', '--short', 'HEAD')}.")
+        return True
+
     def wait_ci(self) -> list[tuple[str, str]] | None:
-        """Wait for every workflow run on the pushed HEAD. [] = green, None = no CI / unknown."""
+        """Wait for every workflow run on the pushed HEAD. [] = green, None = no CI / unknown.
+        Pause works here too; after a resume it waits for CI on the (maybe new) HEAD."""
         sha = git(self.repo, "rev-parse", "HEAD")
         appear_by = time.monotonic() + self.args.ci_appear
         deadline = time.monotonic() + self.args.ci_timeout
         print(f"[{now()}] waiting for CI on {sha[:7]}")
         self.status.event("ci_waiting", detail=sha[:7])
         while True:
+            if self.resumed():
+                return self.wait_ci()
+            if self.stop_reason():
+                return [("stopped", self.stop_reason() or "")]
             runs = ci_runs(self.repo, self.branch, sha)
             if runs is None:
                 return None
@@ -733,38 +787,57 @@ class Run:
                 return [("timeout", f"CI did not finish within {self.args.ci_timeout} s")]
             time.sleep(self.args.ci_poll)
 
-    def ci_gate(self, first: list[tuple[str, str]] | None = None) -> None:
+    def ci_gate(self, first: list[tuple[str, str]] | None = None) -> bool:
         """Wait for CI; turn failures into fix tasks until green or out of rounds.
-        `first` skips the initial wait (agent-watch passes the failure it saw on main)."""
+        `first` skips the initial wait (agent-watch passes the failure it saw on main).
+        Pause works before each fix task and while waiting; after a resume CI is checked again on the new HEAD
+        (a human's fix may have made it green). Returns True if PLAN.md gained new open tasks during a pause, so
+        the caller runs the plan again."""
         if not (self.args.ci and self.args.push):
-            return
+            return False
         if first is None and self.stop_reason():
             self.note_ci(f"CI not checked: {self.stop_reason()}.")
-            return
+            return False
+        known = {t.id for t in parse_plan((self.repo / "PLAN.md").read_text())}
+        def new_tasks() -> bool:
+            return bool({t.id for t in parse_plan((self.repo / "PLAN.md").read_text())} - known)
         self.push()                                       # a trailing "skipped" commit is not pushed yet
         failed = first
-        for n in range(1, self.args.ci_rounds + 1):
+        n = 0
+        while True:
             if failed is None:
                 failed = self.wait_ci()
+            if self.stop_reason():
+                self.note_ci(f"CI round stopped: {self.stop_reason()}.")
+                return False
+            if new_tasks():
+                self.note_ci("PLAN.md gained tasks during a pause; running the plan again.")
+                return True
             if failed is None:
                 self.note_ci("No CI runs found for the last commit (or gh failed).")
-                return
+                return False
             if not failed:
                 self.note_ci(f"CI green on {git(self.repo, 'rev-parse', '--short', 'HEAD')}.")
                 notify("CI green", self.branch, "white_check_mark")
-                return
+                return False
+            if n >= self.args.ci_rounds:
+                self.note_ci(f"CI still failing after {self.args.ci_rounds} fix rounds; needs a human.")
+                return False
             names = ", ".join(name for name, _ in failed)
+            if self.resumed():                            # Pause pressed: a human may fix it; look again
+                failed = None
+                continue
+            if self.stop_reason():
+                return False
+            n += 1
             self.note_ci(f"CI round {n}: failed ({names}).")
             notify("CI failed", f"{self.branch}: {names}; starting fix task CI{n}", "rotating_light")
-            if self.stop_reason():
-                return
             result = self.run_task(ci_fix_task(n, failed))
             self.results.append(result)
             if result.status != "done":
                 self.note_ci(f"CI{n} could not fix it; needs a human.")
-                return
-            failed = None
-        self.note_ci(f"CI still failing after {self.args.ci_rounds} fix rounds; needs a human.")
+                return False
+            failed = None                                 # run_task pushed the fix
 
     def fix_ci_run(self, run_id: str) -> str:
         """agent-watch mode: one failed run (on main) becomes the first fix task."""
@@ -794,6 +867,11 @@ class Run:
             lines += ["", f"{len(remaining)} task(s) not started: " + ", ".join(t.id for t in remaining)]
         if self.ci_notes:
             lines += ["", "## CI", "", *[f"- {note}" for note in self.ci_notes]]
+        if self.sync_error:
+            lines += ["", "## Branch conflict", "",
+                      f"{self.sync_error}. Someone pushed commits to `{self.branch}` that conflict with commits the "
+                      "run had not pushed yet. Those commits are only in the devbox checkout: rebase them by hand "
+                      f"on `origin/{self.branch}` and push."]
         if self.push_errors:
             lines += ["", "## Push failed", "",
                       f"Pushing failed {len(self.push_errors)} time(s); commits may exist only in the "
@@ -870,7 +948,8 @@ def main() -> int:
             ended = run.fix_ci_run(args.fix_ci)
         else:
             ended = run.loop()
-            run.ci_gate()
+            while run.ci_gate():                          # a pause added tasks to PLAN.md
+                ended = run.loop()
     except PcUnavailable as exc:
         ended = str(exc)
     except KeyboardInterrupt:

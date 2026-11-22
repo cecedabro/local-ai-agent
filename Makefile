@@ -11,6 +11,7 @@ lint:
 	python3 -c 'import json, sys; [json.load(open(f)) for f in sys.argv[1:]]' devbox/opencode.json renovate.json
 
 test:
+	python3 -m unittest discover -q -s harness/tests -p 'test_*.py'
 	harness/tests/selftest.sh
 
 # The agent loop's project check (CHECK_CMD=make check): fast, and no packages the devbox lacks.
