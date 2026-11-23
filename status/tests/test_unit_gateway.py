@@ -193,3 +193,38 @@ class OwnersWorkersTest(GatewayBase):
         self.assertIn("paused", self.req("GET", "/", token=None)[2].decode())
         self.clock.t += 601
         self.assertEqual(self.status()["jobs"]["workers"], [])
+
+
+class PreemptTest(GatewayBase):
+    """SPEC §4 preempt and §11: the cv-skills gatekeeper (pc/gpu-gate) takes the GPU from a running job."""
+
+    def test_preempt_takes_the_lease_and_the_old_holder_waits_first(self) -> None:
+        self.assertTrue(self.lease("acquire", "job")["granted"])
+        self.assertFalse(self.lease("acquire", "other")["granted"])
+        res = self.lease("preempt", "gate", repo="cv-skills")
+        self.assertTrue(res["granted"])
+        self.assertEqual(res["holder"]["run_id"], "gate")
+        back = self.lease("renew", "job")                                 # the job learns it lost the lease
+        self.assertEqual((back["granted"], back["position"]), (False, 1))
+        self.lease("release", "gate")
+        self.assertTrue(self.lease("acquire", "job")["granted"])           # and gets it back before "other"
+
+    def test_preempt_by_the_holder_or_with_no_holder(self) -> None:
+        self.assertTrue(self.lease("preempt", "gate", repo="cv-skills")["granted"])
+        self.assertTrue(self.lease("preempt", "gate", repo="cv-skills")["granted"])
+        self.assertEqual(self.status()["lease"]["queue"], [])
+
+    def test_gateway_says_the_gpu_is_taken(self) -> None:
+        self.lease("preempt", "gate", repo="cv-skills")
+        code, raw = self.chat("loop-key-123")
+        self.assertEqual(code, 503)
+        err = json.loads(raw)["error"]
+        self.assertEqual(err["type"], "gpu_taken")
+        self.assertIn("cv-skills", err["message"])
+        self.assertEqual(self.fake.order, [])                               # never sent upstream
+        self.lease("release", "gate")
+        self.assertEqual(self.chat("loop-key-123")[0], 200)
+
+    def test_an_agent_job_holding_the_lease_does_not_block_the_gateway(self) -> None:
+        self.lease("acquire", "job")
+        self.assertEqual(self.chat("loop-key-123")[0], 200)
