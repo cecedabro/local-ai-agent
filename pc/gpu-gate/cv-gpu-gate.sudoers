@@ -1,0 +1,2 @@
+# /etc/sudoers.d/cv-gpu-gate (root 0440, check with visudo -cf). The gatekeeper may run the swap helper, nothing else.
+cv-gate ALL=(root) NOPASSWD: /usr/local/sbin/cv-gpu-swap in, /usr/local/sbin/cv-gpu-swap out, /usr/local/sbin/cv-gpu-swap beat
