@@ -1,5 +1,5 @@
 SHELL := bash
-SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote harness/tests/fakebin/gh
+SH_FILES := $(shell git ls-files '*.sh') pc/power/ai-power-remote pc/gpu-gate/cv-gpu-swap mac/ai harness/tests/fakebin/gh
 PY_FILES := $(shell git ls-files '*.py')
 YAML_FILES := $(shell git ls-files '*.yaml' '*.yml')
 
@@ -12,6 +12,7 @@ lint:
 
 test:
 	python3 -m unittest discover -q -s harness/tests -p 'test_*.py'
+	python3 -m unittest discover -q -s pc/gpu-gate/tests
 	harness/tests/selftest.sh
 
 # The agent loop's project check (CHECK_CMD=make check): fast, and no packages the devbox lacks.

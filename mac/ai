@@ -3,8 +3,27 @@
 #   ai pause    stop llama-server and free VRAM/RAM (nothing can restart it until resume)
 #   ai resume   allow and start llama-server again (model takes about a minute to load)
 #   ai status   paused / active, and whether a job holds the PC awake
+#   ai gpu on|off|status   the cv-skills GPU gatekeeper (pc/gpu-gate): swap the stack in, back, or show its state.
+#                Uses CV_GATE_URL and a gatekeeper key from CV_GATE_KEY or the Keychain (service "cv-gate").
 # Runs the same steps as pc/power/ai.ps1, through `ssh pc` into WSL.
 set -euo pipefail
+
+if [[ "${1:-}" == gpu ]]; then
+  url="${CV_GATE_URL:-https://cv-skills-gpu.tail532153.ts.net}"
+  key="${CV_GATE_KEY:-$(security find-generic-password -s cv-gate -w 2>/dev/null || true)}"
+  [[ -n "${key}" ]] || { echo "no gatekeeper key: set CV_GATE_KEY or add it to the Keychain (service cv-gate)" >&2; exit 2; }
+  case "${2:-status}" in
+    on)     method=POST path=/v1/warmup ;;
+    off)    method=POST path=/v1/cooldown ;;
+    status) method=GET path=/v1/status ;;
+    *) echo "usage: ai gpu on|off|status" >&2; exit 2 ;;
+  esac
+  # The key goes in through a header file on stdin, never on the command line.
+  curl -sS --max-time 15 -X "${method}" -H @- "${url}${path}" <<<"Authorization: Bearer ${key}" \
+    || { echo "gatekeeper unreachable (PC asleep or off?)" >&2; exit 1; }
+  echo
+  exit 0
+fi
 
 case "${1:-}" in
   # Dropping the page cache matters: the model file stays cached in WSL's VM after the
@@ -12,7 +31,7 @@ case "${1:-}" in
   pause)  script='mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory && echo "paused: VRAM and RAM freed"' ;;
   resume) script='rm -f /run/ai/paused && systemctl start llama-server && echo "resumed: model loading"' ;;
   status) script='if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; if test -e /run/ai/busy; then echo busy; fi' ;;
-  *) echo "usage: ai pause|resume|status" >&2; exit 2 ;;
+  *) echo "usage: ai pause|resume|status|gpu on|gpu off|gpu status" >&2; exit 2 ;;
 esac
 
 # The script goes in on stdin (quoting through PowerShell breaks otherwise).

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Root helper for the cv-skills GPU gatekeeper. Installed to /usr/local/sbin/cv-gpu-swap (root:root 0755);
+# the gatekeeper's user may run exactly this via sudoers (cv-gpu-gate.sudoers), nothing else.
+#   cv-gpu-swap in     stop the agent model (like `ai pause`), keep the PC awake, start the cv-skills stack
+#   cv-gpu-swap out    stop the stack, start the agent model again (unless it was paused by hand before)
+#   cv-gpu-swap beat   keep the PC awake (the busy flag is a heartbeat with a 20 min TTL)
+# Config: /etc/cv-gate/swap.env (root-owned): STACK_DIR, COMPOSE_FILES, optional MODEL_PATH.
+set -euo pipefail
+
+CONF=${CV_GATE_SWAP_ENV:-/etc/cv-gate/swap.env}
+FLAGS=${CV_GATE_FLAGS:-/run/ai}
+STACK_DIR="" COMPOSE_FILES="compose.yaml compose.gpu.yml" MODEL_PATH=""
+# shellcheck source=/dev/null
+[[ -r "${CONF}" ]] && . "${CONF}"
+[[ -n "${STACK_DIR}" && -d "${STACK_DIR}" ]] || { echo "STACK_DIR not set or missing (${CONF})" >&2; exit 2; }
+
+compose() {
+  local args=() f
+  for f in ${COMPOSE_FILES}; do args+=(-f "${STACK_DIR}/${f}"); done
+  docker compose --project-directory "${STACK_DIR}" -p cv-skills "${args[@]}" "$@"
+}
+
+precheck() {
+  # The containers have no internet: every image (and the model) must be there already, or we fail fast.
+  local img missing=()
+  while read -r img; do
+    [[ -z "${img}" ]] && continue
+    docker image inspect "${img}" >/dev/null 2>&1 || missing+=("${img}")
+  done < <(compose config --images)
+  if (( ${#missing[@]} )); then echo "images not pulled: ${missing[*]}" >&2; exit 3; fi
+  if [[ -n "${MODEL_PATH}" && ! -e "${MODEL_PATH}" ]]; then echo "model missing: ${MODEL_PATH}" >&2; exit 3; fi
+}
+
+mkdir -p "${FLAGS}"
+case "${1:-}" in
+  in)
+    precheck
+    if [[ -e "${FLAGS}/paused" && ! -e "${FLAGS}/gpu-gate" ]]; then
+      touch "${FLAGS}/gpu-gate-kept-paused"           # paused by hand: don't resume it on the way out
+    fi
+    touch "${FLAGS}/gpu-gate" "${FLAGS}/paused" "${FLAGS}/busy"
+    systemctl stop llama-server
+    { sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory; } 2>/dev/null || true  # free RAM
+    compose up -d --remove-orphans
+    echo "stack starting" ;;
+  out)
+    compose down --remove-orphans || true
+    rm -f "${FLAGS}/gpu-gate"
+    if [[ -e "${FLAGS}/gpu-gate-kept-paused" ]]; then
+      rm -f "${FLAGS}/gpu-gate-kept-paused"
+      echo "stack stopped; agent model stays paused (it was paused before)"
+    else
+      rm -f "${FLAGS}/paused"
+      systemctl start llama-server
+      echo "stack stopped; agent model loading"
+    fi ;;                                              # busy is left to expire, so it never clobbers a job's flag
+  beat)
+    touch "${FLAGS}/busy"; echo beat ;;
+  *)
+    echo "usage: cv-gpu-swap in|out|beat" >&2; exit 2 ;;
+esac

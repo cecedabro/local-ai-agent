@@ -1,0 +1,18 @@
+# /etc/systemd/system/cv-gpu-gate.service (in WSL). Always on, no GPU, 127.0.0.1:8088 only;
+# Windows `tailscale serve --bg --https=443 http://127.0.0.1:8088` is the only way in.
+[Unit]
+Description=cv-skills GPU gatekeeper
+After=network-online.target docker.service
+
+[Service]
+User=cv-gate
+Group=cv-gate
+EnvironmentFile=-/etc/cv-gate/gate.env
+ExecStart=/usr/bin/python3 /opt/cv-gate/gate.py
+Restart=always
+RestartSec=5
+# No ProtectSystem/NoNewPrivileges: the sudo helper (a child) must stop llama-server and write /run/ai.
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
