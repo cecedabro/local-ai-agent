@@ -266,6 +266,17 @@ class Status:
         while not stop.wait(60):
             self._post("/api/lease", {**self.ident, "action": "renew"})
 
+    def lost_lease(self) -> bool:
+        """True when another holder took the lease from us (status SPEC §4 preempt: the cv-skills gatekeeper
+        stopped the model on purpose). Fail-open: False when the service is off or unreachable."""
+        res = self._post("/api/lease", {**self.ident, "action": "renew"})
+        return bool(res) and res.get("granted") is False
+
+    def rejoin(self, should_stop) -> None:
+        """Wait (first in line after a preempt) until the lease is ours again."""
+        self._stop.set()                                  # the old renew thread
+        self.acquire(should_stop)
+
     def pause_wanted(self) -> bool:
         """True while Pause is pressed for this run on the status page (fail-open: False)."""
         res = self._post(f"/api/runs/{self.ident['run_id']}/control", {})
@@ -665,15 +676,47 @@ class Run:
         return False
 
     # -- one task
+    def wait_for_gpu(self) -> bool:
+        """If the GPU was taken from us (lease preempted by the cv-skills gatekeeper), let go of the PC and wait
+        until the lease comes back. Paused time does not count toward --max-hours. True if it waited."""
+        if not self.status.lost_lease():
+            return False
+        t0 = time.monotonic()
+        print(f"[{now()}] the GPU was taken (lease preempted); waiting for it to come back")
+        notify("Agent run waiting", f"{self.repo.name}: the GPU is in use (cv-skills); continuing afterwards",
+               "pause_button")
+        self.status.event("paused", detail="GPU taken (lease preempted)")
+        self.pc.release()
+        self.status.rejoin(self.stop_reason)
+        self.started += time.monotonic() - t0
+        if self.stop_reason():
+            return True
+        print(f"[{now()}] the GPU is back")
+        self.status.event("resumed")
+        self.pc.up()
+        self.pc.hold()
+        return True
+
     def run_task(self, task: Task) -> Result:
         t0 = time.monotonic()
         failure = ""
-        for n in range(1, self.args.retries + 1):
+        n = 1
+        while n <= self.args.retries:
+            self.wait_for_gpu()                           # before pc.up(): the model is stopped on purpose
+            if self.stop_reason() and not failure:        # stopped while waiting: not tried, not skipped
+                return Result(task, "stopped", n - 1, self.stop_reason() or "", time.monotonic() - t0)
+            if self.stop_reason():
+                break
             head = git(self.repo, "rev-parse", "HEAD")
             print(f"[{now()}] {task.id} attempt {n}/{self.args.retries}: {task.title}")
             self.status.event("task_started", task_id=task.id, title=task.title[:200], attempt=n,
                               retries=self.args.retries)
-            ok, failure = self.attempt(task, n, failure)
+            try:
+                ok, failure = self.attempt(task, n, failure)
+            except PcUnavailable:
+                if not self.status.lost_lease():
+                    raise
+                ok, failure = False, "the GPU was taken during the attempt"
             if ok:
                 if task.line >= 0:
                     mark_task(self.repo / "PLAN.md", task, "x")
@@ -686,8 +729,14 @@ class Run:
                 self.status.event("task_done", task_id=task.id, title=task.title[:200], attempts=n,
                                   seconds=round(seconds), plan=plan_snapshot(self.repo), **size)
                 return Result(task, "done", n, seconds=seconds)
+            if self.status.lost_lease():                  # the model was taken mid-attempt: this one doesn't count
+                print(f"[{now()}] {task.id} attempt {n} interrupted: the GPU was taken; retrying it later")
+                self.reset(head)
+                failure = ""
+                continue
             print(f"[{now()}] {task.id} attempt {n} failed: {failure.splitlines()[0] if failure else ''}")
             self.reset(head)
+            n += 1
             if self.stop_reason():
                 break
         reason = failure.splitlines()[0][:160] if failure else "unknown"

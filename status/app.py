@@ -28,6 +28,8 @@ KINDS = {"run_started", "task_started", "task_done", "task_skipped", "push_faile
          "run_finished", "paused", "resumed"}
 IMPORT_KINDS = {"run_started", "task_done", "task_skipped", "run_finished"}
 MAX_BODY = 256 * 1024
+GPU_GATE_REPO = "cv-skills"                               # the lease name of pc/gpu-gate
+GPU_TAKEN = "The GPU is busy with the cv-skills demo; try again in a few minutes."
 IMPORT_MAX = 8 * 1024 * 1024                              # POST /api/import (SPEC §12.1)
 IMPORT_ITEMS = 5000
 DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -321,6 +323,15 @@ class App:
             if self.holder and self.holder["run_id"] == rid:
                 self.holder["seen"] = now
                 return {"granted": True, "position": 0, "holder": self.pub(self.holder)}
+            if act == "preempt":                          # SPEC §4: take it now; the old holder waits first in line
+                me = next((w for w in self.waiters if w["run_id"] == rid), None) or \
+                    {"run_id": rid, "repo": body["repo"], "branch": body.get("branch") or "", "since": iso(now)}
+                me["seen"] = now
+                self.waiters = [w for w in self.waiters if w["run_id"] != rid]
+                if self.holder:
+                    self.waiters.insert(0, self.holder)
+                self.holder = me
+                return {"granted": True, "position": 0, "holder": self.pub(me)}
             me = next((w for w in self.waiters if w["run_id"] == rid), None)
             if me is None:
                 me = {"run_id": rid, "repo": body["repo"], "branch": body.get("branch") or "",
@@ -910,6 +921,12 @@ class Gateway:
         if isinstance(u, dict) and "completion_tokens" in u:
             return {"prompt_n": u.get("prompt_tokens"), "predicted_n": u.get("completion_tokens")}
         return None
+
+    def gpu_taken(self) -> bool:
+        """SPEC §4/§12: the cv-skills gatekeeper (pc/gpu-gate) holds the lease, so `coder` is stopped on purpose."""
+        with self.app.lock:
+            self.app.expire_lease()
+            return bool(self.app.holder and self.app.holder["repo"] == GPU_GATE_REPO)
 
     def upstream(self, method: str, path: str, data: bytes | None) -> urllib.request.Request:
         req = urllib.request.Request(self.app.root + path, data=data, method=method,
@@ -1721,7 +1738,7 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
     class Handler(BaseHTTPRequestHandler):
         server_version = "agent-status"
 
-        def send(self, code: int, body: object, ctype: str = "application/json") -> None:
+        def send(self, code: int, body: object, ctype: str = "application/json", headers: dict | None = None) -> None:
             if isinstance(body, bytes):
                 data = body
             elif isinstance(body, str):
@@ -1733,6 +1750,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
 
@@ -1750,6 +1769,8 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
             client = gw.client_for(self.headers.get("Authorization", ""))
             if client is None:
                 return self.send(401, {"error": {"message": "unknown key"}})
+            if gw.gpu_taken():
+                return self.send(503, {"error": {"message": GPU_TAKEN, "type": "gpu_taken"}}, headers={"Retry-After": "60"})
             if method == "GET":
                 if path != "/v1/models":
                     return self.send(404, {"error": {"message": "not found"}})
@@ -1834,7 +1855,7 @@ def make_server(host: str, port: int, *, db_path: str, token: str, llama_url: st
                 app.add_event(body)
                 return self.send(201, {"ok": True})
             if path == "/api/lease":
-                if body.get("action") not in ("acquire", "renew", "release") \
+                if body.get("action") not in ("acquire", "renew", "release", "preempt") \
                         or not isinstance(body.get("run_id"), str) or not isinstance(body.get("repo"), str):
                     return self.send(400, {"error": "need action, run_id and repo"})
                 return self.send(200, app.lease(body))

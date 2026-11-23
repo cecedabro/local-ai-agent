@@ -76,7 +76,7 @@ restart.
 
 ## 4. `POST /api/lease`
 
-Body: `{"action": "acquire" | "renew" | "release", "run_id": str, "repo": str, "branch": str}`.
+Body: `{"action": "acquire" | "renew" | "release" | "preempt", "run_id": str, "repo": str, "branch": str}`.
 `branch` may be missing (treat as `""`). Unknown action or missing `run_id`/`repo` → 400.
 
 State (in memory; losing it on restart is fine, clients re-acquire): one **holder** or none,
@@ -92,6 +92,10 @@ First drop expired entries: holder and waiters whose `seen` is older than `lease
   - otherwise → add caller to the end of the waiters if not already there (keep its place
     if it is), refresh `seen`; not granted.
 - `release` → remove the caller as holder or waiter. Never an error, also for unknown runs.
+- `preempt` (the cv-skills gatekeeper, `pc/gpu-gate`, repo `cv-skills`) → the caller becomes holder at
+  once and leaves the waiters; the old holder (if another run) goes to the **front** of the waiters,
+  so it gets the lease back first. Granted. The old holder learns it on its next `renew`
+  (not granted, position 1); agent-loop then waits and retries the same attempt (see `harness/loop.py`).
 
 Response 200:
 
@@ -326,6 +330,9 @@ Active when `llama_url` is set (else `/v1/*` → **404**).
   is dropped (recorded as 499).
 - llama-server unreachable → **502** "model unreachable (PC asleep?)". Upstream HTTP errors
   pass through with their status.
+- While repo `cv-skills` holds the lease (§4 preempt: `coder` is stopped on purpose) → **503**
+  `{"error": {"message": "The GPU is busy with the cv-skills demo; try again in a few minutes.",
+  "type": "gpu_taken"}}` with `Retry-After: 60`, without sending anything upstream.
 - Every request is recorded: client, lane, queued/started/finished, status, prompt and
   generated tokens and their milliseconds (from llama-server's `timings`, or `usage`).
   **Prompts and answers are never stored.** Per-client all-time totals are kept separately

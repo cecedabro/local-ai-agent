@@ -14,7 +14,21 @@ import httpx
 
 
 class Busy(Exception):
-    """The gateway answered 503 or 429: the model is busy, try again later."""
+    """The gateway answered 503 or 429: the model is busy, try again later.
+    `message` is set when waiting won't help soon (the GPU is lent out to the cv-skills demo, status SPEC §11)."""
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message or "busy")
+        self.message = message
+
+
+async def busy_from(resp: Any) -> Busy:
+    """A Busy for a 503/429 answer; with the gateway's message when it says the GPU is taken (type gpu_taken)."""
+    try:
+        err = json.loads(await resp.aread()).get("error") or {}
+    except (ValueError, AttributeError, httpx.HTTPError):
+        err = {}
+    return Busy(err.get("message", "") if isinstance(err, dict) and err.get("type") == "gpu_taken" else "")
 
 
 class GatewayError(Exception):
@@ -139,7 +153,7 @@ async def stream_chat(settings: Any, messages: list[dict], think: bool, tools: l
         async with httpx.AsyncClient(timeout=600) as client:
             async with client.stream("POST", url, json=request_body(messages, think, tools=tools), headers=headers) as resp:
                 if resp.status_code in (503, 429):
-                    raise Busy()
+                    raise await busy_from(resp)
                 if resp.status_code != 200:
                     raise GatewayError(resp.status_code)
 
@@ -169,7 +183,7 @@ async def complete(settings: Any, messages: list[dict]) -> str:
         async with httpx.AsyncClient(timeout=600) as client:
             async with client.stream("POST", url, json=request_body(messages, think=False, stream=False), headers=headers) as resp:
                 if resp.status_code in (503, 429):
-                    raise Busy()
+                    raise await busy_from(resp)
                 if resp.status_code != 200:
                     raise GatewayError(resp.status_code)
 

@@ -95,3 +95,52 @@ def test_old_clear_source_profile_gets_the_dutch_list_once(tmp_path):
     d.set_profile_settings("lisa", "evidence", instructions="Kort.")         # saving settings keeps the list version
     again = profiles.config(d, "lisa", "evidence")
     assert gone["domain"] not in {s["domain"] for s in again["sources"]}, "a removed default stays removed"
+
+
+# ---------------------------------------------------------------- the GPU lent out to the cv-skills demo
+def test_busy_carries_the_gpu_taken_message():
+    from coder import gateway
+
+    class Resp:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        async def aread(self) -> bytes:
+            return self.body
+
+    taken = b'{"error": {"message": "The GPU is busy with the cv-skills demo; try again in a few minutes.", "type": "gpu_taken"}}'
+    assert "cv-skills" in asyncio.run(gateway.busy_from(Resp(taken))).message
+    assert asyncio.run(gateway.busy_from(Resp(b'{"error":"busy"}'))).message == ""
+    assert asyncio.run(gateway.busy_from(Resp(b"not json"))).message == ""
+
+
+def test_answer_stops_waiting_when_the_gpu_is_lent_out(tmp_path):
+    import json
+
+    from coder import answer, gateway
+    from coder.db import DB
+    d = DB(str(tmp_path))
+    d.init_schema()
+    d.create_user("u1", "x", ["chat"])
+    c = d.create_chat("u1", "general")
+    d.add_message(c["id"], "user", "hi")
+    chat = d.get_chat(c["id"], "u1")
+    calls = {"n": 0}
+
+    async def stream(settings, messages, think, tools=None):
+        calls["n"] += 1
+        raise gateway.Busy("The GPU is busy with the cv-skills demo; try again in a few minutes.")
+        yield  # pragma: no cover
+
+    async def no_sleep(_):
+        return None
+
+    settings = SimpleNamespace(STATUS_URL="", CTX_DEFAULT=32768, WAIT_LIMIT=60)
+
+    async def go():
+        return [x async for x in answer.run_answer(d, settings, chat, True, stream=stream, sleep=no_sleep)]
+    out = asyncio.run(go())
+    errors = [json.loads(x.split("data: ", 1)[1]) for x in out if x.startswith("event: error")]
+    assert errors and "cv-skills" in errors[0]["error"] and errors[0]["status"] == 503
+    assert calls["n"] == 1                                    # no waiting loop
+    d.close()

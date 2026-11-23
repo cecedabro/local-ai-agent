@@ -872,7 +872,8 @@ async def run_evidence(db: Any, settings: Any, chat: dict, think: bool, *,
             elif tag == "usage":
                 usage = val
     except (gateway.Busy, gateway.GatewayError) as e:
-        yield _sse("error", {"error": "The model could not answer.", "status": getattr(e, "status", 502)})
+        msg = getattr(e, "message", "") or "The model could not answer."
+        yield _sse("error", {"error": msg, "status": getattr(e, "status", 503 if isinstance(e, gateway.Busy) else 502)})
         return
     finally:
         if agen is not None:

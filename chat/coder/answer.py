@@ -155,7 +155,10 @@ async def run_answer(db: Any, settings: Any, chat: dict, think: bool, *,
                     agen = stream(settings, messages, think)
                 try:
                     first = await agen.__anext__()
-                except gateway.Busy:
+                except gateway.Busy as e:
+                    if e.message:                         # the GPU is lent out: waiting a minute won't help
+                        yield sse("error", {"error": e.message, "status": 503})
+                        return
                     if not waited:
                         yield phase("waiting")
                         shown = "waiting"
