@@ -5,7 +5,7 @@ in WSL takes the requests. The first one swaps the GPU from the agent's model (`
 stack. After 10 min without requests it swaps back.
 
 ```
-kind pod: app → http://127.0.0.1:8088 → cv-gpu-link sidecar (ephemeral node, tag:cv-skills-client)
+kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral node, tag:cv-skills-client)
   └─ http://cv-skills-gpu:80 over the tailnet  (Windows: tailscale serve --tcp=80 → 127.0.0.1:8088)
        └─ gate.py  127.0.0.1:8088, user cv-gate, no GPU, always on
             ├─ sudo -n cv-gpu-swap in|out|beat   (the only privileged thing it can do)
@@ -25,8 +25,8 @@ kind pod: app → http://127.0.0.1:8088 → cv-gpu-link sidecar (ephemeral node,
 - **Access (`GATE_AUTH=tailnet`, the default):** the tailnet policy is the lock.
   - Only `tag:cv-skills-client` nodes (and Cédric's own devices) can reach `cv-skills-gpu:80`; the gatekeeper
     itself listens on loopback only. No per-person keys.
-  - The one shared secret is the Tailscale OAuth client secret (tag `tag:cv-skills-client` only), in OpenBao at
-    `secret/cv-skills/tailscale` (key `oauth_client_secret`). Revoke it in the admin console to cut everyone off.
+  - The one shared secret is the Tailscale OAuth client secret (tag `tag:cv-skills-client` only); see Clients.
+    Revoke it in the admin console to cut everyone off.
   - `X-Requester` (optional, sanitised) is only a label for the logs.
   - `GATE_AUTH=keys` brings back per-person keys (`gate.py add-key <name>`, hashes in `/etc/cv-gate/keys`).
 - **The stack:** it gets the internal key (`/etc/cv-gate/internal-key`) plus `X-Requester: <label>`.
@@ -56,7 +56,7 @@ kind pod: app → http://127.0.0.1:8088 → cv-gpu-link sidecar (ephemeral node,
 1. **Tailnet admin (Cédric):**
    - Rename the machine to `cv-skills-gpu`; disable its key expiry.
    - Policy: `tag:cv-skills-client` (owner `autogroup:admin`) → `cv-skills-gpu` `tcp:80`; members keep `*`.
-   - OAuth client, scope Auth Keys: write, tag `tag:cv-skills-client`; its secret goes into OpenBao.
+   - OAuth client, scope Auth Keys: write, tag `tag:cv-skills-client`; its secret is `CV_SKILLS_TS_KEY` (see Clients).
 2. **WSL:** NVIDIA Container Toolkit:
    - NVIDIA's apt repo, `apt install nvidia-container-toolkit`, `nvidia-ctk runtime configure --runtime=docker`,
      `systemctl restart docker`.
@@ -89,17 +89,15 @@ kind pod: app → http://127.0.0.1:8088 → cv-gpu-link sidecar (ephemeral node,
   userdel cv-gate
   ```
 
-## Clients (kind): `link/`
+## Clients
 
-`link/` is the sidecar image: the Tailscale image plus socat, userspace networking (no `NET_ADMIN`, no tun).
-
-- It joins as an ephemeral, pre-authorised `tag:cv-skills-client` node, using `TS_AUTHKEY` (the OAuth client
-  secret). Ephemeral nodes disappear from the tailnet shortly after the pod stops.
-- It forwards `LINK_LISTEN` (default `127.0.0.1:8088`) to `cv-skills-gpu:80`.
-- The app in the same pod calls `http://127.0.0.1:8088/v1/...`.
-- Build and load: `docker build -t cv-gpu-link:1 pc/gpu-gate/link && kind load docker-image cv-gpu-link:1`.
-- `link/sidecar.example.yaml` shows the pod; the Secret comes from OpenBao.
-- Compose doesn't use it (for now compose runs the model locally or a stub).
+- **kind (uwv-hva/deployment#37):** a `cv-skills-egress` Deployment (stock `tailscale/tailscale`, userspace, outbound
+  HTTP proxy on :1055, ephemeral `tag:cv-skills-client`). The API calls `CV_AI_URL=http://cv-skills-gpu` through
+  `CV_AI_PROXY=http://cv-skills-egress:1055`. No key: the tailnet policy is the lock.
+- **The secret:** a Tailscale OAuth client secret (scope Auth Keys: write, tag `tag:cv-skills-client`), kept as the
+  GitHub Actions secret `CV_SKILLS_TS_KEY` in uwv-hva/deployment; `make kind-openbao` puts it in OpenBao at
+  `secret/cap-app/cv-skills-tailscale` (`authkey`).
+- **Compose:** later, the same egress proxy as a compose service.
 
 ## From the Mac
 
