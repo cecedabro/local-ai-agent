@@ -67,7 +67,7 @@ class GateTest(unittest.TestCase):
         self.seen = handler.seen
         self.up = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=self.up.serve_forever, daemon=True).start()
-        self.cfg = gate.Config(port=0, upstream=f"http://127.0.0.1:{self.up.server_port}", keys_file=self.dir / "keys",
+        self.cfg = gate.Config(port=0, auth="keys", upstream=f"http://127.0.0.1:{self.up.server_port}", keys_file=self.dir / "keys",
                                internal_key_file=self.dir / "internal",
                                swap_cmd=[sys.executable, str(self.dir / "swap.py"), str(self.dir)],
                                idle_s=1, load_timeout_s=10, tick_s=0.1, beat_s=0.2)
@@ -117,6 +117,19 @@ class GateTest(unittest.TestCase):
         self.assertEqual(st["state"], "idle")
         self.assertEqual(self.call("GET", "/healthz", key=None)[0], 200)
         self.assertEqual(self.call("GET", "/other", key=None)[0], 404)
+
+    def test_tailnet_mode_needs_no_key_and_keeps_the_label_clean(self) -> None:
+        self.cfg.auth = "tailnet"
+        code, st, _ = self.call("GET", "/v1/status", key=None)
+        self.assertEqual(code, 200)
+        self.assertEqual(st["state"], "idle")
+        self.gate.want()
+        self.wait_state("active")
+        code, _, _ = self.call("POST", "/v1/x", {}, key="ignored", headers={"X-Requester": "kind-dev <evil> log"})
+        self.assertEqual(code, 200)
+        self.assertEqual(self.seen[-1], {"auth": "Bearer internal-key", "who": "kind-devevillog", "path": "/v1/x"})
+        self.call("POST", "/v1/x", {}, key=None)
+        self.assertEqual(self.seen[-1]["who"], "tailnet")
 
     def test_status_shape(self) -> None:
         _, st, _ = self.call("GET", "/v1/status")
@@ -191,7 +204,7 @@ class GateTest(unittest.TestCase):
             time.sleep(0.3)                                       # the log line comes after the reply
         text = out.getvalue()
         self.assertIn("POST /v1/skills-profile 503", text)
-        self.assertIn("key=alice", text)
+        self.assertIn("who=alice", text)
         self.assertNotIn("Jan Jansen", text)
         self.assertNotIn(self.key, text)
         self.assertNotIn("wrong", text)
