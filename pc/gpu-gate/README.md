@@ -76,7 +76,7 @@ kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral 
    - Put the internal key in the stack's `API_KEYS`.
    - Pull the stack's images and model in advance.
 4. **Windows:** `tailscale serve --bg --tcp=80 tcp://127.0.0.1:8088` (TCP, not `--http`: HTTP serve matches the
-   Host header, so the sidecar's `Host: 127.0.0.1:8088` and IP access would get 404). Check from the Mac with
+   Host header, so IP access and other Host values would get 404). Check from the Mac with
    `ai gpu status`.
 
 **Undo:**
