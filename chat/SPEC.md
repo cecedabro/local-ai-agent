@@ -684,3 +684,21 @@ The file work lives in a new module `chat/coder/files.py` (pure functions, no da
   `<span class="fi">EXT</span><b>NAME</b><small>SIZE</small></a>...</div>` (SIZE like `12 KB`).
 - A finished assistant answer's meta row has a `.dl` button that opens `.dl-menu` with links to the export of §16.5:
   Markdown, Word, PDF, HTML.
+
+## 17. Your password: change it, see what you type
+
+Passwords are stored only as argon2id hashes (§2), so nobody can read one back, not even an admin. Instead:
+
+- **Change it on the settings page** (`/account`, card "Password"): current password, new password, new password
+  again. `POST /api/me/password {"current", "new"}` (session + `X-Coder`):
+  - both are stripped, like at sign-in and invite;
+  - a wrong current password → 403 and counts as a failed sign-in for `user:<name>` (§2 rate limit; after 5 → 429);
+  - the new one must be 10–200 characters and differ from the current one → else 400;
+  - on success the hash is replaced and every **other** session of the user ends; this one stays.
+    Answer `{"ok": true, "other_sessions_ended": n}`.
+- **The eye:** every password field on the sign-in and settings pages has a `.pw-eye` button inside the field that
+  shows/hides what you type (`aria-pressed`). Fields go back to dots before a form is sent.
+- **Password managers:** the fields carry `autocomplete` = `username` / `current-password` / `new-password`, so
+  Safari/iCloud Keychain offers to save the new password and fill it in later. Forgot it? Sign in with a passkey
+  and set a new one here.
+- Code: `chat/static/js/password.js`; markup and styles are human-owned.
