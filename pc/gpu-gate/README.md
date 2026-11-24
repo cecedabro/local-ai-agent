@@ -5,8 +5,8 @@ in WSL takes the requests. The first one swaps the GPU from the agent's model (`
 stack. After 10 min without requests it swaps back.
 
 ```
-client (compose / kind, own Tailscale node tag:cv-skills-client)
-  └─ https://cv-skills-gpu.<tailnet>.ts.net  (Windows: tailscale serve 443 → 127.0.0.1:8088)
+kind pod: app → http://127.0.0.1:8088 → cv-gpu-link sidecar (ephemeral node, tag:cv-skills-client)
+  └─ http://cv-skills-gpu:80 over the tailnet  (Windows: tailscale serve --tcp=80 → 127.0.0.1:8088)
        └─ gate.py  127.0.0.1:8088, user cv-gate, no GPU, always on
             ├─ sudo -n cv-gpu-swap in|out|beat   (the only privileged thing it can do)
             └─ proxy → cv-skills-api 127.0.0.1:8089 (internal key + X-Requester)
@@ -22,12 +22,15 @@ client (compose / kind, own Tailscale node tag:cv-skills-client)
 | any other `/v1/…` | active: proxied. Otherwise 503 + `Retry-After: 15` + the status body; idle/unloading also start a swap in |
 | `GET /healthz` | 200, no key; local liveness only |
 
-- **Keys:** every `/v1` call needs a personal key (`Authorization: Bearer …` or `X-API-Key`).
-  - Only sha256 hashes are stored, in `/etc/cv-gate/keys`, re-read on every request.
-  - To revoke a key, delete its line.
-- **The stack:** it never sees personal keys. It gets the internal key (`/etc/cv-gate/internal-key`) plus
-  `X-Requester: <name>`.
-- **Logs:** method, path, status, duration and key name only (`journalctl -u cv-gpu-gate`).
+- **Access (`GATE_AUTH=tailnet`, the default):** the tailnet policy is the lock.
+  - Only `tag:cv-skills-client` nodes (and Cédric's own devices) can reach `cv-skills-gpu:80`; the gatekeeper
+    itself listens on loopback only. No per-person keys.
+  - The one shared secret is the Tailscale OAuth client secret (tag `tag:cv-skills-client` only), in OpenBao at
+    `secret/cv-skills/tailscale` (key `oauth_client_secret`). Revoke it in the admin console to cut everyone off.
+  - `X-Requester` (optional, sanitised) is only a label for the logs.
+  - `GATE_AUTH=keys` brings back per-person keys (`gate.py add-key <name>`, hashes in `/etc/cv-gate/keys`).
+- **The stack:** it gets the internal key (`/etc/cv-gate/internal-key`) plus `X-Requester: <label>`.
+- **Logs:** method, path, status, duration and requester only (`journalctl -u cv-gpu-gate`).
 - **Clients:** a connect timeout means the PC is asleep or off. The gatekeeper never sends "offline".
 
 ## Swapping (`cv-gpu-swap`, root)
@@ -48,17 +51,16 @@ client (compose / kind, own Tailscale node tag:cv-skills-client)
   - The gatekeeper takes the lease with `preempt`, falling back to `acquire` on an older status service.
   - It goes ahead either way: a cv-skills request wins over agent jobs.
 
-## Install on the PC (needs Cédric's OK; not done yet)
+## Install on the PC (done 2026-11-24)
 
 1. **Tailnet admin (Cédric):**
-   - Rename the machine to `cv-skills-gpu`.
-   - Enable HTTPS certificates.
-   - Save the policy with `tag:cv-skills-client` → `cv-skills-gpu:443`.
-   - Create the reusable, ephemeral, tagged auth key.
+   - Rename the machine to `cv-skills-gpu`; disable its key expiry.
+   - Policy: `tag:cv-skills-client` (owner `autogroup:admin`) → `cv-skills-gpu` `tcp:80`; members keep `*`.
+   - OAuth client, scope Auth Keys: write, tag `tag:cv-skills-client`; its secret goes into OpenBao.
 2. **WSL:** NVIDIA Container Toolkit:
-   - `apt install nvidia-container-toolkit`, then `nvidia-ctk runtime configure --runtime=docker`, then
+   - NVIDIA's apt repo, `apt install nvidia-container-toolkit`, `nvidia-ctk runtime configure --runtime=docker`,
      `systemctl restart docker`.
-   - Check with `docker run --rm --gpus all nvidia/cuda:<tag> nvidia-smi` (with `coder` paused).
+   - Check: `docker run --rm --gpus all ubuntu nvidia-smi -L`.
 3. **WSL, as root:**
    ```bash
    useradd --system --no-create-home --shell /usr/sbin/nologin cv-gate
@@ -69,13 +71,12 @@ client (compose / kind, own Tailscale node tag:cv-skills-client)
    install -m 0640 -g cv-gate pc/gpu-gate/gate.env.example /etc/cv-gate/gate.env
    install -m 0644 pc/gpu-gate/swap.env.example /etc/cv-gate/swap.env      # set STACK_DIR
    (umask 027; head -c 32 /dev/urandom | base64 > /etc/cv-gate/internal-key); chgrp cv-gate /etc/cv-gate/internal-key
-   touch /etc/cv-gate/keys && chgrp cv-gate /etc/cv-gate/keys && chmod 0640 /etc/cv-gate/keys
-   python3 /opt/cv-gate/gate.py add-key <person>    # shows the key once
    install -m 0644 pc/gpu-gate/cv-gpu-gate.service /etc/systemd/system/ && systemctl enable --now cv-gpu-gate
    ```
    - Put the internal key in the stack's `API_KEYS`.
    - Pull the stack's images and model in advance.
-4. **Windows:** `tailscale serve --bg --https=443 http://127.0.0.1:8088`. Check from the Mac with
+4. **Windows:** `tailscale serve --bg --tcp=80 tcp://127.0.0.1:8088` (TCP, not `--http`: HTTP serve matches the
+   Host header, so the sidecar's `Host: 127.0.0.1:8088` and IP access would get 404). Check from the Mac with
    `ai gpu status`.
 
 **Undo:**
@@ -88,10 +89,21 @@ client (compose / kind, own Tailscale node tag:cv-skills-client)
   userdel cv-gate
   ```
 
+## Clients (kind): `link/`
+
+`link/` is the sidecar image: the Tailscale image plus socat, userspace networking (no `NET_ADMIN`, no tun).
+
+- It joins as an ephemeral, pre-authorised `tag:cv-skills-client` node, using `TS_AUTHKEY` (the OAuth client
+  secret). Ephemeral nodes disappear from the tailnet shortly after the pod stops.
+- It forwards `LINK_LISTEN` (default `127.0.0.1:8088`) to `cv-skills-gpu:80`.
+- The app in the same pod calls `http://127.0.0.1:8088/v1/...`.
+- Build and load: `docker build -t cv-gpu-link:1 pc/gpu-gate/link && kind load docker-image cv-gpu-link:1`.
+- `link/sidecar.example.yaml` shows the pod; the Secret comes from OpenBao.
+- Compose doesn't use it (for now compose runs the model locally or a stub).
+
 ## From the Mac
 
-`ai gpu on|off|status`. It uses `CV_GATE_URL` and a key from `CV_GATE_KEY` or the Keychain:
-`security add-generic-password -s cv-gate -a cedric -w`.
+`ai gpu on|off|status`. It calls `http://cv-skills-gpu` over Tailscale (`CV_GATE_URL` overrides); no key.
 
 ## Tests
 

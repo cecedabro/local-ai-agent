@@ -1,0 +1,33 @@
+# kind: run cv-gpu-link next to the app that calls the GPU server; the app uses http://127.0.0.1:8088.
+# The Secret comes from OpenBao (secret/cv-skills/tailscale, key oauth_client_secret), e.g. via External Secrets
+# or: kubectl create secret generic cv-gpu-link --from-literal=TS_AUTHKEY="$(bao kv get -field=oauth_client_secret secret/cv-skills/tailscale)"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cv-skills-client-example
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: cv-skills-client-example}
+  template:
+    metadata:
+      labels: {app: cv-skills-client-example}
+    spec:
+      containers:
+        - name: app
+          image: REPLACE_ME
+          env:
+            - {name: CV_SKILLS_URL, value: "http://127.0.0.1:8088"}
+        - name: cv-gpu-link
+          image: cv-gpu-link:1          # kind load docker-image cv-gpu-link:1
+          env:
+            - name: TS_AUTHKEY
+              valueFrom: {secretKeyRef: {name: cv-gpu-link, key: TS_AUTHKEY}}
+            - {name: LINK_NAME, value: "cv-gpu-link-kind"}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}

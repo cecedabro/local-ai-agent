@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """cv-skills GPU gatekeeper: the PC answers cv-skills requests on demand.
 
-Always on in WSL, no GPU, listening on 127.0.0.1:8088 behind `tailscale serve --https=443`. The first request
+Always on in WSL, no GPU, listening on 127.0.0.1:8088 behind `tailscale serve --tcp=80` (Windows side). The first request
 swaps the GPU over from the agent's model (`coder`) to the AI-Engineers stack; after GATE_IDLE_S without requests
 it swaps back. Python 3.11+, standard library only.
 
@@ -13,9 +13,13 @@ Contract (agreed with the capaciteitsmanager side):
   any other /v1/...  -> active: proxied to the stack (127.0.0.1:8089) with the internal key + X-Requester;
                         idle: starts the swap in; idle/loading/unloading: 503 + Retry-After + status
   GET  /healthz      -> 200 {"ok": true}, no key (local liveness only)
-Every /v1 call needs a personal key (Authorization: Bearer <key> or X-API-Key). Keys are stored as sha256 hashes,
-one "name hash" per line in GATE_KEYS_FILE. Logs hold method, path, status, duration and key name: never bodies,
-never keys.
+Access (GATE_AUTH):
+  tailnet (default) the tailnet policy is the lock: only tag:cv-skills-client nodes (and the owner's own devices) can
+                    reach cv-skills-gpu:80, and the gatekeeper listens on loopback only. No key; the optional
+                    X-Requester header (a label, sanitised) is only used for the logs.
+  keys              every /v1 call needs a personal key (Authorization: Bearer <key> or X-API-Key), stored as
+                    sha256 hashes, one "name hash" per line in GATE_KEYS_FILE.
+Logs hold method, path, status, duration and requester: never bodies, never keys.
 
 The swap itself is one root helper (`cv-gpu-swap in|out|beat`, via sudo -n): the gatekeeper runs as its own
 unprivileged user and cannot run anything else.
@@ -28,6 +32,7 @@ import hmac
 import http.client
 import json
 import os
+import re
 import secrets
 import shlex
 import subprocess
@@ -59,6 +64,7 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 8088
     upstream: str = "http://127.0.0.1:8089"
+    auth: str = "tailnet"           # tailnet | keys
     keys_file: Path = Path("/etc/cv-gate/keys")
     internal_key_file: Path = Path("/etc/cv-gate/internal-key")
     swap_cmd: list[str] = field(default_factory=lambda: ["sudo", "-n", "/usr/local/sbin/cv-gpu-swap"])
@@ -75,6 +81,7 @@ class Config:
         e = os.environ.get
         return cls(host=e("GATE_HOST", "127.0.0.1"), port=int(e("GATE_PORT", "8088")),
                    upstream=e("GATE_UPSTREAM", "http://127.0.0.1:8089").rstrip("/"),
+                   auth=e("GATE_AUTH", "tailnet"),
                    keys_file=Path(e("GATE_KEYS_FILE", "/etc/cv-gate/keys")),
                    internal_key_file=Path(e("GATE_INTERNAL_KEY_FILE", "/etc/cv-gate/internal-key")),
                    swap_cmd=shlex.split(e("GATE_SWAP_CMD", "sudo -n /usr/local/sbin/cv-gpu-swap")),
@@ -279,6 +286,9 @@ class Handler(BaseHTTPRequestHandler):
         self._code = code
 
     def _who(self) -> str | None:
+        if self.gate.cfg.auth != "keys":
+            label = re.sub(r"[^A-Za-z0-9._@-]", "", self.headers.get("X-Requester", ""))[:64]
+            return label or "tailnet"
         auth = self.headers.get("Authorization", "")
         key = auth[7:].strip() if auth.lower().startswith("bearer ") else self.headers.get("X-API-Key", "").strip()
         if not key:
@@ -304,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "not found"})
             name = self._who()
             if name is None:
-                return self._send(401, {"error": "missing or unknown API key"})
+                return self._send(401, {"error": "missing or unknown API key"})  # keys mode only
             who = name
             if path == "/v1/status" and self.command == "GET":
                 return self._send(200, self.gate.status())
@@ -326,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
         finally:
             log(f"{self.command} {urllib.parse.urlsplit(self.path).path} {self._code or '-'} "
-                f"{(time.monotonic() - t0) * 1000:.0f}ms key={who}")
+                f"{(time.monotonic() - t0) * 1000:.0f}ms who={who}")
 
     def _proxy(self, body: bytes, name: str) -> None:
         up = urllib.parse.urlsplit(self.gate.cfg.upstream)
