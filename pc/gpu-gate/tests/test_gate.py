@@ -174,6 +174,22 @@ class GateTest(unittest.TestCase):
         self.wait_state("active")
         self.assertEqual(self.swaps().count("in"), 2)
 
+    def test_pinned_warmup_ignores_the_idle_timer_until_cooldown(self) -> None:
+        self.cfg.idle_s = 1
+        code, _, _ = self.call("POST", "/v1/warmup?pin=1")
+        self.assertEqual(code, 202)
+        st = self.wait_state("active")
+        self.assertIsNone(st["active_until"])
+        self.assertIn("held on", st["detail"])
+        time.sleep(2.5)                                           # well past idle_s
+        self.assertEqual(self.call("GET", "/v1/status")[1]["state"], "active")
+        self.assertNotIn("out", self.swaps())
+        self.call("POST", "/v1/cooldown")
+        self.wait_state("idle")
+        self.call("POST", "/v1/warmup")                           # a plain warmup after that has the timer again
+        self.wait_state("active")
+        self.wait_state("idle")
+
     def test_long_request_is_not_unloaded_midway(self) -> None:
         self.cfg.idle_s = 1
         self.call("POST", "/v1/warmup")

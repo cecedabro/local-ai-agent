@@ -3,7 +3,9 @@
 #   ai pause    stop llama-server and free VRAM/RAM (nothing can restart it until resume)
 #   ai resume   allow and start llama-server again (model takes about a minute to load)
 #   ai status   paused / active, and whether a job holds the PC awake
-#   ai gpu on|off|status   the cv-skills GPU gatekeeper (pc/gpu-gate): swap the stack in, back, or show its state.
+#   ai gpu on|off|status   the cv-skills GPU gatekeeper (pc/gpu-gate). on: swap the stack in and keep it on (no idle
+#                timer); off: swap back to coder; status: show the state.
+#   ai coder    same as ai gpu off: the GPU goes back to the agent's model.
 #                Uses CV_GATE_URL (default http://cv-skills-gpu, over Tailscale).
 #   ai cv deploy <branch>   put that AI-Engineers branch on the PC and rebuild the cv-skills image
 #                (restarts the API if the stack is running). The PC has no GitHub access: the branch
@@ -48,10 +50,12 @@ if [ -n \"\$($compose ps -q cv-skills-api)\" ]; then $compose up -d cv-skills-ap
   exit 0
 fi
 
+if [[ "${1:-}" == coder ]]; then set -- gpu off; fi
+
 if [[ "${1:-}" == gpu ]]; then
   url="${CV_GATE_URL:-http://cv-skills-gpu}"
   case "${2:-status}" in
-    on)     method=POST path=/v1/warmup ;;
+    on)     method=POST path='/v1/warmup?pin=1' ;;
     off)    method=POST path=/v1/cooldown ;;
     status) method=GET path=/v1/status ;;
     *) echo "usage: ai gpu on|off|status" >&2; exit 2 ;;
@@ -69,7 +73,7 @@ case "${1:-}" in
   pause)  script='mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory && echo "paused: VRAM and RAM freed"' ;;
   resume) script='rm -f /run/ai/paused && systemctl start llama-server && echo "resumed: model loading"' ;;
   status) script='if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; if test -e /run/ai/busy; then echo busy; fi' ;;
-  *) echo "usage: ai pause|resume|status|gpu on|off|status|cv deploy <branch>|status|logs" >&2; exit 2 ;;
+  *) echo "usage: ai pause|resume|status|coder|gpu on|off|status|cv deploy <branch>|status|logs" >&2; exit 2 ;;
 esac
 
 # The script goes in on stdin (quoting through PowerShell breaks otherwise).

@@ -2,7 +2,7 @@
 
 The PC answers cv-skills requests on demand (uwv-hva/capaciteitsmanager#479). A small always-on gatekeeper
 in WSL takes the requests. The first one swaps the GPU from the agent's model (`coder`) to the AI-Engineers
-stack. After 10 min without requests it swaps back.
+stack. After 10 min without requests it swaps back, unless `ai gpu on` pinned it (then it stays until `ai gpu off`).
 
 ```
 kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral node, tag:cv-skills-client)
@@ -17,7 +17,7 @@ kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral 
 | Call | Answer |
 |---|---|
 | `GET /v1/status` | 200 `{"state", "detail", "retry_after", "since", "idle_timeout_s", "active_until"}`; state is `idle`, `loading`, `active` or `unloading` |
-| `POST /v1/warmup` | 202 + status; starts the swap in |
+| `POST /v1/warmup` | 202 + status; starts the swap in. `?pin=1` (`ai gpu on`) keeps it on: no idle timer until `/v1/cooldown` |
 | `POST /v1/cooldown` | 202 + status; starts the swap back |
 | any other `/v1/…` | active: proxied. Otherwise 503 + `Retry-After: 15` + the status body; idle/unloading also start a swap in |
 | `GET /healthz` | 200, no key; local liveness only |
@@ -101,16 +101,17 @@ kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral 
 
 ## From the Mac
 
-`ai gpu on|off|status`. It calls `http://cv-skills-gpu` over Tailscale (`CV_GATE_URL` overrides); no key.
+`ai gpu on|off|status` (`ai coder` = `ai gpu off`). `ai gpu on` pins the stack: it stays on until `ai gpu off`;
+a stack started by a request (kind) still swaps back after 10 min idle. It calls `http://cv-skills-gpu` over Tailscale (`CV_GATE_URL` overrides); no key.
 
 ### A new AI-Engineers branch on the PC
 
 ```bash
 ai cv deploy feature/366-koppelhulp-in-service   # copy the branch over, rebuild the image, restart the API if it runs
-ai gpu on                                         # swap the stack in (pauses coder); wait for "active"
+ai gpu on                                         # swap the stack in and keep it on (pauses coder); wait for "active"
 ai cv status                                      # branch, gatekeeper state, containers
 ai cv logs                                        # the API log (e.g. the "Catalogus … geladen" line)
-ai gpu off                                        # swap back to coder (or wait 10 min idle)
+ai coder                                          # swap back to coder (same as ai gpu off)
 ```
 
 - `/opt/cv-skills/AI-Engineers` on the PC is a git checkout, but the PC has no GitHub access: `ai cv deploy` fetches
