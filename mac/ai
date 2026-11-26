@@ -5,8 +5,48 @@
 #   ai status   paused / active, and whether a job holds the PC awake
 #   ai gpu on|off|status   the cv-skills GPU gatekeeper (pc/gpu-gate): swap the stack in, back, or show its state.
 #                Uses CV_GATE_URL (default http://cv-skills-gpu, over Tailscale).
+#   ai cv deploy <branch>   put that AI-Engineers branch on the PC and rebuild the cv-skills image
+#                (restarts the API if the stack is running). The PC has no GitHub access: the branch
+#                goes over as a git bundle from your Mac clone (CV_REPO, default ~/HvA/UWV Project/AI-Engineers).
+#   ai cv status            branch and commit on the PC, the gatekeeper state, the containers
+#   ai cv logs              the last 50 lines of the cv-skills API log
 # Runs the same steps as pc/power/ai.ps1, through `ssh pc` into WSL.
 set -euo pipefail
+
+if [[ "${1:-}" == cv ]]; then
+  dir=/opt/cv-skills/AI-Engineers
+  compose="docker compose -p cv-skills -f compose.yaml -f compose.gpu.yml"
+  case "${2:-status}" in
+    deploy)
+      branch="${3:?usage: ai cv deploy <branch>}"
+      # Letters, digits, . _ / - only: the name goes into the remote script.
+      if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! git check-ref-format --branch "$branch" >/dev/null; then
+        echo "bad branch name: $branch" >&2; exit 2
+      fi
+      repo="${CV_REPO:-$HOME/HvA/UWV Project/AI-Engineers}"
+      git -C "$repo" fetch -q origin "$branch"
+      bundle="$(mktemp -d)/cv.bundle"
+      git -C "$repo" bundle create "$bundle" "refs/remotes/origin/$branch" 2>/dev/null
+      echo "copying $branch ($(git -C "$repo" rev-parse --short "origin/$branch")) to the PC"
+      scp -q "$bundle" pc:cv.bundle   # lands in the Windows home, /mnt/c/Users/<you>/ in WSL
+      rm -r "$(dirname "$bundle")"
+      script="set -euo pipefail
+b=\$(ls /mnt/c/Users/*/cv.bundle | head -1)
+cd $dir
+git fetch -q \"\$b\" 'refs/remotes/origin/$branch:refs/remotes/origin/$branch'
+rm \"\$b\"
+git checkout -q -B '$branch' 'origin/$branch'
+git log --oneline -1
+echo 'building the image (first build of a new branch can take ~10 min)'
+$compose build -q cv-skills-api
+if [ -n \"\$($compose ps -q cv-skills-api)\" ]; then $compose up -d cv-skills-api && echo 'API restarted'; else echo 'stack not running: it starts on the next request, or with: ai gpu on'; fi" ;;
+    status) script="cd $dir && git log --oneline -1 && git status -sb | head -1; curl -s 127.0.0.1:8088/v1/status; echo; $compose ps --format '{{.Service}} {{.Status}}'" ;;
+    logs)   script="cd $dir && $compose logs --tail 50 cv-skills-api" ;;
+    *) echo "usage: ai cv deploy <branch>|status|logs" >&2; exit 2 ;;
+  esac
+  ssh pc 'wsl -d Ubuntu -u root -- bash -s' <<<"$script"
+  exit 0
+fi
 
 if [[ "${1:-}" == gpu ]]; then
   url="${CV_GATE_URL:-http://cv-skills-gpu}"
@@ -29,7 +69,7 @@ case "${1:-}" in
   pause)  script='mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory && echo "paused: VRAM and RAM freed"' ;;
   resume) script='rm -f /run/ai/paused && systemctl start llama-server && echo "resumed: model loading"' ;;
   status) script='if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; if test -e /run/ai/busy; then echo busy; fi' ;;
-  *) echo "usage: ai pause|resume|status|gpu on|gpu off|gpu status" >&2; exit 2 ;;
+  *) echo "usage: ai pause|resume|status|gpu on|off|status|cv deploy <branch>|status|logs" >&2; exit 2 ;;
 esac
 
 # The script goes in on stdin (quoting through PowerShell breaks otherwise).
