@@ -103,6 +103,21 @@ kind: API → CV_AI_PROXY cv-skills-egress:1055 (tailscale userspace, ephemeral 
 
 `ai gpu on|off|status`. It calls `http://cv-skills-gpu` over Tailscale (`CV_GATE_URL` overrides); no key.
 
+### A new AI-Engineers branch on the PC
+
+```bash
+ai cv deploy feature/366-koppelhulp-in-service   # copy the branch over, rebuild the image, restart the API if it runs
+ai gpu on                                         # swap the stack in (pauses coder); wait for "active"
+ai cv status                                      # branch, gatekeeper state, containers
+ai cv logs                                        # the API log (e.g. the "Catalogus … geladen" line)
+ai gpu off                                        # swap back to coder (or wait 10 min idle)
+```
+
+- `/opt/cv-skills/AI-Engineers` on the PC is a git checkout, but the PC has no GitHub access: `ai cv deploy` fetches
+  the branch in your Mac clone (`CV_REPO`, default `~/HvA/UWV Project/AI-Engineers`) and sends it as a git bundle.
+- The first build of a branch with new dependencies takes about 10 minutes (torch CPU); later builds use the cache.
+- Don't deploy while an agent job runs if you will also `ai gpu on`: the swap stops `coder`.
+
 ## Tests
 
 `python3 -m unittest discover -s pc/gpu-gate/tests` (part of `make test`). The tests use a fake swap helper, a
