@@ -359,6 +359,30 @@ async function main() {
     const me = await ev(`fetch('/api/me').then(r=>r.json())`);
     if (me.username !== "cedric") throw new Error("signed in as " + JSON.stringify(me));
   });
+  await check("password: the eye shows it, change it on /account, sign in with the new one (SPEC §17)", async () => {
+    await go("/account");
+    await waitFor(() => ev(`!!document.getElementById('pw-form')`), 5000, "the password form");
+    const f = `document.getElementById('pw-form')`;
+    await ev(`${f}.current.value='browser-test-password'`);
+    await ev(`${f}.current.parentElement.querySelector('.pw-eye').click()`);
+    if ((await ev(`${f}.current.type`)) !== "text") throw new Error("the eye does not show the password");
+    if ((await ev(`${f}.current.parentElement.querySelector('.pw-eye').getAttribute('aria-pressed')`)) !== "true") throw new Error("aria-pressed");
+    await ev(`${f}.new.value='changed-in-browser-1';${f}.again.value='changed-in-browser-2';${f}.requestSubmit()`);
+    await waitFor(() => ev(`/not the same/.test(document.getElementById('pw-msg').textContent)`), 3000, "the mismatch message");
+    await ev(`${f}.again.value='changed-in-browser-1';${f}.requestSubmit()`);
+    await waitFor(() => ev(`/Password changed/.test(document.getElementById('pw-msg').textContent)`), 5000, "'Password changed.'");
+    if ((await ev(`${f}.current.type`)) !== "password" || (await ev(`${f}.current.value`)) !== "") throw new Error("the form is not reset");
+    await ev(`fetch('/api/logout',{method:'POST',headers:{'X-Coder':'1'}})`);
+    await cmd("Network.clearBrowserCookies");
+    await go("/login");
+    const lf = `document.getElementById('login-form')`;
+    await ev(`${lf}.password.parentElement.querySelector('.pw-eye').click()`);
+    if ((await ev(`${lf}.password.type`)) !== "text") throw new Error("the eye on the sign-in page");
+    const eye = await ev(`(()=>{const i=${lf}.password.getBoundingClientRect(),b=${lf}.querySelector('.pw-eye').getBoundingClientRect();return b.right<=i.right&&b.left>i.left&&b.top>=i.top-1&&b.bottom<=i.bottom+1})()`);
+    if (!eye) throw new Error("the eye is not inside the password field");
+    await ev(`${lf}.username.value='cedric';${lf}.password.value='changed-in-browser-1';${lf}.requestSubmit()`);
+    await waitFor(() => ev(`location.pathname==='/'`), 10000, "being signed in with the new password");
+  });
   ws.close();
 }
 

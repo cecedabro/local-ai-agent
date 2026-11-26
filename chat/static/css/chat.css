@@ -786,3 +786,19 @@ body.admin .pf-head a.back:hover{box-shadow:inset 0 1px 0 var(--hi),0 4px 14px v
   html.kb-open .dock{padding-bottom:8px}
   html.kb-open .dock .ctx,html.kb-open .dock .hint{display:none}   /* the composer sits right on the keyboard */
 }
+
+/* password fields: show/hide eye, change password (SPEC §17) */
+.pw{position:relative;display:block}
+.pw input{width:100%;padding-right:46px}
+.pw-eye{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;display:grid;place-items:center;
+  border:0;background:none;box-shadow:none;color:var(--muted);border-radius:50%}
+.pw-eye:hover{color:var(--ink);filter:none}.pw-eye:active{transform:translateY(-50%)}
+.pw-eye:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pw-eye svg{width:20px;height:20px}
+.pw-eye .shut,.pw-eye[aria-pressed=true] .open{display:none}.pw-eye[aria-pressed=true] .shut{display:inline}
+.admin-main form.pw-form{display:grid;gap:10px;max-width:420px;align-items:stretch}
+.pw-form label{display:grid;gap:5px;font-size:13px;font-weight:600;color:var(--muted)}
+.pw-form label input{font-weight:400;color:var(--ink)}
+.pw-form .primary{justify-self:start;padding:9px 20px}
+.pw-form p{margin:0}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}

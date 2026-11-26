@@ -265,6 +265,41 @@ def create_app(settings: dict | None = None) -> FastAPI:
             app.state.db.update_user_icon(username, icon)
         return JSONResponse(_me(username, app.state.db))
 
+    @app.post("/api/me/password")
+    async def api_me_password(request: Request) -> JSONResponse:
+        """Change your own password (SPEC §17). Needs the current one; ends your other sessions."""
+        session = _session_from_cookie(request, app.state.db)
+        if not session:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        username, user = session
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "current and new password required"}, status_code=400)
+        current, new = body.get("current"), body.get("new")
+        # stripped like at sign-in and invite, so the new password works there exactly as typed here
+        current = current.strip() if isinstance(current, str) else ""
+        new = new.strip() if isinstance(new, str) else ""
+        if not current or not new:
+            return JSONResponse({"error": "current and new password required"}, status_code=400)
+        if app.state.db.has_recent_failures(f"user:{username}"):
+            return JSONResponse({"error": "too many failures – wait a moment"}, status_code=429)
+        from .auth import hash_password, verify_password
+        if not verify_password(current, user["pw_hash"]):
+            app.state.db.record_login_failure(f"user:{username}")
+            return JSONResponse({"error": "Your current password is not right."}, status_code=403)
+        if len(new) < 10 or len(new) > 200:
+            return JSONResponse({"error": "The new password must be 10 to 200 characters."}, status_code=400)
+        if new == current:
+            return JSONResponse({"error": "The new password is the same as the current one."}, status_code=400)
+        app.state.db.set_password_hash(username, hash_password(new))
+        import hashlib
+        keep = hashlib.sha256(request.cookies.get("coder_session", "").encode()).hexdigest()
+        ended = app.state.db.delete_other_sessions(username, keep)
+        return JSONResponse({"ok": True, "other_sessions_ended": ended})
+
     @app.get("/manifest.json")
     async def manifest_json(request: Request) -> Response:
         session = _session_from_cookie(request, app.state.db)

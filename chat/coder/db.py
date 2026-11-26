@@ -310,6 +310,20 @@ class DB:
             conn.execute("DELETE FROM sessions WHERE id_hash = ?", (id_hash,))
             conn.commit()
 
+    def set_password_hash(self, username: str, pw_hash: str) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute("UPDATE users SET pw_hash = ? WHERE username = ?", (pw_hash, username))
+            conn.commit()
+
+    def delete_other_sessions(self, username: str, keep_id_hash: str) -> int:
+        """End every session of `username` except `keep_id_hash`; returns how many were ended."""
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute("DELETE FROM sessions WHERE username = ? AND id_hash != ?", (username, keep_id_hash))
+            conn.commit()
+            return cur.rowcount
+
     def delete_user_sessions(self, username: str) -> None:
         with self._lock:
             conn = self._connect()
