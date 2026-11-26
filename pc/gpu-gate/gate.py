@@ -8,7 +8,8 @@ it swaps back. Python 3.11+, standard library only.
 Contract (agreed with the capaciteitsmanager side):
   GET  /v1/status    -> 200 {"state", "detail", "retry_after", "since", "idle_timeout_s", "active_until"}
                         state: idle | loading | active | unloading
-  POST /v1/warmup    -> 202 + status; starts the swap in
+  POST /v1/warmup    -> 202 + status; starts the swap in. With ?pin=1 (`ai gpu on`) the stack stays on: no idle
+                        timer until /v1/cooldown
   POST /v1/cooldown  -> 202 + status; starts the swap back (`ai gpu off`)
   any other /v1/...  -> active: proxied to the stack (127.0.0.1:8089) with the internal key + X-Requester;
                         idle: starts the swap in; idle/loading/unloading: 503 + Retry-After + status
@@ -144,6 +145,10 @@ class Lease:
         self.held = False
 
 
+ACTIVE = "stack up; requests are proxied"
+ACTIVE_PINNED = "stack up and held on (ai gpu on); requests are proxied; ai gpu off switches back to coder"
+
+
 class Gate:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -154,6 +159,7 @@ class Gate:
         self.last_request = 0.0
         self.inflight = 0
         self.want_in = False                              # a request came in while unloading
+        self.pinned = False                               # `ai gpu on`: stay loaded until cooldown
         self.lease = Lease(cfg)
         self.stop = threading.Event()
 
@@ -168,11 +174,16 @@ class Gate:
             return {"state": self.state, "detail": self.detail,
                     "retry_after": self.cfg.retry_after if busy else None, "since": iso(self.since),
                     "idle_timeout_s": self.cfg.idle_s,
-                    "active_until": iso(self.last_request + self.cfg.idle_s) if self.state == "active" else None}
+                    "active_until": iso(self.last_request + self.cfg.idle_s)
+                    if self.state == "active" and not self.pinned else None}
 
-    def want(self) -> None:
-        """Make sure the stack is (getting) loaded."""
+    def want(self, pin: bool = False) -> None:
+        """Make sure the stack is (getting) loaded; *pin* keeps it loaded until cooldown."""
         with self.lock:
+            if pin:
+                self.pinned = True
+                if self.state == "active":
+                    self._set("active", ACTIVE_PINNED)
             if self.state == "idle":
                 self._set("loading", "swapping in: stopping the agent model, starting the stack")
                 threading.Thread(target=self._swap_in, daemon=True).start()
@@ -181,6 +192,7 @@ class Gate:
 
     def cooldown(self) -> None:
         with self.lock:
+            self.pinned = False
             if self.state != "active":
                 self.want_in = False
                 return
@@ -215,12 +227,13 @@ class Gate:
         if ok:
             with self.lock:
                 self.last_request = time.time()
-                self._set("active", "stack up; requests are proxied")
+                self._set("active", ACTIVE_PINNED if self.pinned else ACTIVE)
             return
         log(f"swap in failed: {msg}")
         self._swap("out", self.cfg.load_timeout_s)        # leave the PC as it was
         self.lease.release()
         with self.lock:
+            self.pinned = False
             self._set("idle", f"swap in failed: {msg}")
 
     def _swap_out(self) -> None:
@@ -238,7 +251,7 @@ class Gate:
         while not self.stop.wait(self.cfg.tick_s):
             with self.lock:
                 state, idle = self.state, time.time() - self.last_request
-                expired = state == "active" and self.inflight == 0 and idle > self.cfg.idle_s
+                expired = state == "active" and not self.pinned and self.inflight == 0 and idle > self.cfg.idle_s
                 if expired:
                     self._set("unloading", f"swapping back after {self.cfg.idle_s} s without requests")
             if expired:
@@ -319,7 +332,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/v1/status" and self.command == "GET":
                 return self._send(200, self.gate.status())
             if path == "/v1/warmup" and self.command == "POST":
-                self.gate.want()
+                pin = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("pin") == ["1"]
+                self.gate.want(pin=pin)
                 return self._send(202, self.gate.status())
             if path == "/v1/cooldown" and self.command == "POST":
                 self.gate.cooldown()
