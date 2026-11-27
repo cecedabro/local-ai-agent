@@ -1,80 +1,194 @@
 #!/usr/bin/env bash
-# Pause / resume / check the local model on the Windows PC, from the Mac.
-#   ai pause    stop llama-server and free VRAM/RAM (nothing can restart it until resume)
-#   ai resume   allow and start llama-server again (model takes about a minute to load)
-#   ai status   paused / active, and whether a job holds the PC awake
-#   ai gpu on|off|status   the cv-skills GPU gatekeeper (pc/gpu-gate). on: swap the stack in and keep it on (no idle
-#                timer); off: swap back to coder; status: show the state.
-#   ai coder    same as ai gpu off: the GPU goes back to the agent's model.
-#                Uses CV_GATE_URL (default http://cv-skills-gpu, over Tailscale).
-#   ai cv deploy <branch>   put that AI-Engineers branch on the PC and rebuild the cv-skills image
-#                (restarts the API if the stack is running). The PC has no GitHub access: the branch
-#                goes over as a git bundle from your Mac clone (CV_REPO, default ~/HvA/UWV Project/AI-Engineers).
-#   ai cv status            branch and commit on the PC, the gatekeeper state, the containers
-#   ai cv logs              the last 50 lines of the cv-skills API log
-# Runs the same steps as pc/power/ai.ps1, through `ssh pc` into WSL.
+# `ai`: control the Windows PC's GPU from the Mac. `ai help` lists every command.
+# The GPU runs either the agent's model (coder, llama-server in WSL) or the cv-skills stack
+# (pc/gpu-gate: the gatekeeper swaps between them). Talks to the PC through `ssh pc` into WSL,
+# and to the gatekeeper over Tailscale (CV_GATE_URL, default http://cv-skills-gpu).
 set -euo pipefail
 
-if [[ "${1:-}" == cv ]]; then
-  dir=/opt/cv-skills/AI-Engineers
-  compose="docker compose -p cv-skills -f compose.yaml -f compose.gpu.yml"
-  case "${2:-status}" in
+GATE="${CV_GATE_URL:-http://cv-skills-gpu}"
+CV_DIR=/opt/cv-skills/AI-Engineers
+COMPOSE="docker compose -p cv-skills -f compose.yaml -f compose.gpu.yml"
+
+# ---------------------------------------------------------------- output
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  B=$'\e[1m' D=$'\e[2m' G=$'\e[32m' Y=$'\e[33m' R=$'\e[31m' C=$'\e[36m' N=$'\e[0m'
+else
+  B='' D='' G='' Y='' R='' C='' N=''
+fi
+ok()   { printf '%s✓%s %s\n' "$G" "$N" "$*"; }
+warn() { printf '%s!%s %s\n' "$Y" "$N" "$*"; }
+fail() { printf '%s✗%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+step() { printf '%s→%s %s\n' "$C" "$N" "$*"; }
+row()  { printf '  %-14s %s\n' "$1" "$2"; }
+
+# Run a script in WSL as root. The script goes in on stdin (quoting through PowerShell breaks otherwise).
+pc() { ssh -o LogLevel=ERROR -o ConnectTimeout=8 pc 'wsl -d Ubuntu -u root -- bash -s' \
+         || fail "PC unreachable (asleep or off?)"; }
+
+# ---------------------------------------------------------------- gatekeeper
+gate() {  # gate METHOD PATH -> JSON on stdout
+  curl -sS --max-time 15 -X "$1" -H "X-Requester: ${USER:-mac}" "${GATE}$2" 2>/dev/null \
+    || fail "gatekeeper unreachable at $GATE (PC asleep or off?)"
+}
+
+# One readable line for the gatekeeper's status JSON: "<state>\t<text>".
+describe() {
+  python3 -c '
+import json, sys, datetime as dt
+s = json.load(sys.stdin)
+st, until = s["state"], s.get("active_until")
+def hm(t): return dt.datetime.fromisoformat(t).astimezone().strftime("%H:%M")
+if st == "active" and until is None:
+    txt = "CV stack on, held until you run: ai coder"
+elif st == "active":
+    txt = f"CV stack on, switches back to coder at {hm(until)} (10 min without requests)"
+elif st == "loading":
+    txt = "switching to the CV stack…"
+elif st == "unloading":
+    txt = "switching back to coder…"
+else:
+    txt, d = "coder (CV stack off)", s["detail"]
+    if d != "stack not loaded":
+        txt += "; last change: " + d
+print(f"{st}\t{txt}")'
+}
+
+gpu_line() {  # prints the GPU row
+  local st txt
+  IFS=$'\t' read -r st txt < <(gate GET /v1/status | describe)
+  case "$st" in active) row "GPU" "${G}●${N} $txt" ;; idle) row "GPU" "${C}●${N} $txt" ;; *) row "GPU" "${Y}●${N} $txt" ;; esac
+}
+
+wait_for() {  # wait_for STATE TIMEOUT_S: dots until the gatekeeper reports STATE (or idle after a failed swap)
+  local want="$1" end=$((SECONDS + $2)) st txt
+  while ((SECONDS < end)); do
+    IFS=$'\t' read -r st txt < <(gate GET /v1/status | describe)
+    if [[ "$st" == "$want" ]]; then printf '\n'; return 0; fi
+    if [[ "$want" == active && "$st" == idle ]]; then printf '\n'; fail "$txt"; fi
+    printf '.'; sleep 3
+  done
+  printf '\n'; fail "still not $want after $2 s; check with: ai status"
+}
+
+gpu() {
+  case "${1:-status}" in
+    on)
+      step "Switching the GPU to the CV stack (stops coder)"
+      gate POST '/v1/warmup?pin=1' >/dev/null
+      wait_for active 300
+      ok "CV stack is on and stays on until you run: ${B}ai coder${N}" ;;
+    off)
+      step "Switching the GPU back to coder"
+      gate POST /v1/cooldown >/dev/null
+      wait_for idle 120
+      ok "coder is back (the model takes about a minute to load)" ;;
+    status) gpu_line ;;
+    *) fail "unknown: ai gpu ${1}. Try: ai help" ;;
+  esac
+}
+
+# ---------------------------------------------------------------- coder (llama-server)
+coder_line() {  # coder_line GPU_STATE
+  local s
+  s=$(pc <<<'if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; test -e /run/ai/busy && echo busy || true')
+  case "$s" in
+    paused*)  if [[ "${1:-idle}" != idle ]]; then row "coder" "${D}●${N} stopped while the GPU runs the CV stack"
+              else row "coder" "${Y}●${N} paused by hand (ai resume starts it)"; fi ;;
+    active*)  row "coder" "${G}●${N} running" ;;
+    *)        row "coder" "${D}●${N} stopped" ;;
+  esac
+  if [[ "$s" == *busy* ]]; then row "PC" "kept awake (a job or the CV stack holds it)"; else row "PC" "may sleep when idle"; fi
+}
+
+# ---------------------------------------------------------------- cv stack
+cv() {
+  case "${1:-status}" in
     deploy)
-      branch="${3:?usage: ai cv deploy <branch>}"
+      local branch="${2:-}" repo bundle sha
+      [[ -n "$branch" ]] || fail "which branch? ai cv deploy <branch>"
       # Letters, digits, . _ / - only: the name goes into the remote script.
       if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || ! git check-ref-format --branch "$branch" >/dev/null; then
-        echo "bad branch name: $branch" >&2; exit 2
+        fail "bad branch name: $branch"
       fi
       repo="${CV_REPO:-$HOME/HvA/UWV Project/AI-Engineers}"
-      git -C "$repo" fetch -q origin "$branch"
+      step "Fetching $branch in your Mac clone"
+      git -C "$repo" fetch -q origin "$branch" || fail "could not fetch $branch from GitHub"
+      sha=$(git -C "$repo" log -1 --format='%h %s' "origin/$branch")
       bundle="$(mktemp -d)/cv.bundle"
-      git -C "$repo" bundle create "$bundle" "refs/remotes/origin/$branch" 2>/dev/null
-      echo "copying $branch ($(git -C "$repo" rev-parse --short "origin/$branch")) to the PC"
-      scp -q "$bundle" pc:cv.bundle   # lands in the Windows home, /mnt/c/Users/<you>/ in WSL
+      git -C "$repo" bundle create -q "$bundle" "refs/remotes/origin/$branch" 2>/dev/null
+      step "Copying it to the PC  ${D}$sha${N}"
+      scp -q -o LogLevel=ERROR "$bundle" pc:cv.bundle || fail "copy to the PC failed"   # Windows home = /mnt/c/Users/<you>/
       rm -r "$(dirname "$bundle")"
-      script="set -euo pipefail
+      step "Building the image on the PC ${D}(a branch with new packages takes ~10 min)${N}"
+      pc <<EOF
+set -euo pipefail
 b=\$(ls /mnt/c/Users/*/cv.bundle | head -1)
-cd $dir
-git fetch -q \"\$b\" 'refs/remotes/origin/$branch:refs/remotes/origin/$branch'
-rm \"\$b\"
+cd $CV_DIR
+git fetch -q "\$b" 'refs/remotes/origin/$branch:refs/remotes/origin/$branch'
+rm "\$b"
 git checkout -q -B '$branch' 'origin/$branch'
-git log --oneline -1
-echo 'building the image (first build of a new branch can take ~10 min)'
-$compose build -q cv-skills-api
-if [ -n \"\$($compose ps -q cv-skills-api)\" ]; then $compose up -d cv-skills-api && echo 'API restarted'; else echo 'stack not running: it starts on the next request, or with: ai gpu on'; fi" ;;
-    status) script="cd $dir && git log --oneline -1 && git status -sb | head -1; curl -s 127.0.0.1:8088/v1/status; echo; $compose ps --format '{{.Service}} {{.Status}}'" ;;
-    logs)   script="cd $dir && $compose logs --tail 50 cv-skills-api" ;;
-    *) echo "usage: ai cv deploy <branch>|status|logs" >&2; exit 2 ;;
+$COMPOSE build -q cv-skills-api >/tmp/cv-build.log 2>&1 || { tail -20 /tmp/cv-build.log; exit 1; }
+if [ -n "\$($COMPOSE ps -q cv-skills-api)" ]; then $COMPOSE up -d cv-skills-api >/dev/null 2>&1; echo restarted; else echo built; fi
+EOF
+      ok "$branch is on the PC"
+      echo "  Start it with ${B}ai gpu on${N} (if it was already on, the API was restarted)." ;;
+    status)
+      echo "${B}CV stack${N}"
+      pc <<EOF | while IFS=$'\t' read -r k v; do row "$k" "$v"; done
+cd $CV_DIR
+printf 'branch\t%s\n' "\$(git rev-parse --abbrev-ref HEAD)"
+printf 'commit\t%s\n' "\$(git log -1 --format='%h %s' | cut -c1-70)"
+$COMPOSE ps --format '{{.Service}}\t{{.Status}}' 2>/dev/null | grep . || printf 'containers\tnot running\n'
+EOF
+      gpu_line ;;
+    logs) pc <<<"cd $CV_DIR && $COMPOSE logs --no-log-prefix --tail ${2:-50} cv-skills-api" ;;
+    *) fail "unknown: ai cv ${1}. Try: ai help" ;;
   esac
-  ssh pc 'wsl -d Ubuntu -u root -- bash -s' <<<"$script"
-  exit 0
-fi
+}
 
-if [[ "${1:-}" == coder ]]; then set -- gpu off; fi
+usage() {
+  cat <<EOF
+${B}ai${N}: the PC's GPU from your Mac. It runs either ${B}coder${N} (the agent's model) or the ${B}CV stack${N}.
 
-if [[ "${1:-}" == gpu ]]; then
-  url="${CV_GATE_URL:-http://cv-skills-gpu}"
-  case "${2:-status}" in
-    on)     method=POST path='/v1/warmup?pin=1' ;;
-    off)    method=POST path=/v1/cooldown ;;
-    status) method=GET path=/v1/status ;;
-    *) echo "usage: ai gpu on|off|status" >&2; exit 2 ;;
-  esac
-  # Access is the tailnet policy (this Mac is a member). Plain HTTP: Tailscale already encrypts the hop.
-  curl -sS --max-time 15 -X "${method}" -H "X-Requester: ${USER:-mac}" "${url}${path}" \
-    || { echo "gatekeeper unreachable (PC asleep or off?)" >&2; exit 1; }
-  echo
-  exit 0
-fi
+${B}Overview${N}
+  ai status                  what the GPU and the PC are doing now
 
-case "${1:-}" in
+${B}Switch the GPU${N}
+  ai gpu on                  CV stack on, and it stays on (stops coder)
+  ai coder                   back to coder (same as: ai gpu off)
+  ai gpu status              just the GPU line
+
+${B}CV stack${N}
+  ai cv deploy <branch>      put an AI-Engineers branch on the PC and rebuild it
+  ai cv status               branch, commit and containers on the PC
+  ai cv logs [n]             last n lines of the API log (default 50)
+
+${B}coder by hand${N}
+  ai pause                   stop coder and free the GPU (nothing restarts it)
+  ai resume                  start coder again
+
+${D}Don't run ai gpu on while an agent loop runs: it stops the model the loop uses.
+Settings: CV_GATE_URL (gatekeeper), CV_REPO (your AI-Engineers clone). NO_COLOR=1 turns colours off.${N}
+EOF
+}
+
+case "${1:-help}" in
+  help|-h|--help) usage ;;
+  status)
+    echo "${B}PC${N}"
+    gst=$(gate GET /v1/status | describe | cut -f1)
+    coder_line "$gst"
+    gpu_line ;;
+  gpu)   shift; gpu "$@" ;;
+  coder) gpu off ;;
+  cv)    shift; cv "$@" ;;
   # Dropping the page cache matters: the model file stays cached in WSL's VM after the
   # server stops, and WSL on Windows 10 does not give that memory back by itself.
-  pause)  script='mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory && echo "paused: VRAM and RAM freed"' ;;
-  resume) script='rm -f /run/ai/paused && systemctl start llama-server && echo "resumed: model loading"' ;;
-  status) script='if test -e /run/ai/paused; then echo paused; else systemctl is-active llama-server || true; fi; if test -e /run/ai/busy; then echo busy; fi' ;;
-  *) echo "usage: ai pause|resume|status|coder|gpu on|off|status|cv deploy <branch>|status|logs" >&2; exit 2 ;;
+  pause)
+    pc <<<'mkdir -p /run/ai && touch /run/ai/paused && systemctl stop llama-server && sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory'
+    ok "coder paused; GPU memory and RAM freed. ${B}ai resume${N} starts it again." ;;
+  resume)
+    pc <<<'rm -f /run/ai/paused && systemctl start llama-server'
+    ok "coder starting (the model takes about a minute to load)" ;;
+  *) printf '%s✗%s unknown command: %s\n\n' "$R" "$N" "$1" >&2; usage >&2; exit 2 ;;
 esac
-
-# The script goes in on stdin (quoting through PowerShell breaks otherwise).
-ssh pc 'wsl -d Ubuntu -u root -- bash -s' <<<"$script"
